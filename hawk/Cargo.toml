@@ -1,0 +1,7 @@
+[workspace]
+
+resolver = "2"
+members = [
+    "code-examples/*",
+    "crust-of-rust/*",
+]
