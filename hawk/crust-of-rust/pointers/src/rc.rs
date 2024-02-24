@@ -1,5 +1,5 @@
 use crate::cell::Cell;
-use std::ptr::NonNull;
+use std::{marker::PhantomData, ptr::NonNull};
 
 // Where do we keep the reference count? We can't keep it in
 // the `Rc<T>` because doing so makes each clone of `Rc<T>` has
@@ -22,8 +22,16 @@ struct RcInner<T> {
 // One way to type a raw pointer is using `*const` or `*mut`
 // But `*const` and `*mut` pointers can be pointing to null.
 // So we use `std::ptr::NonNull` here.
+//
+// The `_marker` is telling the compiler that `Rc<T>` owns the
+// `RcInner<T>`. If not doing so, compiler only knows `Rc<T>`
+// has a pointer to `RcInner<T>`, so when `Rc<T>` gets dropped
+// `RcInner<T>` won't be dropped, so the `T` won't be dropped
+// either. See https://doc.rust-lang.org/nomicon/dropck.html and
+// https://doc.rust-lang.org/std/marker/struct.PhantomData.html.
 pub struct Rc<T> {
     inner: NonNull<RcInner<T>>,
+    _marker: PhantomData<RcInner<T>>,
 }
 
 impl<T> Rc<T> {
@@ -41,6 +49,7 @@ impl<T> Rc<T> {
         Rc {
             // SAFETY: Box does not give us a null pointer.
             inner: unsafe { NonNull::new_unchecked(ptr) },
+            _marker: PhantomData,
         }
     }
 }
@@ -49,7 +58,10 @@ impl<T> Clone for Rc<T> {
     fn clone(&self) -> Self {
         let inner = unsafe { self.inner.as_ref() };
         inner.refcount.set(inner.refcount.get() + 1);
-        Rc { inner: self.inner }
+        Rc {
+            inner: self.inner,
+            _marker: PhantomData,
+        }
     }
 }
 

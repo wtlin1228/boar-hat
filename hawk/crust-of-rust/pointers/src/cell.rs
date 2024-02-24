@@ -45,6 +45,7 @@ mod test {
     use super::Cell;
 
     #[test]
+    // Note: this wrong behavior is caught by rust compiler now (v1.78.0)
     fn show_why_giving_out_reference_is_not_ok() {
         let x = Cell::new(vec![vec![42]]);
         let first: &Vec<i32> = &x.get_ref()[0];
