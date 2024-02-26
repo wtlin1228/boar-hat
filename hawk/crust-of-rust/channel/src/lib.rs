@@ -3,6 +3,24 @@ use std::{
     sync::{Arc, Condvar, Mutex},
 };
 
+// Flavors:
+//  - Synchronous channels: Channel where send() can block. Limited capacity.
+//   - Mutex + Condvar + VecDeque
+//   - Atomic VecDeque (atomic queue) + thread::park + thread::Thread::notify
+//  - Asynchronous channels: Channel where send() cannot block. Unbounded.
+//   - Mutex + Condvar + VecDeque
+//   - Mutex + Condvar + LinkedList
+//   - Atomic linked list, linked list of T
+//   - Atomic block linked list, linked list of atomic VecDeque<T>
+//  - Rendezvous channels: Synchronous with capacity = 0. Used for thread synchronization.
+//  - Oneshot channels: Any capacity. In practice, only one call to send().
+//
+// Next:
+//  - https://doc.rust-lang.org/src/std/sync/mpsc/mod.rs.html
+//  - https://github.com/crossbeam-rs/crossbeam/tree/master/crossbeam-channel/src/flavors
+//  - https://github.com/zesterer/flume
+//  - https://docs.rs/tokio/latest/tokio/sync/mpsc/index.html
+
 pub struct Sender<T> {
     shared: Arc<Shared<T>>,
 }
