@@ -51,11 +51,9 @@ impl JsonSorter {
             let line = line?;
             let line = line.trim();
             match line {
-                s if s.is_empty() || s == "{" || s == "}" => (),
+                s if s.is_empty() || s == "{" || s == "}" || s == "{}" => (),
                 _ => {
-                    let (key, value) = line
-                        .split_once(":")
-                        .expect("a valid translation key-value pair should have at least one `:`");
+                    let (key, value) = line.split_once(":").expect("colon expected");
                     let value = value.trim();
                     json_sorter.contents.push(KeyValuePair {
                         key: key[1..key.len() - 1].to_owned(), // "key" => key

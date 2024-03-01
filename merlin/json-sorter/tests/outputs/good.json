@@ -1,0 +1,9 @@
+{
+    "foo": "Lorem ipsum dolor sit amet.",
+    "foo.bar.a": "Lorem ipsum dolor sit amet.",
+    "foo.bar.b": "Lorem ipsum dolor sit amet.",
+    "foo.bar.baz.a": "Lorem ipsum dolor sit amet.",
+    "foo.bar.baz.b": "Lorem ipsum dolor sit amet.",
+    "foo.bar.baz.c": "Lorem ipsum dolor sit amet.",
+    "foo.bar.c": "Lorem ipsum dolor sit amet."
+}
