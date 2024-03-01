@@ -83,18 +83,26 @@ impl JsonSorter {
         let _ = fs::remove_file(file_path);
         let mut file = File::create_new(file_path)?;
         file.write_all(b"{\n")?;
-        for (i, single_translation) in self.contents.iter().enumerate() {
+        let mut lines = vec![];
+        for (i, KeyValuePair { key, value }) in self.contents.iter().enumerate() {
             let line = format!(
                 "    \"{}\": \"{}\"{}",
-                single_translation.key,
-                single_translation.value,
+                key,
+                value,
                 if i != self.contents.len() - 1 {
                     ",\n"
                 } else {
                     "\n"
                 }
             );
-            file.write_all(line.as_bytes())?;
+            lines.push(line);
+            if lines.len() > 1_000_000 {
+                file.write_all(lines.join("").as_bytes())?;
+                lines.clear();
+            }
+        }
+        if lines.len() > 0 {
+            file.write_all(lines.join("").as_bytes())?;
         }
         file.write_all(b"}\n")?;
         Ok(())
