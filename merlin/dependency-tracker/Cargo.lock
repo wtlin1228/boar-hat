@@ -1224,10 +1224,8 @@ dependencies = [
  "swc_atoms",
  "swc_common",
  "swc_ecma_ast",
- "swc_ecma_codegen",
  "swc_ecma_transforms_base",
  "swc_ecma_transforms_testing",
- "swc_ecma_utils",
  "swc_ecma_visit",
  "swc_plugin",
  "swc_plugin_macro",
@@ -1248,7 +1246,6 @@ dependencies = [
  "phf",
  "rkyv",
  "scoped-tls",
- "serde",
  "string_enum",
  "swc_atoms",
  "swc_common",
@@ -1395,7 +1392,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df0127694c36d656ea9eab5c170cdd8ab398246ae2a335de26961c913a4aca47"
 dependencies = [
  "num-bigint",
- "serde",
  "swc_atoms",
  "swc_common",
  "swc_ecma_ast",

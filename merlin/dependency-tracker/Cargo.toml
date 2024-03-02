@@ -4,5 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-swc_core = { version = "0.90", features = ["common", "ecma_utils", "ecma_plugin_transform", "ecma_ast", "ecma_ast_serde", "ecma_codegen", "ecma_transforms", "ecma_visit" ]}
+swc_core = { version = "0.90", features = [
+    "common", 
+    "ecma_ast", 
+    "ecma_visit",
+    "ecma_plugin_transform"
+]}
 swc_ecma_parser = { version = "0.143.5", features = ["typescript"] }
