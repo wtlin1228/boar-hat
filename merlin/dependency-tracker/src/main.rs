@@ -4,9 +4,8 @@ use std::path::Path;
 use swc_core::{
     common::{
         errors::{ColorConfig, Handler},
-        hygiene::*,
         sync::Lrc,
-        Globals, SourceMap, GLOBALS,
+        Globals, Mark, SourceMap, GLOBALS,
     },
     ecma::{
         transforms::base::resolver,
@@ -51,8 +50,7 @@ fn main() {
         })
         .expect("failed to parser module");
 
-    let globals = Globals::new();
-    GLOBALS.set(&globals, || {
+    GLOBALS.set(&Globals::new(), || {
         module
             .fold_with(&mut resolver(Mark::new(), Mark::new(), true))
             .visit_with(&mut TopVisitor {});
