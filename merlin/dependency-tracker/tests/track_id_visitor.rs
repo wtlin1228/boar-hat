@@ -49,10 +49,8 @@ macro_rules! parse_with_visitors {
           .expect("failed to parser module");
 
       GLOBALS.set(&Globals::new(), || {
-          module
-              .fold_with(&mut resolver(Mark::new(), Mark::new(), true))
-              $(.visit_with(&mut $visitor))*
-              ;
+          let module = module.fold_with(&mut resolver(Mark::new(), Mark::new(), true));
+          $(module.visit_with(&mut $visitor);)*
       });
     };
 
