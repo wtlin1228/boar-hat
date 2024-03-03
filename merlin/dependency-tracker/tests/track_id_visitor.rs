@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use swc_core::{
     common::{
         errors::{ColorConfig, Handler},
@@ -58,12 +59,131 @@ macro_rules! parse_with_visitors {
     ($input:expr, $($visitor:expr,)*) => {
       $crate::parse_with_visitors![$input:expr, $($visitor),*]
     };
+}
 
+macro_rules! assert_tracked_ids {
+    ($visitor:expr, $expect:expr) => {
+        let tracked_ids: HashSet<&str> = $visitor
+            .tracked_ids
+            .iter()
+            .map(|(atom, _)| atom.as_str())
+            .collect();
+        assert_eq!(tracked_ids, HashSet::from($expect));
+    };
 }
 
 #[test]
-fn empty_input() {
+fn test_empty_input() {
     let mut visitor = TrackIdVisitor::new();
     parse_with_visitors!["", visitor];
-    assert_eq!(visitor.tracked_ids.len(), 0);
+    assert_tracked_ids!(visitor, []);
+}
+
+#[test]
+fn test_import() {
+    let input = "
+import A, { B, _C as C } from 'some/where';
+import * as D from 'some/where/else';
+";
+    let mut visitor = TrackIdVisitor::new();
+    parse_with_visitors![input, visitor];
+    assert_tracked_ids!(visitor, ["A", "B", "C", "D"]);
+}
+
+#[test]
+fn test_export_declaration() {
+    let input = "
+export class A {}
+export function B() {}
+export const C = () => {};
+export const D = [];
+export const E = {};
+";
+    let mut visitor = TrackIdVisitor::new();
+    parse_with_visitors![input, visitor];
+    assert_tracked_ids!(visitor, ["A", "B", "C", "D", "E"]);
+}
+
+#[test]
+fn test_export_named_declaration() {
+    let input = "
+export { A };
+";
+    let mut visitor = TrackIdVisitor::new();
+    parse_with_visitors![input, visitor];
+    assert_tracked_ids!(visitor, []);
+}
+
+#[test]
+fn test_export_default_declaration_class() {
+    let input = "
+export default class A {}
+";
+    let mut visitor = TrackIdVisitor::new();
+    parse_with_visitors![input, visitor];
+    assert_tracked_ids!(visitor, ["A"]);
+}
+
+#[test]
+fn test_export_default_declaration_function() {
+    let input = "
+export default function A() {}
+";
+    let mut visitor = TrackIdVisitor::new();
+    parse_with_visitors![input, visitor];
+    assert_tracked_ids!(visitor, ["A"]);
+}
+
+#[test]
+fn test_export_default_declaration_class_no_ident() {
+    let input = "
+export default class {}
+";
+    let mut visitor = TrackIdVisitor::new();
+    parse_with_visitors![input, visitor];
+    assert_tracked_ids!(visitor, []);
+}
+
+#[test]
+fn test_export_default_declaration_function_no_ident() {
+    let input = "
+export default function () {}
+";
+    let mut visitor = TrackIdVisitor::new();
+    parse_with_visitors![input, visitor];
+    assert_tracked_ids!(visitor, []);
+}
+
+#[test]
+fn test_export_default_expression() {
+    let input = "
+export default [1, 2, 3];
+";
+    let mut visitor = TrackIdVisitor::new();
+    parse_with_visitors![input, visitor];
+    assert_tracked_ids!(visitor, []);
+}
+
+#[test]
+fn test_export_all_declaration() {
+    let input = "
+export * from 'some/where';
+";
+    let mut visitor = TrackIdVisitor::new();
+    parse_with_visitors![input, visitor];
+    assert_tracked_ids!(visitor, []);
+}
+
+#[test]
+fn test_statement() {
+    let input = "
+class A {}
+function B() {}
+const C = () => {};
+const D = [];
+const E = {};
+";
+    let mut visitor = TrackIdVisitor::new();
+    parse_with_visitors![input, visitor];
+    assert_tracked_ids!(visitor, ["A", "B", "C", "D", "E"]);
 }
