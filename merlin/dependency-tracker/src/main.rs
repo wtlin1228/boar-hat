@@ -1,4 +1,4 @@
-use dependency_tracker::TopVisitor;
+use dependency_tracker::visitors::track_id_visitor::TrackIdVisitor;
 use std::path::Path;
 
 use swc_core::{
@@ -50,9 +50,13 @@ fn main() {
         })
         .expect("failed to parser module");
 
+    let mut track_id_visitor = TrackIdVisitor::new();
+
     GLOBALS.set(&Globals::new(), || {
         module
             .fold_with(&mut resolver(Mark::new(), Mark::new(), true))
-            .visit_with(&mut TopVisitor {});
+            .visit_with(&mut track_id_visitor);
     });
+
+    println!("{:?}", track_id_visitor.tracked_ids);
 }
