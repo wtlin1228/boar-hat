@@ -21,7 +21,7 @@ trait Heap {
     }
 }
 
-trait MaxHeap: Heap {
+trait MaxHeapify: Heap {
     fn max_heapify_up(&mut self, current: usize) {
         if current == 0 {
             return;
@@ -67,7 +67,7 @@ trait MaxHeap: Heap {
     }
 }
 
-trait MinHeap: Heap {
+trait MinHeapify: Heap {
     fn min_heapify_up(&mut self, current: usize) {
         if current == 0 {
             return;
@@ -113,7 +113,7 @@ trait MinHeap: Heap {
     }
 }
 
-trait HeapSort: MaxHeap {
+trait HeapSort: MaxHeapify {
     fn heap_sort(&mut self) {
         self.build_max_heap();
         let mut i = self.heap_size() - 1;
@@ -128,50 +128,123 @@ trait HeapSort: MaxHeap {
     }
 }
 
+impl<T: Ord> Heap for Vec<T> {
+    fn heap_size(&self) -> usize {
+        self.len()
+    }
+
+    fn exchange(&mut self, i: usize, j: usize) {
+        self.swap(i, j);
+    }
+
+    fn compare(&self, i: usize, j: usize) -> Ordering {
+        self[i].cmp(&self[j])
+    }
+}
+
+impl<T: Ord> Heap for &mut [T] {
+    fn heap_size(&self) -> usize {
+        self.len()
+    }
+
+    fn exchange(&mut self, i: usize, j: usize) {
+        self.swap(i, j);
+    }
+
+    fn compare(&self, i: usize, j: usize) -> Ordering {
+        self[i].cmp(&self[j])
+    }
+}
+
+impl<T: Ord> MaxHeapify for Vec<T> {}
+impl<T: Ord> MaxHeapify for &mut [T] {}
+
+impl<T: Ord> MinHeapify for Vec<T> {}
+impl<T: Ord> MinHeapify for &mut [T] {}
+
+impl<T: Ord> HeapSort for Vec<T> {}
+impl<T: Ord> HeapSort for &mut [T] {}
+
+pub struct MaxHeap<T: Ord> {
+    data: Vec<T>,
+}
+
+impl<T: Ord> MaxHeap<T> {
+    pub fn new() -> Self {
+        Self { data: vec![] }
+    }
+
+    pub fn from(mut data: Vec<T>) -> Self {
+        data.build_max_heap();
+        Self { data }
+    }
+
+    pub fn insert(&mut self, v: T) {
+        self.data.push(v);
+        self.data.max_heapify_up(self.data.len() - 1);
+    }
+
+    pub fn delete(&mut self) -> Option<T> {
+        if self.data.len() == 0 {
+            return None;
+        }
+        self.data.exchange(0, self.data.len() - 1);
+        let res = self.data.pop().unwrap();
+        self.data.max_heapify_down(0, None);
+        Some(res)
+    }
+
+    pub fn peek(&self) -> Option<&T> {
+        match self.data.len() {
+            0 => None,
+            _ => Some(&self.data[0]),
+        }
+    }
+}
+
+pub struct MinHeap<T: Ord> {
+    data: Vec<T>,
+}
+
+impl<T: Ord> MinHeap<T> {
+    pub fn new() -> Self {
+        Self { data: vec![] }
+    }
+
+    pub fn from(mut data: Vec<T>) -> Self {
+        data.build_min_heap();
+        Self { data }
+    }
+
+    pub fn insert(&mut self, v: T) {
+        self.data.push(v);
+        self.data.min_heapify_up(self.data.len() - 1);
+    }
+
+    pub fn delete(&mut self) -> Option<T> {
+        if self.data.len() == 0 {
+            return None;
+        }
+        self.data.exchange(0, self.data.len() - 1);
+        let res = self.data.pop().unwrap();
+        self.data.min_heapify_down(0, None);
+        Some(res)
+    }
+
+    pub fn peek(&self) -> Option<&T> {
+        match self.data.len() {
+            0 => None,
+            _ => Some(&self.data[0]),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cmp::Ordering;
 
-    impl<T: Ord> Heap for Vec<T> {
-        fn heap_size(&self) -> usize {
-            self.len()
-        }
-
-        fn exchange(&mut self, i: usize, j: usize) {
-            self.swap(i, j);
-        }
-
-        fn compare(&self, i: usize, j: usize) -> Ordering {
-            self[i].cmp(&self[j])
-        }
-    }
-
-    impl<T: Ord> Heap for &mut [T] {
-        fn heap_size(&self) -> usize {
-            self.len()
-        }
-
-        fn exchange(&mut self, i: usize, j: usize) {
-            self.swap(i, j);
-        }
-
-        fn compare(&self, i: usize, j: usize) -> Ordering {
-            self[i].cmp(&self[j])
-        }
-    }
-
-    impl<T: Ord> MaxHeap for Vec<T> {}
-    impl<T: Ord> MaxHeap for &mut [T] {}
-
-    impl<T: Ord> MinHeap for Vec<T> {}
-    impl<T: Ord> MinHeap for &mut [T] {}
-
-    impl<T: Ord> HeapSort for Vec<T> {}
-    impl<T: Ord> HeapSort for &mut [T] {}
-
-    mod max_heap_tests {
-        use super::MaxHeap;
+    mod max_heapify_tests {
+        use super::MaxHeapify;
 
         #[test]
         fn test_vector() {
@@ -197,8 +270,8 @@ mod tests {
         }
     }
 
-    mod min_heap_tests {
-        use super::MinHeap;
+    mod min_heapify_tests {
+        use super::MinHeapify;
 
         #[test]
         fn test_vector() {
@@ -248,6 +321,58 @@ mod tests {
             let mut slice = &mut v[..10];
             slice.heap_sort();
             assert_eq!(v, [1, 2, 3, 4, 7, 8, 9, 10, 14, 16, 5, 6]);
+        }
+    }
+
+    mod max_heap_tests {
+        use super::MaxHeap;
+
+        #[test]
+        fn test_new() {
+            let mut q: MaxHeap<i32> = MaxHeap::new();
+            for i in [4, 1, 3, 2, 16, 9, 10, 14, 8, 7] {
+                q.insert(i);
+            }
+
+            for i in [16, 14, 10, 9, 8, 7, 4, 3, 2, 1] {
+                assert_eq!(q.peek().unwrap(), &i);
+                assert_eq!(q.delete().unwrap(), i);
+            }
+        }
+
+        #[test]
+        fn test_from() {
+            let mut q = MaxHeap::from(vec![4, 1, 3, 2, 16, 9, 10, 14, 8, 7]);
+            for i in [16, 14, 10, 9, 8, 7, 4, 3, 2, 1] {
+                assert_eq!(q.peek().unwrap(), &i);
+                assert_eq!(q.delete().unwrap(), i);
+            }
+        }
+    }
+
+    mod min_heap_tests {
+        use super::MinHeap;
+
+        #[test]
+        fn test_new() {
+            let mut q: MinHeap<i32> = MinHeap::new();
+            for i in [4, 1, 3, 2, 16, 9, 10, 14, 8, 7] {
+                q.insert(i);
+            }
+
+            for i in [1, 2, 3, 4, 7, 8, 9, 10, 14, 16] {
+                assert_eq!(q.peek().unwrap(), &i);
+                assert_eq!(q.delete().unwrap(), i);
+            }
+        }
+
+        #[test]
+        fn test_from() {
+            let mut q = MinHeap::from(vec![4, 1, 3, 2, 16, 9, 10, 14, 8, 7]);
+            for i in [1, 2, 3, 4, 7, 8, 9, 10, 14, 16] {
+                assert_eq!(q.peek().unwrap(), &i);
+                assert_eq!(q.delete().unwrap(), i);
+            }
         }
     }
 }
