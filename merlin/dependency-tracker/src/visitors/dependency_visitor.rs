@@ -20,14 +20,6 @@ impl DependencyVisitor {
             dependency,
         }
     }
-
-    pub fn a(&self) {
-        let mut d: HashMap<&str, HashSet<&str>> = HashMap::new();
-        for (key, value) in &self.dependency {
-            let set: HashSet<&str> = value.iter().map(|(atom, _)| atom.as_str()).collect();
-            d.insert(key.0.as_str(), set);
-        }
-    }
 }
 
 impl Visit for DependencyVisitor {
