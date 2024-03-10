@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-trait Heap {
+trait Heapify {
     fn heap_size(&self) -> usize;
     fn exchange(&mut self, i: usize, j: usize);
     fn compare(&self, i: usize, j: usize) -> Ordering;
@@ -21,7 +21,7 @@ trait Heap {
     }
 }
 
-trait MaxHeapify: Heap {
+trait MaxHeapify: Heapify {
     fn max_heapify_up(&mut self, current: usize) {
         if current == 0 {
             return;
@@ -67,7 +67,7 @@ trait MaxHeapify: Heap {
     }
 }
 
-trait MinHeapify: Heap {
+trait MinHeapify: Heapify {
     fn min_heapify_up(&mut self, current: usize) {
         if current == 0 {
             return;
@@ -128,7 +128,7 @@ trait HeapSort: MaxHeapify {
     }
 }
 
-impl<T: Ord> Heap for Vec<T> {
+impl<T: Ord> Heapify for Vec<T> {
     fn heap_size(&self) -> usize {
         self.len()
     }
@@ -142,7 +142,7 @@ impl<T: Ord> Heap for Vec<T> {
     }
 }
 
-impl<T: Ord> Heap for &mut [T] {
+impl<T: Ord> Heapify for &mut [T] {
     fn heap_size(&self) -> usize {
         self.len()
     }
