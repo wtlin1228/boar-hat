@@ -53,7 +53,7 @@ impl<T: Ord> MaxHeap<T> {
         i * 2 + 2
     }
 
-    pub fn build_max_heap(slice: &mut [T]) {
+    fn build_max_heap(slice: &mut [T]) {
         for i in (0..=Self::parent(slice.len() - 1)).rev() {
             Self::max_heapify_down(slice, i);
         }
@@ -93,10 +93,10 @@ impl<T: Ord> MaxHeap<T> {
 pub struct HeapSort;
 
 impl HeapSort {
-    pub fn sort<T: Ord + std::fmt::Debug>(slice: &mut [T]) {
+    pub fn sort<T: Ord>(slice: &mut [T]) {
         MaxHeap::build_max_heap(slice);
-        let len = slice.len() - 1;
-        for i in (1..=len).rev() {
+        let unsorted = slice.len() - 1;
+        for i in (1..=unsorted).rev() {
             slice.swap(0, i);
             MaxHeap::max_heapify_down(&mut slice[0..i], 0);
         }
