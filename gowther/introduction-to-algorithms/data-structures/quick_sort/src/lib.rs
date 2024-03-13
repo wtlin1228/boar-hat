@@ -80,7 +80,7 @@ mod tests {
     fn test_large_size() {
         let mut rand = rand::thread_rng();
         let mut things = Vec::with_capacity(5000000);
-        for _ in 0..things.len() {
+        for _ in 0..things.capacity() {
             things.push(rand.gen::<usize>());
         }
         QuickSort { randomized: false }.sort(&mut things);
@@ -93,7 +93,7 @@ mod tests {
     fn test_large_size_with_random_partition() {
         let mut rand = rand::thread_rng();
         let mut things = Vec::with_capacity(5000000);
-        for _ in 0..things.len() {
+        for _ in 0..things.capacity() {
             things.push(rand.gen::<usize>());
         }
         QuickSort { randomized: true }.sort(&mut things);
