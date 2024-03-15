@@ -81,7 +81,7 @@ impl JsonSorter {
     /// Writes the contents of the JSON Sorter to a file located at the given `file_path`.
     pub fn write_to_file(&self, file_path: &str) -> Result<(), JsonSorterError> {
         let _ = fs::remove_file(file_path);
-        let mut file = File::create_new(file_path)?;
+        let mut file = File::create(file_path)?;
         file.write_all(b"{\n")?;
         let mut lines = vec![];
         for (i, KeyValuePair { key, value }) in self.contents.iter().enumerate() {
