@@ -11,20 +11,7 @@ use swc_core::ecma::{
     visit::{Visit, VisitWith},
 };
 
-#[derive(Debug, PartialEq)]
-pub struct SingleTranslation {
-    pub key: String,
-    pub value: String,
-}
-
-impl SingleTranslation {
-    pub fn new(key: &str, value: &str) -> Self {
-        Self {
-            key: key.to_string(),
-            value: value.to_string(),
-        }
-    }
-}
+use crate::SingleTranslation;
 
 /// I18nKeyVisitor filters out `const LABELS = translate({ /*...*/ })`
 pub struct I18nKeyVisitor {

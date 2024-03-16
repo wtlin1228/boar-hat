@@ -1,4 +1,4 @@
-use dependency_tracker::visitors::i18n_key_visitor::{I18nKeyVisitor, SingleTranslation};
+use i18n::{i18n_key_visitor::I18nKeyVisitor, SingleTranslation};
 
 use swc_core::{
     common::{
