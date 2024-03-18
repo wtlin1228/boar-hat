@@ -85,7 +85,7 @@ impl JsonSorter {
         stream.write(b"{\n")?;
         for (i, KeyValuePair { key, value }) in self.contents.iter().enumerate() {
             let line = format!(
-                "    \"{}\": \"{}\"{}",
+                "\t\"{}\": \"{}\"{}",
                 key,
                 value,
                 if i != self.contents.len() - 1 {

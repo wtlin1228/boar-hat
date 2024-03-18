@@ -16,13 +16,13 @@ fn sort_json_file() {
         lines,
         [
             "{",
-            "    \"foo\": \"Lorem ipsum dolor sit amet.\",",
-            "    \"foo.bar.a\": \"Lorem ipsum dolor sit amet.\",",
-            "    \"foo.bar.b\": \"Lorem ipsum dolor sit amet.\",",
-            "    \"foo.bar.baz.a\": \"Lorem ipsum dolor sit amet.\",",
-            "    \"foo.bar.baz.b\": \"Lorem ipsum dolor sit amet.\",",
-            "    \"foo.bar.baz.c\": \"Lorem ipsum dolor sit amet.\",",
-            "    \"foo.bar.c\": \"Lorem ipsum dolor sit amet.\"",
+            "\t\"foo\": \"Lorem ipsum dolor sit amet.\",",
+            "\t\"foo.bar.a\": \"Lorem ipsum dolor sit amet.\",",
+            "\t\"foo.bar.b\": \"Lorem ipsum dolor sit amet.\",",
+            "\t\"foo.bar.baz.a\": \"Lorem ipsum dolor sit amet.\",",
+            "\t\"foo.bar.baz.b\": \"Lorem ipsum dolor sit amet.\",",
+            "\t\"foo.bar.baz.c\": \"Lorem ipsum dolor sit amet.\",",
+            "\t\"foo.bar.c\": \"Lorem ipsum dolor sit amet.\"",
             "}",
         ]
     );
