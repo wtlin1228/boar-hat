@@ -1,6 +1,6 @@
 use std::{fs, io::BufRead};
 
-use json_sorter::JsonSorter;
+use i18n_json_sorter::JsonSorter;
 
 #[test]
 fn sort_json_file() {

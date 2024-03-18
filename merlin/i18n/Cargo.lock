@@ -528,6 +528,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "i18n_json_sorter"
+version = "0.1.0"
+
+[[package]]
 name = "i18n_key_extractor"
 version = "0.1.0"
 dependencies = [

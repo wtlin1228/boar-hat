@@ -1,5 +1,6 @@
 [workspace]
-members = [
+members = [ 
+    "crates/i18n_json_sorter",
     "crates/i18n_key_extractor",
 ]
 

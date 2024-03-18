@@ -8,7 +8,7 @@
 //! ## Usage
 //!
 //! ```rust no_run
-//! use json_sorter::JsonSorter;
+//! use i18n_json_sorter::JsonSorter;
 //!
 //! fn main() {
 //!     // Example usage
