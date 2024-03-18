@@ -66,14 +66,21 @@ const LABELS = translate({
     method: 'abc.def.payment.method',
     price: ['abc.def.payment.formatted-price', 'lazy'],
   },
+  productType: {
+    [FOO]: 'abc.def.product-type.foo',
+    [PRODUCT_TYPE_ENUM[A]]: 'abc.def.product-type.a',
+    [PRODUCT_TYPE_ENUM.B]: 'abc.def.product-type.b',
+  },
 });
-
         ",
         [
             SingleTranslation::new("title", "abc.def.title"),
             SingleTranslation::new("description", "abc.def.description"),
             SingleTranslation::new("method", "abc.def.payment.method"),
             SingleTranslation::new("price", "abc.def.payment.formatted-price"),
+            SingleTranslation::new("FOO", "abc.def.product-type.foo"),
+            SingleTranslation::new("PRODUCT_TYPE_ENUM", "abc.def.product-type.a"),
+            SingleTranslation::new("PRODUCT_TYPE_ENUM", "abc.def.product-type.b"),
         ]
     );
 }

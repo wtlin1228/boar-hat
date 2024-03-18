@@ -82,7 +82,22 @@ impl<'contents> TranslateArgumentVisitor<'contents> {
 
 impl<'contents> Visit for TranslateArgumentVisitor<'contents> {
     fn visit_key_value_prop(&mut self, n: &KeyValueProp) {
-        let key = n.key.as_ident().unwrap().sym.as_str();
+        let key = match &n.key {
+            // "foo"
+            PropName::Ident(_) | PropName::Str(_) => n.key.as_ident().unwrap().sym.as_str(),
+            // [foo]
+            PropName::Computed(computed_prop_name) => match &*computed_prop_name.expr {
+                // [foo.abc]
+                Expr::Member(expr) => match &*expr.obj {
+                    Expr::Ident(expr) => expr.sym.as_str(),
+                    _ => unreachable!(),
+                },
+                // [foo]
+                Expr::Ident(expr) => expr.sym.as_str(),
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        };
 
         // extract value
         match &*n.value {
