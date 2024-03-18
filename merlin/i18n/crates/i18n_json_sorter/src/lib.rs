@@ -21,7 +21,7 @@
 
 use std::{
     fs::{self, File},
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, BufWriter, Write},
 };
 
 use anyhow::Context;
@@ -79,9 +79,10 @@ impl JsonSorter {
     /// Writes the contents of the JSON Sorter to a file located at the given `file_path`.
     pub fn write_to_file(&self, file_path: &str) -> anyhow::Result<()> {
         let _ = fs::remove_file(file_path);
-        let mut file = File::create(file_path)?;
-        file.write_all(b"{\n")?;
-        let mut lines = vec![];
+        let file = File::create(file_path)?;
+        let mut stream = BufWriter::new(file);
+
+        stream.write(b"{\n")?;
         for (i, KeyValuePair { key, value }) in self.contents.iter().enumerate() {
             let line = format!(
                 "    \"{}\": \"{}\"{}",
@@ -93,16 +94,10 @@ impl JsonSorter {
                     "\n"
                 }
             );
-            lines.push(line);
-            if lines.len() > 1_000_000 {
-                file.write_all(lines.join("").as_bytes())?;
-                lines.clear();
-            }
+            stream.write(line.as_bytes())?;
         }
-        if lines.len() > 0 {
-            file.write_all(lines.join("").as_bytes())?;
-        }
-        file.write_all(b"}\n")?;
+        stream.write(b"}\n")?;
+
         Ok(())
     }
 }
