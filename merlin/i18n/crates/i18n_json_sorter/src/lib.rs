@@ -20,13 +20,11 @@
 //! ```
 
 use std::{
-    error::Error,
     fs::{self, File},
     io::{BufRead, BufReader, Write},
 };
 
-/// Alias for the error type returned by JsonSorter methods.
-type JsonSorterError = Box<dyn Error + Send + Sync + 'static>;
+use anyhow::Context;
 
 /// Represents a key-value pair in the JSON Sorter.
 #[derive(Debug)]
@@ -43,7 +41,7 @@ pub struct JsonSorter {
 
 impl JsonSorter {
     /// Constructs a new JsonSorter instance from the JSON file located at the given `file_path`.
-    pub fn from(file_path: &str) -> Result<Self, JsonSorterError> {
+    pub fn from(file_path: &str) -> anyhow::Result<Self> {
         let mut json_sorter = JsonSorter { contents: vec![] };
         let mut file = File::open(file_path)?;
         let reader = BufReader::new(&mut file);
@@ -53,7 +51,7 @@ impl JsonSorter {
             match line {
                 s if s.is_empty() || s == "{" || s == "}" || s == "{}" => (),
                 _ => {
-                    let (key, value) = line.split_once(":").expect("colon expected");
+                    let (key, value) = line.split_once(":").context("colon expected")?;
                     let value = value.trim();
                     json_sorter.contents.push(KeyValuePair {
                         key: key[1..key.len() - 1].to_owned(), // "key" => key
@@ -69,7 +67,7 @@ impl JsonSorter {
     }
 
     /// Sorts the contents of the JSON Sorter by keys.
-    pub fn sort_contents(&mut self) -> Result<(), JsonSorterError> {
+    pub fn sort_contents(&mut self) -> anyhow::Result<()> {
         self.contents.sort_by(|a, b| {
             let a = &a.key[..];
             let b = &b.key[..];
@@ -79,7 +77,7 @@ impl JsonSorter {
     }
 
     /// Writes the contents of the JSON Sorter to a file located at the given `file_path`.
-    pub fn write_to_file(&self, file_path: &str) -> Result<(), JsonSorterError> {
+    pub fn write_to_file(&self, file_path: &str) -> anyhow::Result<()> {
         let _ = fs::remove_file(file_path);
         let mut file = File::create(file_path)?;
         file.write_all(b"{\n")?;

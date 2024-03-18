@@ -42,7 +42,6 @@ fn sort_empty_json_file() {
 }
 
 #[test]
-#[should_panic(expected = "colon expected")]
 fn sort_bad_json_file() {
-    let _ = JsonSorter::from("./tests/inputs/bad.json");
+    assert!(JsonSorter::from("./tests/inputs/bad.json").is_err());
 }
