@@ -1,6 +1,6 @@
 use anyhow;
 use clap::Parser;
-use i18n::{extract_i18n_keys::extract_i18n_keys, GitDiffStatusLetter};
+use i18n_key_extractor::{extract_i18n_keys::extract_i18n_keys, GitDiffStatusLetter};
 use rand::{distributions::Alphanumeric, Rng};
 use std::{
     fs::File,
