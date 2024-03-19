@@ -1,38 +1,54 @@
-/// Counting sort assumes that each of the n input elements is
-/// an integer in the range 0 to k. So it can run in Θ(n) time.
-/// The space complexity is Θ(n) since counting sort uses two
-/// extra vectors with size k and size n respectively.
 pub struct CountingSort;
 
-pub trait Id {
-    fn id(&self) -> usize;
+pub trait SortKey {
+    fn key(&self) -> usize;
 }
 
-impl Id for usize {
-    fn id(&self) -> usize {
+impl SortKey for usize {
+    fn key(&self) -> usize {
         *self
     }
 }
 
 impl CountingSort {
-    pub fn sort<T: Id + Clone + Default>(&self, slice: &[T], k: usize) -> Vec<T> {
-        let mut c: Vec<usize> = Vec::with_capacity(k + 1);
-        c.resize(c.capacity(), 0);
+    // Time and space complexity are both Θ(n + k), where
+    //     - n is slice.len()
+    //     - k is the maximum key
+    pub fn sort<T: SortKey + std::fmt::Debug>(&self, slice: &mut [T]) {
+        if slice.len() == 0 {
+            return;
+        }
+        let max = slice.iter().map(|x| x.key()).max().unwrap();
+        let mut lookup_table: Vec<usize> = Vec::with_capacity(max + 1);
+        lookup_table.resize(max + 1, 0);
+        for key in slice.iter().map(|x| x.key()) {
+            lookup_table[key] += 1;
+        }
+        // now lookup table contains the count of each key
 
-        for n in slice {
-            c[n.id()] = c[n.id()] + 1;
+        for i in 1..lookup_table.len() {
+            lookup_table[i] += lookup_table[i - 1];
         }
-        for i in 1..=k {
-            c[i] = c[i] + c[i - 1];
-        }
+        // now lookup table contains the ending index of each key
 
-        let mut res: Vec<T> = Vec::with_capacity(slice.len());
-        res.resize(res.capacity(), Default::default());
-        for n in slice.iter().rev() {
-            res[c[n.id()] - 1] = n.clone();
-            c[n.id()] -= 1;
+        // Since Rust doesn't allow us to leave holes inside slices.
+        // So I use one additional vector `fixed` to track is this
+        // position is already filled with the sorted element.
+        // This takes extra Θ(n) space.
+        let mut fixed = Vec::with_capacity(slice.len());
+        fixed.resize(slice.len(), false);
+        let mut ptr = slice.len() - 1;
+        while ptr > 0 {
+            match fixed[ptr] {
+                true => ptr -= 1,
+                false => {
+                    let move_to = lookup_table[slice[ptr].key()] - 1;
+                    lookup_table[slice[ptr].key()] -= 1;
+                    slice.swap(move_to, ptr);
+                    fixed[move_to] = true;
+                }
+            }
         }
-        res
     }
 }
 
@@ -43,9 +59,10 @@ mod tests {
 
     #[test]
     fn test_counting_sort() {
-        let things = vec![4, 4, 2, 1, 1, 1, 2, 2, 4];
-        let sorted = CountingSort.sort(&things, 4);
-        assert_eq!(sorted, [1, 1, 1, 2, 2, 2, 4, 4, 4]);
+        let mut things = vec![4, 4, 2, 1, 1, 1, 2, 2, 4];
+        CountingSort.sort(&mut things);
+        println!("{:?}", things);
+        assert_eq!(things, [1, 1, 1, 2, 2, 2, 4, 4, 4]);
     }
 
     #[test]
@@ -56,9 +73,9 @@ mod tests {
         for _ in 0..things.capacity() {
             things.push(rng.gen_range(0..=k));
         }
-        let sorted = CountingSort.sort(&things, k);
-        for i in 1..sorted.len() {
-            assert!(sorted[i] >= sorted[i - 1]);
+        CountingSort.sort(&mut things);
+        for i in 1..things.len() {
+            assert!(things[i] >= things[i - 1]);
         }
     }
 }
