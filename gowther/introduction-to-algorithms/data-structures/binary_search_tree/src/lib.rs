@@ -55,8 +55,13 @@ pub trait TreePointerHelper<T: Key<K> + PartialEq, K: Ord> {
     fn parent(&self) -> Option<Rc<RefCell<Node<T, K>>>>;
     fn left(&self) -> Option<Rc<RefCell<Node<T, K>>>>;
     fn right(&self) -> Option<Rc<RefCell<Node<T, K>>>>;
+    fn unlink_parent(&self);
+    fn unlink_left(&self);
+    fn unlink_right(&self);
     fn set_left(&self, left: &Rc<RefCell<Node<T, K>>>);
     fn set_right(&self, right: &Rc<RefCell<Node<T, K>>>);
+    fn is_left_child(&self) -> bool;
+    fn is_right_child(&self) -> bool;
 }
 
 impl<T: Key<K> + PartialEq, K: Ord> TreePointerHelper<T, K> for Rc<RefCell<Node<T, K>>> {
@@ -81,59 +86,66 @@ impl<T: Key<K> + PartialEq, K: Ord> TreePointerHelper<T, K> for Rc<RefCell<Node<
         }
     }
 
+    fn unlink_parent(&self) {
+        if self.is_left_child() {
+            self.parent().unwrap().borrow_mut().left.take();
+        } else if self.is_right_child() {
+            self.parent().unwrap().borrow_mut().right.take();
+        }
+        self.borrow_mut().parent.take();
+    }
+
+    fn unlink_left(&self) {
+        if self.borrow().left.is_some() {
+            let left = self.borrow_mut().left.take().unwrap();
+            left.borrow_mut().parent.take();
+        }
+    }
+
+    fn unlink_right(&self) {
+        if self.borrow().right.is_some() {
+            let right = self.borrow_mut().right.take().unwrap();
+            right.borrow_mut().parent.take();
+        }
+    }
+
     fn set_left(&self, left: &Rc<RefCell<Node<T, K>>>) {
         let left = Rc::clone(left);
 
-        match self.left() {
-            Some(prev_left) => {
-                prev_left.borrow_mut().parent = None;
-                self.borrow_mut().left = Some(Rc::clone(&left));
-            }
-            None => {
-                self.borrow_mut().left = Some(Rc::clone(&left));
-            }
-        }
+        self.unlink_left();
+        self.borrow_mut().left = Some(Rc::clone(&left));
 
-        match left.parent() {
-            Some(prev_parent) => {
-                if prev_parent.left().is_some() && prev_parent.left().unwrap() == left {
-                    prev_parent.borrow_mut().left = None;
-                } else {
-                    prev_parent.borrow_mut().right = None;
-                }
-                left.borrow_mut().parent = Some(Rc::downgrade(self));
-            }
-            None => {
-                left.borrow_mut().parent = Some(Rc::downgrade(self));
-            }
-        }
+        left.unlink_parent();
+        left.borrow_mut().parent = Some(Rc::downgrade(self));
     }
 
     fn set_right(&self, right: &Rc<RefCell<Node<T, K>>>) {
         let right = Rc::clone(right);
 
-        match self.right() {
-            Some(prev_right) => {
-                prev_right.borrow_mut().parent = None;
-                self.borrow_mut().right = Some(Rc::clone(&right));
-            }
-            None => {
-                self.borrow_mut().right = Some(Rc::clone(&right));
-            }
-        }
+        self.unlink_right();
+        self.borrow_mut().right = Some(Rc::clone(&right));
 
-        match right.parent() {
-            Some(prev_parent) => {
-                if prev_parent.right().is_some() && prev_parent.right().unwrap() == right {
-                    prev_parent.borrow_mut().right = None;
-                } else {
-                    prev_parent.borrow_mut().left = None;
-                }
-                right.borrow_mut().parent = Some(Rc::downgrade(self));
-            }
-            None => {
-                right.borrow_mut().parent = Some(Rc::downgrade(self));
-            }
+        right.unlink_parent();
+        right.borrow_mut().parent = Some(Rc::downgrade(self));
+    }
+
+    fn is_left_child(&self) -> bool {
+        match self.parent() {
+            Some(parent) => match parent.left() {
+                Some(left) => self == &left,
+                None => false,
+            },
+            None => false,
+        }
+    }
+
+    fn is_right_child(&self) -> bool {
+        match self.parent() {
+            Some(parent) => match parent.right() {
+                Some(right) => self == &right,
+                None => false,
+            },
+            None => false,
         }
     }
 }
@@ -191,7 +203,7 @@ impl<T: Key<K> + PartialEq, K: Ord> BinarySearchTree<T, K> {
         loop {
             match y {
                 Some(ref node) => {
-                    if node.left().is_some() && node.left().unwrap() == x {
+                    if x.is_left_child() {
                         return Some(Rc::clone(node));
                     }
                 }
@@ -211,7 +223,7 @@ impl<T: Key<K> + PartialEq, K: Ord> BinarySearchTree<T, K> {
         loop {
             match y {
                 Some(ref node) => {
-                    if node.right().is_some() && node.right().unwrap() == x {
+                    if x.is_right_child() {
                         return Some(Rc::clone(node));
                     }
                 }
@@ -219,6 +231,30 @@ impl<T: Key<K> + PartialEq, K: Ord> BinarySearchTree<T, K> {
             }
             x = Rc::clone(y.as_ref().unwrap());
             y = x.parent();
+        }
+    }
+
+    fn transplant(&mut self, u: &Rc<RefCell<Node<T, K>>>, v: Option<Rc<RefCell<Node<T, K>>>>) {
+        if let Some(ref v) = v {
+            v.unlink_parent();
+        }
+
+        if u.parent().is_none() {
+            self.root = match v {
+                Some(ref node) => Some(Rc::clone(node)),
+                None => None,
+            };
+            return;
+        } else if u.is_left_child() {
+            match v {
+                Some(ref node) => u.parent().unwrap().set_left(node),
+                None => u.parent().unwrap().borrow_mut().left = None,
+            }
+        } else {
+            match v {
+                Some(ref node) => u.parent().unwrap().set_right(node),
+                None => u.parent().unwrap().borrow_mut().right = None,
+            }
         }
     }
 }
@@ -458,5 +494,87 @@ mod tests {
             n_3.borrow().data
         );
         assert_eq!(BinarySearchTree::predecessor(&n_2), None);
+    }
+
+    #[test]
+    fn test_transplant_root() {
+        let n_2 = Rc::new(RefCell::new(Node::new(2)));
+        let n_3 = Rc::new(RefCell::new(Node::new(3)));
+        let n_4 = Rc::new(RefCell::new(Node::new(4)));
+        let n_6 = Rc::new(RefCell::new(Node::new(6)));
+        let n_7 = Rc::new(RefCell::new(Node::new(7)));
+        let n_13 = Rc::new(RefCell::new(Node::new(13)));
+        let n_9 = Rc::new(RefCell::new(Node::new(9)));
+        let n_15 = Rc::new(RefCell::new(Node::new(15)));
+        let n_17 = Rc::new(RefCell::new(Node::new(17)));
+        let n_18 = Rc::new(RefCell::new(Node::new(18)));
+        let n_20 = Rc::new(RefCell::new(Node::new(20)));
+
+        n_3.set_left(&n_2);
+        n_3.set_right(&n_4);
+        n_13.set_left(&n_9);
+        n_7.set_right(&n_13);
+        n_6.set_left(&n_3);
+        n_6.set_right(&n_7);
+        n_18.set_left(&n_17);
+        n_18.set_right(&n_20);
+        n_15.set_left(&n_6);
+        n_15.set_right(&n_18);
+
+        let mut bst = BinarySearchTree {
+            root: Some(Rc::clone(&n_15)),
+        };
+        bst.transplant(&n_15, Some(Rc::clone(&n_18)));
+
+        assert_eq!(n_15.parent(), None);
+        assert_eq!(n_15.left(), Some(Rc::clone(&n_6)));
+        assert_eq!(n_15.right(), None);
+
+        assert_eq!(bst.root, Some(Rc::clone(&n_18)));
+        assert_eq!(bst.root.as_ref().unwrap().left(), Some(Rc::clone(&n_17)));
+        assert_eq!(bst.root.as_ref().unwrap().right(), Some(Rc::clone(&n_20)));
+    }
+
+    #[test]
+    fn test_transplant_not_root() {
+        let n_2 = Rc::new(RefCell::new(Node::new(2)));
+        let n_3 = Rc::new(RefCell::new(Node::new(3)));
+        let n_4 = Rc::new(RefCell::new(Node::new(4)));
+        let n_6 = Rc::new(RefCell::new(Node::new(6)));
+        let n_7 = Rc::new(RefCell::new(Node::new(7)));
+        let n_13 = Rc::new(RefCell::new(Node::new(13)));
+        let n_9 = Rc::new(RefCell::new(Node::new(9)));
+        let n_15 = Rc::new(RefCell::new(Node::new(15)));
+        let n_17 = Rc::new(RefCell::new(Node::new(17)));
+        let n_18 = Rc::new(RefCell::new(Node::new(18)));
+        let n_20 = Rc::new(RefCell::new(Node::new(20)));
+
+        n_3.set_left(&n_2);
+        n_3.set_right(&n_4);
+        n_13.set_left(&n_9);
+        n_7.set_right(&n_13);
+        n_6.set_left(&n_3);
+        n_6.set_right(&n_7);
+        n_18.set_left(&n_17);
+        n_18.set_right(&n_20);
+        n_15.set_left(&n_6);
+        n_15.set_right(&n_18);
+
+        let mut bst = BinarySearchTree {
+            root: Some(Rc::clone(&n_15)),
+        };
+        bst.transplant(&n_6, Some(Rc::clone(&n_18)));
+
+        assert_eq!(n_6.parent(), None);
+        assert_eq!(n_6.left(), Some(Rc::clone(&n_3)));
+        assert_eq!(n_6.right(), Some(Rc::clone(&n_7)));
+
+        assert_eq!(bst.root, Some(Rc::clone(&n_15)));
+        assert_eq!(bst.root.as_ref().unwrap().left(), Some(Rc::clone(&n_18)));
+        assert_eq!(bst.root.as_ref().unwrap().right(), None);
+
+        assert_eq!(n_18.parent(), Some(Rc::clone(&n_15)));
+        assert_eq!(n_18.left(), Some(Rc::clone(&n_17)));
+        assert_eq!(n_18.right(), Some(Rc::clone(&n_20)));
     }
 }
