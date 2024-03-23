@@ -257,6 +257,41 @@ impl<T: Key<K> + PartialEq, K: Ord> BinarySearchTree<T, K> {
             }
         }
     }
+
+    pub fn delete(&mut self, k: &K) -> Result<Rc<RefCell<Node<T, K>>>, ()> {
+        // it's an empty tree
+        if self.root.is_none() {
+            return Err(());
+        }
+
+        // find the node to delete
+        let root = self.root.as_ref().unwrap();
+        let z = BinarySearchTree::search(Some(Rc::clone(root)), k);
+        if z.is_none() {
+            return Err(());
+        }
+
+        // z is the node to delete
+        let z = z.unwrap();
+
+        if z.left().is_none() {
+            self.transplant(&z, z.right());
+        } else if z.right().is_none() {
+            self.transplant(&z, z.left());
+        } else {
+            let y = BinarySearchTree::minimum(&z.right().unwrap());
+            // y.left is guaranteed to be Nil since it's the minimum of z.right
+            if y != z.right().unwrap() {
+                self.transplant(&y, y.right());
+                y.set_right(z.right().as_ref().unwrap());
+            }
+            self.transplant(&z, Some(Rc::clone(&y)));
+            y.set_left(z.left().as_ref().unwrap());
+        }
+
+        z.borrow_mut().parent.take();
+        Ok(z)
+    }
 }
 
 #[cfg(test)]
@@ -576,5 +611,148 @@ mod tests {
         assert_eq!(n_18.parent(), Some(Rc::clone(&n_15)));
         assert_eq!(n_18.left(), Some(Rc::clone(&n_17)));
         assert_eq!(n_18.right(), Some(Rc::clone(&n_20)));
+    }
+
+    #[test]
+    fn test_delete() {
+        let n_2 = Rc::new(RefCell::new(Node::new(2)));
+        let n_3 = Rc::new(RefCell::new(Node::new(3)));
+        let n_4 = Rc::new(RefCell::new(Node::new(4)));
+        let n_6 = Rc::new(RefCell::new(Node::new(6)));
+        let n_7 = Rc::new(RefCell::new(Node::new(7)));
+        let n_13 = Rc::new(RefCell::new(Node::new(13)));
+        let n_9 = Rc::new(RefCell::new(Node::new(9)));
+        let n_15 = Rc::new(RefCell::new(Node::new(15)));
+        let n_17 = Rc::new(RefCell::new(Node::new(17)));
+        let n_18 = Rc::new(RefCell::new(Node::new(18)));
+        let n_20 = Rc::new(RefCell::new(Node::new(20)));
+
+        n_3.set_left(&n_2);
+        n_3.set_right(&n_4);
+        n_13.set_left(&n_9);
+        n_7.set_right(&n_13);
+        n_6.set_left(&n_3);
+        n_6.set_right(&n_7);
+        n_18.set_left(&n_17);
+        n_18.set_right(&n_20);
+        n_15.set_left(&n_6);
+        n_15.set_right(&n_18);
+
+        let mut bst = BinarySearchTree {
+            root: Some(Rc::clone(&n_15)),
+        };
+
+        let n_15 = bst.delete(&15).unwrap();
+        assert_eq!(n_15.parent(), None);
+        assert_eq!(n_15.left(), None);
+        assert_eq!(n_15.right(), None);
+        assert_eq!(bst.root, Some(Rc::clone(&n_17)));
+        assert_eq!(n_17.parent(), None);
+        assert_eq!(n_17.left(), Some(Rc::clone(&n_6)));
+        assert_eq!(n_17.right(), Some(Rc::clone(&n_18)));
+        assert_eq!(n_6.parent(), Some(Rc::clone(&n_17)));
+        assert_eq!(n_18.parent(), Some(Rc::clone(&n_17)));
+
+        let n_17 = bst.delete(&17).unwrap();
+        assert_eq!(n_17.parent(), None);
+        assert_eq!(n_17.left(), None);
+        assert_eq!(n_17.right(), None);
+        assert_eq!(bst.root, Some(Rc::clone(&n_18)));
+        assert_eq!(n_18.parent(), None);
+        assert_eq!(n_18.left(), Some(Rc::clone(&n_6)));
+        assert_eq!(n_18.right(), Some(Rc::clone(&n_20)));
+        assert_eq!(n_6.parent(), Some(Rc::clone(&n_18)));
+        assert_eq!(n_20.parent(), Some(Rc::clone(&n_18)));
+
+        let n_18 = bst.delete(&18).unwrap();
+        assert_eq!(n_18.parent(), None);
+        assert_eq!(n_18.left(), None);
+        assert_eq!(n_18.right(), None);
+        assert_eq!(bst.root, Some(Rc::clone(&n_20)));
+        assert_eq!(n_20.parent(), None);
+        assert_eq!(n_20.left(), Some(Rc::clone(&n_6)));
+        assert_eq!(n_20.right(), None);
+        assert_eq!(n_6.parent(), Some(Rc::clone(&n_20)));
+
+        let n_20 = bst.delete(&20).unwrap();
+        assert_eq!(n_20.parent(), None);
+        assert_eq!(n_20.left(), None);
+        assert_eq!(n_20.right(), None);
+        assert_eq!(bst.root, Some(Rc::clone(&n_6)));
+        assert_eq!(n_6.parent(), None);
+        assert_eq!(n_6.left(), Some(Rc::clone(&n_3)));
+        assert_eq!(n_6.right(), Some(Rc::clone(&n_7)));
+        assert_eq!(n_3.parent(), Some(Rc::clone(&n_6)));
+        assert_eq!(n_7.parent(), Some(Rc::clone(&n_6)));
+
+        let n_2 = bst.delete(&2).unwrap();
+        assert_eq!(n_2.parent(), None);
+        assert_eq!(n_2.left(), None);
+        assert_eq!(n_2.right(), None);
+        assert_eq!(bst.root, Some(Rc::clone(&n_6)));
+        assert_eq!(n_3.parent(), Some(Rc::clone(&n_6)));
+        assert_eq!(n_3.left(), None);
+        assert_eq!(n_3.right(), Some(Rc::clone(&n_4)));
+        assert_eq!(n_6.left(), Some(Rc::clone(&n_3)));
+
+        let n_3 = bst.delete(&3).unwrap();
+        assert_eq!(n_3.parent(), None);
+        assert_eq!(n_3.left(), None);
+        assert_eq!(n_3.right(), None);
+        assert_eq!(bst.root, Some(Rc::clone(&n_6)));
+        assert_eq!(n_4.parent(), Some(Rc::clone(&n_6)));
+        assert_eq!(n_4.left(), None);
+        assert_eq!(n_4.right(), None);
+        assert_eq!(n_6.left(), Some(Rc::clone(&n_4)));
+
+        let n_4 = bst.delete(&4).unwrap();
+        assert_eq!(n_4.parent(), None);
+        assert_eq!(n_4.left(), None);
+        assert_eq!(n_4.right(), None);
+        assert_eq!(bst.root, Some(Rc::clone(&n_6)));
+        assert_eq!(n_6.parent(), None);
+        assert_eq!(n_6.left(), None);
+        assert_eq!(n_6.right(), Some(Rc::clone(&n_7)));
+
+        let n_13 = bst.delete(&13).unwrap();
+        assert_eq!(n_13.parent(), None);
+        assert_eq!(n_13.left(), None);
+        assert_eq!(n_13.right(), None);
+        assert_eq!(bst.root, Some(Rc::clone(&n_6)));
+        assert_eq!(n_7.parent(), Some(Rc::clone(&n_6)));
+        assert_eq!(n_7.left(), None);
+        assert_eq!(n_7.right(), Some(Rc::clone(&n_9)));
+        assert_eq!(n_9.parent(), Some(Rc::clone(&n_7)));
+        assert_eq!(n_9.left(), None);
+        assert_eq!(n_9.right(), None);
+
+        let n_6 = bst.delete(&6).unwrap();
+        assert_eq!(n_6.parent(), None);
+        assert_eq!(n_6.left(), None);
+        assert_eq!(n_6.right(), None);
+        assert_eq!(bst.root, Some(Rc::clone(&n_7)));
+        assert_eq!(n_7.parent(), None);
+        assert_eq!(n_7.left(), None);
+        assert_eq!(n_7.right(), Some(Rc::clone(&n_9)));
+        assert_eq!(n_9.parent(), Some(Rc::clone(&n_7)));
+        assert_eq!(n_9.left(), None);
+        assert_eq!(n_9.right(), None);
+
+        let n_9 = bst.delete(&9).unwrap();
+        assert_eq!(n_9.parent(), None);
+        assert_eq!(n_9.left(), None);
+        assert_eq!(n_9.right(), None);
+        assert_eq!(bst.root, Some(Rc::clone(&n_7)));
+        assert_eq!(n_7.parent(), None);
+        assert_eq!(n_7.left(), None);
+        assert_eq!(n_7.right(), None);
+
+        let n_7 = bst.delete(&7).unwrap();
+        assert_eq!(n_7.parent(), None);
+        assert_eq!(n_7.left(), None);
+        assert_eq!(n_7.right(), None);
+        assert_eq!(bst.root, None);
+
+        assert_eq!(bst.delete(&1), Err(()));
     }
 }
