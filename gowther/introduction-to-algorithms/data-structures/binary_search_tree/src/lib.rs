@@ -62,6 +62,7 @@ pub trait TreePointerHelper<T: Key<K> + PartialEq, K: Ord> {
     fn set_right(&self, right: &Rc<RefCell<Node<T, K>>>);
     fn is_left_child(&self) -> bool;
     fn is_right_child(&self) -> bool;
+    fn is_leaf(&self) -> bool;
 }
 
 impl<T: Key<K> + PartialEq, K: Ord> TreePointerHelper<T, K> for Rc<RefCell<Node<T, K>>> {
@@ -147,6 +148,10 @@ impl<T: Key<K> + PartialEq, K: Ord> TreePointerHelper<T, K> for Rc<RefCell<Node<
             },
             None => false,
         }
+    }
+
+    fn is_leaf(&self) -> bool {
+        self.left().is_none() && self.right().is_none()
     }
 }
 
@@ -256,6 +261,37 @@ impl<T: Key<K> + PartialEq, K: Ord> BinarySearchTree<T, K> {
                 None => u.parent().unwrap().borrow_mut().right = None,
             }
         }
+
+        u.unlink_parent();
+    }
+
+    pub fn insert(&mut self, node: Node<T, K>) {
+        if self.root.is_none() {
+            self.root = Some(Rc::new(RefCell::new(node)));
+            return;
+        }
+
+        let mut x = Some(Rc::clone(self.root.as_ref().unwrap()));
+        let mut y: Option<Rc<RefCell<Node<T, K>>>> = None;
+        let mut should_insert_to_left_of_y = false;
+        while x.is_some() {
+            y = x;
+            match node.key() < y.as_ref().unwrap().borrow().key() {
+                true => {
+                    x = y.as_ref().unwrap().left();
+                    should_insert_to_left_of_y = true;
+                }
+                false => {
+                    x = y.as_ref().unwrap().right();
+                    should_insert_to_left_of_y = false;
+                }
+            }
+        }
+
+        match should_insert_to_left_of_y {
+            true => y.as_ref().unwrap().set_left(&Rc::new(RefCell::new(node))),
+            false => y.as_ref().unwrap().set_right(&Rc::new(RefCell::new(node))),
+        };
     }
 
     pub fn delete(&mut self, k: &K) -> Result<Rc<RefCell<Node<T, K>>>, ()> {
@@ -289,7 +325,6 @@ impl<T: Key<K> + PartialEq, K: Ord> BinarySearchTree<T, K> {
             y.set_left(z.left().as_ref().unwrap());
         }
 
-        z.borrow_mut().parent.take();
         Ok(z)
     }
 }
@@ -611,6 +646,61 @@ mod tests {
         assert_eq!(n_18.parent(), Some(Rc::clone(&n_15)));
         assert_eq!(n_18.left(), Some(Rc::clone(&n_17)));
         assert_eq!(n_18.right(), Some(Rc::clone(&n_20)));
+    }
+
+    #[test]
+    fn test_insert() {
+        let mut bst: BinarySearchTree<i32, i32> = BinarySearchTree { root: None };
+        bst.insert(Node::new(15));
+        bst.insert(Node::new(6));
+        bst.insert(Node::new(18));
+        bst.insert(Node::new(17));
+        bst.insert(Node::new(20));
+        bst.insert(Node::new(3));
+        bst.insert(Node::new(7));
+        bst.insert(Node::new(13));
+        bst.insert(Node::new(9));
+        bst.insert(Node::new(2));
+        bst.insert(Node::new(4));
+
+        assert_eq!(bst.root.as_ref().unwrap().borrow().data, 15);
+        let n_6 = bst.root.as_ref().unwrap().left().unwrap();
+        assert_eq!(n_6.borrow().data, 6);
+        assert_eq!(n_6.parent(), bst.root);
+        let n_3 = n_6.left().unwrap();
+        assert_eq!(n_3.borrow().data, 3);
+        assert_eq!(n_3.parent(), Some(Rc::clone(&n_6)));
+        let n_2 = n_3.left().unwrap();
+        assert_eq!(n_2.borrow().data, 2);
+        assert_eq!(n_2.parent(), Some(Rc::clone(&n_3)));
+        assert!(n_2.is_leaf());
+        let n_4 = n_3.right().unwrap();
+        assert_eq!(n_4.borrow().data, 4);
+        assert_eq!(n_4.parent(), Some(Rc::clone(&n_3)));
+        assert!(n_4.is_leaf());
+        let n_7 = n_6.right().unwrap();
+        assert_eq!(n_7.borrow().data, 7);
+        assert_eq!(n_7.parent(), Some(Rc::clone(&n_6)));
+        assert_eq!(n_7.left(), None);
+        let n_13 = n_7.right().unwrap();
+        assert_eq!(n_13.borrow().data, 13);
+        assert_eq!(n_13.parent(), Some(Rc::clone(&n_7)));
+        let n_9 = n_13.left().unwrap();
+        assert_eq!(n_9.borrow().data, 9);
+        assert_eq!(n_9.parent(), Some(Rc::clone(&n_13)));
+        assert!(n_9.is_leaf());
+        assert_eq!(n_13.right(), None);
+        let n_18 = bst.root.as_ref().unwrap().right().unwrap();
+        assert_eq!(n_18.borrow().data, 18);
+        assert_eq!(n_18.parent(), bst.root);
+        let n_17 = n_18.left().unwrap();
+        assert_eq!(n_17.borrow().data, 17);
+        assert_eq!(n_17.parent(), Some(Rc::clone(&n_18)));
+        assert!(n_17.is_leaf());
+        let n_20 = n_18.right().unwrap();
+        assert_eq!(n_20.borrow().data, 20);
+        assert_eq!(n_20.parent(), Some(Rc::clone(&n_18)));
+        assert!(n_20.is_leaf());
     }
 
     #[test]
