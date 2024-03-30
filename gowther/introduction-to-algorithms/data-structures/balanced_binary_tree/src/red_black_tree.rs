@@ -20,11 +20,7 @@ enum Color {
 }
 
 #[derive(Debug)]
-struct RBTreeNode<T, K>
-where
-    T: Key<K> + PartialEq,
-    K: Ord,
-{
+struct RBTreeNode<T, K> {
     data: T,
     color: Color,
     parent: Option<Weak<RefCell<RBTreeNode<T, K>>>>,
@@ -34,8 +30,7 @@ where
 
 impl<T, K> PartialEq for RBTreeNode<T, K>
 where
-    T: Key<K> + PartialEq,
-    K: Ord,
+    T: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
         self.data == other.data
@@ -58,7 +53,7 @@ where
 
 impl<T, K> Key<K> for RBTreeNode<T, K>
 where
-    T: Key<K> + PartialEq,
+    T: Key<K>,
     K: Ord,
 {
     fn key(&self) -> &K {
@@ -66,11 +61,7 @@ where
     }
 }
 
-impl<T, K> RBTreeNode<T, K>
-where
-    T: Key<K> + PartialEq,
-    K: Ord,
-{
+impl<T, K> RBTreeNode<T, K> {
     pub fn new(data: T) -> Self {
         Self {
             data,
@@ -82,11 +73,7 @@ where
     }
 }
 
-trait RBTreeNodePointer<T, K>
-where
-    T: Key<K> + PartialEq,
-    K: Ord,
-{
+trait RBTreeNodePointer<T, K> {
     fn is_left_child(&self) -> bool;
     fn is_right_child(&self) -> bool;
     fn is_leaf(&self) -> bool;
@@ -203,11 +190,7 @@ trait RBTreeNodePointerColorHelper {
     fn get_color(&self) -> Color;
 }
 
-impl<T, K> RBTreeNodePointerColorHelper for Option<Rc<RefCell<RBTreeNode<T, K>>>>
-where
-    T: Key<K> + PartialEq,
-    K: Ord,
-{
+impl<T, K> RBTreeNodePointerColorHelper for Option<Rc<RefCell<RBTreeNode<T, K>>>> {
     // Red-Black Tree expects every node's pointer pointing to either to some other node
     // or the Nil node. And Red-Black Tree says that the Nil node is black. So this helper
     // function trick the None type as black color node.
@@ -219,11 +202,7 @@ where
     }
 }
 
-pub struct RBTree<T, K>
-where
-    T: Key<K> + PartialEq,
-    K: Ord,
-{
+pub struct RBTree<T, K> {
     root: Option<Rc<RefCell<RBTreeNode<T, K>>>>,
 }
 
