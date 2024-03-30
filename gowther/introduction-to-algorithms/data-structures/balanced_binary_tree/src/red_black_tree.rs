@@ -276,6 +276,9 @@ where
         self.insert_fixup(&z);
     }
 
+    // When insert_fixup is called, the only properties might be violated are
+    // - #2 "the root is black"
+    // - #4 "if node is red, then both its children are black"
     fn insert_fixup(&mut self, z: &Rc<RefCell<RBTreeNode<T, K>>>) {
         let get_p_and_pp = |node: &Rc<RefCell<RBTreeNode<T, K>>>| {
             (
@@ -285,21 +288,32 @@ where
         };
 
         let mut z = Rc::clone(z);
+
+        // This while loop maintains the following three-part invariant at the start of each iteration of the loop:
+        // 1. node z is red
+        // 2. if z.p is the root, than z.p is black
+        // 3. If the tree violates any of the red-black properties, then it violates at most one of them, either #2 or #4.
         while z.get_parent().get_color() == Color::Red {
             // z.p is guaranteed to be Some(...) since its color is red
             // z.p.p is also guaranteed to be Some(...) since z.p.color is red
             // red-black properties #2 "the root is black"
             let (mut z_p, mut z_p_p) = get_p_and_pp(&z);
             match z_p.is_left_child() {
+                // this branch handles z.p == z.p.p.left
                 true => match z_p_p.get_right().get_color() {
+                    // Case 1: z's uncle is red
+                    // We transfer the blackness 1 layer down, from grandparent to parent and uncle.
+                    // After the coloring, we set z' to z.p.p because it's colored red. If z' is the
+                    // root, then #4 is satisfied. Otherwise, if z'.p is red, #2 is satisfied.
+                    // So, loop invariant is proved to be maintained in Case1.
                     Color::Red => {
-                        //           __z.p.p__        Coloring                __Red__
+                        //           __Black__        Coloring                __Red__
                         //      __Red         Red     -------->        __Black       Black
                         // Red z                                  Red z
                         //
                         //                              And
                         //
-                        //       ______z.p.p__        Coloring             ______Red__
+                        //       ______Black__        Coloring             ______Red__
                         //    Red__           Red     -------->     Black__           Black
                         //         Red z                                   Red z
                         z_p.set_color(Color::Black);
@@ -307,19 +321,24 @@ where
                         z_p_p.set_color(Color::Red);
                         z = z_p_p;
                     }
+                    // Case 2 and Case 3: z's uncle is black
+                    // We transfer case2 to case3 by doing one left rotate. Since node z is not the root,
+                    // there is no violation of #2. And because the only node that's made red becomes a
+                    // child of a black node by the rotation, #4 is also corrected.
+                    // So, case2 and case3 do not introduce another violation.
                     Color::Black => {
-                        //           __z.p.p__                      ______z.p.p__
+                        //           __Black__                      ______Black__
                         //      __Red         Black     Or     Red__             Black
                         // Red z                                    Red z
                         if z.is_right_child() {
-                            //      ______z.p.p__          Left Rotate              __z.p.p__
+                            //      ______Black__          Left Rotate              __Black__
                             // Red__             Black     ----------->        __Red         Black
                             //      Red z                                 Red z
                             z = z_p;
                             self.left_rotate(&z);
                             (z_p, z_p_p) = get_p_and_pp(&z);
                         }
-                        //           __z.p.p__         Coloring                __Red__         Right Rotate            __Black__
+                        //           __Black__         Coloring                __Red__         Right Rotate            __Black__
                         //      __Red         Black    -------->        __Black       Black    ------------->     Red z         Red
                         // Red z                                   Red z
                         z_p.set_color(Color::Black);
@@ -327,15 +346,16 @@ where
                         self.right_rotate(&z_p_p);
                     }
                 },
+                // this branch handles z.p == z.p.p.right
                 false => match z_p_p.get_left().get_color() {
                     Color::Red => {
-                        //    __z.p.p__              Coloring              __Red__
+                        //    __Black__              Coloring              __Red__
                         // Red         Red__         -------->        Black       Black__
                         //                  Red z                                        Red z
                         //
                         //                              And
                         //
-                        //       __z.p.p_________        Coloring           __Red_________
+                        //       __Black_________        Coloring           __Red_________
                         //    Red              __Red     -------->     Black            __Black
                         //                Red z                                    Red z
                         z_p.set_color(Color::Black);
@@ -344,18 +364,18 @@ where
                         z = z_p_p;
                     }
                     Color::Black => {
-                        //           __z.p.p__                          __z.p.p_________
+                        //           __Black__                          __Black_________
                         //      Black         Red__         Or     Black                __Red
                         //                         Red z                           Red z
                         if z.is_left_child() {
-                            //         __z.p.p_________        Right Rotate            __z.p.p__
+                            //         __Black_________        Right Rotate            __Black__
                             //  Black                __Red     ----------->       Black         Red__
                             //                  Red z                                                Red z
                             z = z_p;
                             self.right_rotate(&z);
                             (z_p, z_p_p) = get_p_and_pp(&z);
                         }
-                        //       __z.p.p__               Coloring             __Red__                Left Rotate          __Black__
+                        //       __Black__               Coloring             __Red__                Left Rotate          __Black__
                         //  Black         Red__          -------->       Black       Black__         ----------->      Red         Red z
                         //                     Red z                                        Red z
                         z_p.set_color(Color::Black);
