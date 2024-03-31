@@ -6,12 +6,11 @@
 // 5. for each node, all simple paths from the node to descendant leaves contain the
 //    same number of black nodes
 
+use super::Key;
 use std::{
     cell::RefCell,
     rc::{Rc, Weak},
 };
-
-use super::Key;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 enum Color {
@@ -20,7 +19,7 @@ enum Color {
 }
 
 #[derive(Debug)]
-struct RBTreeNode<T, K> {
+pub struct RBTreeNode<T, K> {
     data: T,
     color: Color,
     parent: Option<Weak<RefCell<RBTreeNode<T, K>>>>,
@@ -220,6 +219,87 @@ where
         self.root = Some(Rc::clone(&root));
     }
 
+    pub fn search(
+        x: Option<Rc<RefCell<RBTreeNode<T, K>>>>,
+        k: &K,
+    ) -> Option<Rc<RefCell<RBTreeNode<T, K>>>> {
+        let mut x = x;
+        loop {
+            let next: Option<Rc<RefCell<RBTreeNode<T, K>>>>;
+            match x {
+                Some(ref node) => match k.cmp(node.borrow().key()) {
+                    std::cmp::Ordering::Less => next = node.get_left(),
+                    std::cmp::Ordering::Equal => return Some(Rc::clone(node)),
+                    std::cmp::Ordering::Greater => next = node.get_right(),
+                },
+                None => return None,
+            }
+            x = next;
+        }
+    }
+
+    pub fn minimum(x: &Rc<RefCell<RBTreeNode<T, K>>>) -> Rc<RefCell<RBTreeNode<T, K>>> {
+        let mut x = Rc::clone(x);
+        loop {
+            match x.get_left() {
+                Some(left) => x = left,
+                None => break,
+            }
+        }
+        x
+    }
+
+    pub fn maximum(x: &Rc<RefCell<RBTreeNode<T, K>>>) -> Rc<RefCell<RBTreeNode<T, K>>> {
+        let mut x = Rc::clone(x);
+        loop {
+            match x.get_right() {
+                Some(right) => x = right,
+                None => break,
+            }
+        }
+        x
+    }
+
+    pub fn successor(x: &Rc<RefCell<RBTreeNode<T, K>>>) -> Option<Rc<RefCell<RBTreeNode<T, K>>>> {
+        if let Some(right) = x.get_right() {
+            return Some(Self::minimum(&right));
+        }
+        let mut x = Rc::clone(x);
+        let mut y = x.get_parent();
+        loop {
+            if y.is_none() {
+                return None;
+            }
+
+            if x.is_left_child() {
+                return y;
+            } else {
+                x = y.unwrap();
+                y = x.get_parent();
+            }
+        }
+    }
+
+    pub fn predecessor(x: &Rc<RefCell<RBTreeNode<T, K>>>) -> Option<Rc<RefCell<RBTreeNode<T, K>>>> {
+        if let Some(left) = x.get_left() {
+            return Some(Self::maximum(&left));
+        }
+        let mut x = Rc::clone(x);
+        let mut y = x.get_parent();
+        loop {
+            if y.is_none() {
+                return None;
+            }
+
+            if x.is_right_child() {
+                return y;
+            } else {
+                x = y.unwrap();
+                y = x.get_parent();
+            }
+        }
+    }
+
     pub fn insert(&mut self, data: T) {
         let z = Rc::new(RefCell::new(RBTreeNode::new(data)));
         if self.root.is_none() {
@@ -367,9 +447,217 @@ where
         self.root.as_ref().unwrap().set_color(Color::Black);
     }
 
-    //   __x__                 __y__
-    //  a   __y__     ->    __x__   c
-    //     b     c         a     b
+    pub fn delete(&mut self, k: &K) -> Result<Rc<RefCell<RBTreeNode<T, K>>>, ()> {
+        // it's an empty tree
+        if self.root.is_none() {
+            return Err(());
+        }
+
+        // find the node to delete
+        let root = self.root.as_ref().unwrap();
+        let z = Self::search(Some(Rc::clone(root)), k);
+        if z.is_none() {
+            return Err(());
+        }
+
+        // z is the node to delete
+        let z = z.unwrap();
+
+        match (z.get_left(), z.get_right()) {
+            (None, None) => {
+                if z.get_parent().is_none() {
+                    self.root.take();
+                    return Ok(z);
+                }
+                let z_p = z.get_parent();
+                z.unlink_parent();
+                if z.borrow().color == Color::Black {
+                    self.delete_fixup(None, z_p);
+                }
+            }
+            (None, Some(right)) => {
+                self.transplant(&z, Some(Rc::clone(&right)));
+                if z.borrow().color == Color::Black {
+                    let right_parent = right.get_parent();
+                    self.delete_fixup(Some(right), right_parent);
+                }
+            }
+            (Some(left), None) => {
+                self.transplant(&z, Some(Rc::clone(&left)));
+                if z.borrow().color == Color::Black {
+                    let left_parent = left.get_parent();
+                    self.delete_fixup(Some(left), left_parent);
+                }
+            }
+            (Some(left), Some(right)) => {
+                // z is our target to delete
+                // y is the node that will be moved into z's location
+                // x is the node that will be moved into y's location
+                let y = Self::minimum(&right);
+                let x = y.get_right();
+                let x_p: Option<Rc<RefCell<RBTreeNode<T, K>>>>;
+                if y != right {
+                    x_p = y.get_parent();
+                    match x {
+                        Some(ref x) => self.transplant(&y, Some(Rc::clone(x))),
+                        None => self.transplant(&y, None),
+                    }
+                    y.set_right(&right);
+                } else {
+                    x_p = Some(Rc::clone(&y));
+                }
+                self.transplant(&z, Some(Rc::clone(&y)));
+                y.set_left(&left);
+
+                let y_original_color = y.borrow().color;
+                y.set_color(z.borrow().color);
+                if y_original_color == Color::Black {
+                    self.delete_fixup(x, x_p);
+                }
+            }
+        }
+
+        Ok(z)
+    }
+
+    fn delete_fixup(
+        &mut self,
+        mut x: Option<Rc<RefCell<RBTreeNode<T, K>>>>,
+        mut x_p: Option<Rc<RefCell<RBTreeNode<T, K>>>>,
+    ) {
+        let x_is_left_child = {
+            match x {
+                Some(ref x) => x.is_left_child(),
+                None => x_p.as_ref().unwrap().get_left().is_none(),
+            }
+        };
+
+        while x != self.root && x.get_color() == Color::Black {
+            if x_is_left_child {
+                //   __x_p__
+                //  x       w (w is guaranteed to be Some(...) since y's original color is black if w is None, then #5 is violated.
+                let x_parent = Rc::clone(x_p.as_ref().unwrap());
+                let mut w = x_parent.get_right().unwrap();
+                let w_color = w.borrow().color;
+                match w_color {
+                    Color::Red => {
+                        // Case 1: x's sibling w is red
+                        //
+                        //           __Black(B)____________                                              ____________Black(D)__
+                        //  Black x(A)                   __Red w(D)__           ------>           __Red(B)__                   Black(E)
+                        //                       Black(C)            Black(E)            Black x(A)         Black w(C)
+                        w.set_color(Color::Black);
+                        x_parent.set_color(Color::Red);
+                        self.left_rotate(&x_parent);
+                    }
+                    Color::Black => {
+                        match (w.get_left().get_color(), w.get_right().get_color()) {
+                            (Color::Black, Color::Black) => {
+                                // Case 2: w, w.left, w.right are all black
+                                //
+                                //           __Brown(B)____________                                          __Brown x(B)____________
+                                //  Black x(A)                   __Black w(D)__           ------>     Black(A)                   __Red(D)__
+                                //                       Black(C)              Black(E)                                  Black(C)          Black(E)
+                                w.set_color(Color::Red);
+                                x = Some(Rc::clone(&x_parent));
+                                x_p = x_parent.get_parent();
+                            }
+                            _ => {
+                                if w.get_right().get_color() == Color::Black {
+                                    // Case 3: w is black, w.left is red, w.right is black
+                                    //
+                                    //           __Brown(B)____________                                            __Brown(B)__
+                                    //  Black x(A)                   __Black w(D)__           ------>     Black x(A)           Black w(C)__
+                                    //                         Red(C)              Black(E)                                                Red(D)__
+                                    //                                                                                                             Black(E)
+                                    w.get_left().unwrap().set_color(Color::Black);
+                                    w.set_color(Color::Red);
+                                    self.right_rotate(&w);
+                                    w = x_parent.get_right().unwrap();
+                                }
+                                // Case 4: w is black, w.right is red
+                                //
+                                //            __Brown(B)___________                                                     ____________Brown(D)__
+                                //  Black x(A)                   __Black w(D)__            ------>             __Black(B)__                   Black(E)
+                                //                       Brown(C)              Red(E)                  Black(A)            Brown(C)
+                                w.set_color(x_parent.borrow().color);
+                                x_parent.set_color(Color::Black);
+                                w.get_right().unwrap().set_color(Color::Black);
+                                self.left_rotate(&x_parent);
+                                x = Some(Rc::clone(self.root.as_ref().unwrap()));
+                                x_p = None;
+                            }
+                        }
+                    }
+                }
+            } else {
+                //   __x_p__
+                //  w       x (w is guaranteed to be Some(...) since y's original color is black if w is None, then #5 is violated.
+                let x_parent = Rc::clone(x_p.as_ref().unwrap());
+                let mut w = x_parent.get_left().unwrap();
+                let w_color = w.borrow().color;
+                match w_color {
+                    Color::Red => {
+                        // Case 1: x's sibling w is red
+                        //
+                        //                   ____________Black(D)__                               __Black(B)____________
+                        //          __Red w(B)__                   Black x(E)    ------>   Black(A)                   __Red w(D)__
+                        //  Black(A)            Black w(C)                                                  Black w(C)            Black x(E)
+                        w.set_color(Color::Black);
+                        x_parent.set_color(Color::Red);
+                        self.right_rotate(&x_parent);
+                    }
+                    Color::Black => {
+                        match (w.get_left().get_color(), w.get_right().get_color()) {
+                            (Color::Black, Color::Black) => {
+                                // Case 2: w, w.left, w.right are all black
+                                //
+                                //                        _________Brown(D)__                                          _________Brown(D)__
+                                //          __Black w(B)__                   Black x(E)     ------>           __Red(B)__                  Black(E)
+                                //  Black(A)              Black(C)                                    Black(A)          Black(C)
+                                w.set_color(Color::Red);
+                                x = Some(Rc::clone(&x_parent));
+                                x_p = x_parent.get_parent();
+                            }
+                            _ => {
+                                if w.get_left().get_color() == Color::Black {
+                                    // Case 3: w is black, w.left is black, w.right is red
+                                    //
+                                    //                        _________Brown(D)__                                                     __Brown(D)__
+                                    //          __Black w(B)__                   Black x(E)     ------>                    __Black w(C)           Black x(E)
+                                    //  Black(A)              Red(C)                                               __Red(B)
+                                    //                                                                     Black(C)
+                                    //
+                                    w.get_right().unwrap().set_color(Color::Black);
+                                    w.set_color(Color::Red);
+                                    self.left_rotate(&w);
+                                    w = x_parent.get_left().unwrap();
+                                }
+                                // Case 4: w is black, w.left is red
+                                //
+                                //                    ___________Brown(D)__                                    __Brown(B)___________
+                                //        __Black w(B)__                   Black x(E)     ------>      Black(A)                   __Black(D)__
+                                //  Red(A)              Brown(C)                                                          Brown(C)            Black(E)
+                                //
+                                //
+                                w.set_color(x_parent.borrow().color);
+                                x_parent.set_color(Color::Black);
+                                w.get_left().unwrap().set_color(Color::Black);
+                                self.right_rotate(&x_parent);
+                                x = Some(Rc::clone(self.root.as_ref().unwrap()));
+                                x_p = None;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        x.as_ref().unwrap().set_color(Color::Black);
+    }
+
+    //   __x_____                 _____y__
+    //  a      __y__     ->    __x__      c
+    //        b     c         a     b
     fn left_rotate(&mut self, x: &Rc<RefCell<RBTreeNode<T, K>>>) {
         let y = x.get_right();
         assert!(y.is_some(), "can't do left rotate if x.right is None");
@@ -393,9 +681,9 @@ where
         y.set_left(&x);
     }
 
-    //      __y__             __x__
-    //   __x__   c     ->    a   __y__
-    //  a     b                 b     c
+    //      _____y__             __x_____
+    //   __x__      c     ->    a      __y__
+    //  a     b                       b     c
     fn right_rotate(&mut self, y: &Rc<RefCell<RBTreeNode<T, K>>>) {
         let x = y.get_left();
         assert!(x.is_some(), "can't do right rotate if y.left is None");
@@ -417,6 +705,39 @@ where
             }
         }
         x.set_right(&y);
+    }
+
+    //   __p__              __p__
+    //  u         ---->    v
+    fn transplant(
+        &mut self,
+        u: &Rc<RefCell<RBTreeNode<T, K>>>,
+        v: Option<Rc<RefCell<RBTreeNode<T, K>>>>,
+    ) {
+        if let Some(ref v) = v {
+            v.unlink_parent();
+        }
+
+        match u.get_parent() {
+            Some(parent) => match u.is_left_child() {
+                true => match v {
+                    Some(ref node) => parent.set_left(node),
+                    None => parent.borrow_mut().left = None,
+                },
+                false => match v {
+                    Some(ref node) => parent.set_right(node),
+                    None => parent.borrow_mut().right = None,
+                },
+            },
+            None => {
+                self.root = match v {
+                    Some(ref node) => Some(Rc::clone(node)),
+                    None => None,
+                };
+            }
+        }
+
+        u.unlink_parent();
     }
 }
 
@@ -599,6 +920,75 @@ mod tests {
     }
 
     #[test]
+    fn test_transplant_on_root() {
+        //      __y__             __x__
+        //   __x__   c     ->    a     b
+        //  a     b
+        let x = Rc::new(RefCell::new(RBTreeNode::new(Item::new("x", 0))));
+        let y = Rc::new(RefCell::new(RBTreeNode::new(Item::new("y", 0))));
+        let a = Rc::new(RefCell::new(RBTreeNode::new(Item::new("a", 0))));
+        let b = Rc::new(RefCell::new(RBTreeNode::new(Item::new("b", 0))));
+        let c = Rc::new(RefCell::new(RBTreeNode::new(Item::new("c", 0))));
+        y.set_left(&x);
+        y.set_right(&c);
+        x.set_left(&a);
+        x.set_right(&b);
+        let mut tree: RBTree<Item, i32> = RBTree::new();
+        tree.set_root(&y);
+
+        tree.transplant(&y, Some(Rc::clone(&x)));
+        assert_node!(tree.root, "x");
+
+        assert_eq!(x.get_parent(), None);
+        assert_node!(x.get_left(), "a");
+        assert_node!(x.get_right(), "b");
+
+        assert_eq!(y.get_parent(), None);
+        assert_eq!(y.get_left(), None);
+        assert_node!(y.get_right(), "c");
+
+        assert_node!(a.get_parent(), "x");
+        assert_node!(b.get_parent(), "x");
+        assert_node!(c.get_parent(), "y");
+    }
+
+    #[test]
+    fn test_transplant() {
+        //      __y__             __x__
+        //   __x__   c     ->    a     b
+        //  a     b
+        let root = Rc::new(RefCell::new(RBTreeNode::new(Item::new("root", 0))));
+        let x = Rc::new(RefCell::new(RBTreeNode::new(Item::new("x", 0))));
+        let y = Rc::new(RefCell::new(RBTreeNode::new(Item::new("y", 0))));
+        let a = Rc::new(RefCell::new(RBTreeNode::new(Item::new("a", 0))));
+        let b = Rc::new(RefCell::new(RBTreeNode::new(Item::new("b", 0))));
+        let c = Rc::new(RefCell::new(RBTreeNode::new(Item::new("c", 0))));
+        root.set_left(&y);
+        y.set_left(&x);
+        y.set_right(&c);
+        x.set_left(&a);
+        x.set_right(&b);
+        let mut tree: RBTree<Item, i32> = RBTree::new();
+        tree.set_root(&root);
+
+        tree.transplant(&y, Some(Rc::clone(&x)));
+        assert_node!(tree.root, "root");
+        assert_node!(root.get_left(), "x");
+
+        assert_node!(x.get_parent(), "root");
+        assert_node!(x.get_left(), "a");
+        assert_node!(x.get_right(), "b");
+
+        assert_eq!(y.get_parent(), None);
+        assert_eq!(y.get_left(), None);
+        assert_node!(y.get_right(), "c");
+
+        assert_node!(a.get_parent(), "x");
+        assert_node!(b.get_parent(), "x");
+        assert_node!(c.get_parent(), "y");
+    }
+
+    #[test]
     fn test_insert() {
         let mut tree: RBTree<Item, i32> = RBTree::new();
         tree.insert(Item::new("1", 1));
@@ -748,5 +1138,176 @@ mod tests {
             ]
         );
         assert_node!(tree.root, "4");
+    }
+
+    #[test]
+    fn test_delete() {
+        let mut tree: RBTree<Item, i32> = RBTree::new();
+        tree.insert(Item::new("1", 1));
+        tree.insert(Item::new("2", 2));
+        tree.insert(Item::new("3", 3));
+        tree.insert(Item::new("4", 4));
+        tree.insert(Item::new("5", 5));
+        tree.insert(Item::new("6", 6));
+        tree.insert(Item::new("7", 7));
+        tree.insert(Item::new("8", 8));
+        tree.insert(Item::new("9", 9));
+        tree.insert(Item::new("10", 10));
+        tree.insert(Item::new("11", 11));
+        tree.insert(Item::new("12", 12));
+        assert_tree_in_order!(
+            &tree,
+            [
+                ("1", Color::Black),
+                ("2", Color::Black),
+                ("3", Color::Black),
+                ("4", Color::Black),
+                ("5", Color::Black),
+                ("6", Color::Red),
+                ("7", Color::Black),
+                ("8", Color::Black),
+                ("9", Color::Black),
+                ("10", Color::Red),
+                ("11", Color::Black),
+                ("12", Color::Red)
+            ]
+        );
+
+        tree.delete(&5).unwrap();
+        assert_tree_in_order!(
+            &tree,
+            [
+                ("1", Color::Black),
+                ("2", Color::Black),
+                ("3", Color::Black),
+                ("4", Color::Black),
+                ("6", Color::Black),
+                ("7", Color::Red),
+                ("8", Color::Black),
+                ("9", Color::Black),
+                ("10", Color::Red),
+                ("11", Color::Black),
+                ("12", Color::Red)
+            ]
+        );
+
+        tree.delete(&8).unwrap();
+        assert_tree_in_order!(
+            &tree,
+            [
+                ("1", Color::Black),
+                ("2", Color::Black),
+                ("3", Color::Black),
+                ("4", Color::Black),
+                ("6", Color::Black),
+                ("7", Color::Red),
+                ("9", Color::Black),
+                ("10", Color::Black),
+                ("11", Color::Red),
+                ("12", Color::Black)
+            ]
+        );
+
+        tree.delete(&6).unwrap();
+        assert_tree_in_order!(
+            &tree,
+            [
+                ("1", Color::Black),
+                ("2", Color::Black),
+                ("3", Color::Black),
+                ("4", Color::Black),
+                ("7", Color::Black),
+                ("9", Color::Black),
+                ("10", Color::Black),
+                ("11", Color::Red),
+                ("12", Color::Black)
+            ]
+        );
+
+        tree.delete(&4).unwrap();
+        assert_tree_in_order!(
+            &tree,
+            [
+                ("1", Color::Black),
+                ("2", Color::Black),
+                ("3", Color::Black),
+                ("7", Color::Black),
+                ("9", Color::Black),
+                ("10", Color::Red),
+                ("11", Color::Black),
+                ("12", Color::Black)
+            ]
+        );
+
+        tree.delete(&7).unwrap();
+        assert_tree_in_order!(
+            &tree,
+            [
+                ("1", Color::Black),
+                ("2", Color::Black),
+                ("3", Color::Black),
+                ("9", Color::Black),
+                ("10", Color::Black),
+                ("11", Color::Black),
+                ("12", Color::Black)
+            ]
+        );
+
+        tree.delete(&11).unwrap();
+        assert_tree_in_order!(
+            &tree,
+            [
+                ("1", Color::Black),
+                ("2", Color::Red),
+                ("3", Color::Black),
+                ("9", Color::Black),
+                ("10", Color::Red),
+                ("12", Color::Black)
+            ]
+        );
+
+        tree.delete(&2).unwrap();
+        assert_tree_in_order!(
+            &tree,
+            [
+                ("1", Color::Red),
+                ("3", Color::Black),
+                ("9", Color::Black),
+                ("10", Color::Red),
+                ("12", Color::Black)
+            ]
+        );
+
+        tree.delete(&3).unwrap();
+        assert_tree_in_order!(
+            &tree,
+            [
+                ("1", Color::Black),
+                ("9", Color::Black),
+                ("10", Color::Red),
+                ("12", Color::Black)
+            ]
+        );
+
+        tree.delete(&10).unwrap();
+        assert_tree_in_order!(
+            &tree,
+            [
+                ("1", Color::Black),
+                ("9", Color::Black),
+                ("12", Color::Black)
+            ]
+        );
+
+        tree.delete(&9).unwrap();
+        assert_tree_in_order!(&tree, [("1", Color::Red), ("12", Color::Black)]);
+
+        tree.delete(&12).unwrap();
+        assert_tree_in_order!(&tree, [("1", Color::Black)]);
+
+        tree.delete(&1).unwrap();
+        assert!(tree.root.is_none());
+
+        assert_eq!(tree.delete(&100), Err(()));
     }
 }
