@@ -1,15 +1,3 @@
-<style>
-  .ds-table table {
-    border: 2px solid rgb(140 140 140);
-  }
-
-  .ds-table th,
-  .ds-table td {
-    text-align: center;
-    border: 1px solid rgb(160 160 160);
-  }
-</style>
-
 # Asymptotic Complexity
 
 | Input | Constant | Logarithmic | Linear | Log-Linear   | Quadratic | Polynomial  | Exponential     |
@@ -39,7 +27,7 @@
     - insert_last(x): add x as the last item
     - delete_last(): remove and return the last item
 
-<table class="ds-table">
+<table>
   <caption>
     Sequence Data Structure
   </caption>
@@ -133,7 +121,7 @@
     - find_next(k): return the stored item with smallest key larger than k
     - find_prev(k): return the stored item with largest key smaller than k
 
-<table class="ds-table">
+<table>
   <caption>
     Set Data Structure
   </caption>
