@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="27" height="34" viewBox="0 0 27 34">
+  <defs>
+    <path id="icon-play--white-b" d="M48.430857,31.8559484 C50.3214678,33.0026026 50.3231606,34.8606697 48.430857,36.0083507 L26.4232536,49.3559484 C24.5326428,50.5026026 23,49.6483762 23,47.4342569 L23,20.4300421 C23,18.222067 24.53095,17.3606697 26.4232536,18.5083507 L48.430857,31.8559484 Z"/>
+    <filter id="icon-play--white-a" width="107.4%" height="112.6%" x="-3.7%" y="-3.1%" filterUnits="objectBoundingBox">
+      <feOffset dy="2" in="SourceAlpha" result="shadowOffsetOuter1"/>
+      <feColorMatrix in="shadowOffsetOuter1" values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.2 0"/>
+    </filter>
+  </defs>
+  <g fill="none" fill-rule="evenodd" transform="translate(-23 -18)">
+    <use fill="#000" filter="url(#icon-play--white-a)" xlink:href="#icon-play--white-b"/>
+    <use fill="#FFF" xlink:href="#icon-play--white-b"/>
+  </g>
+</svg>
