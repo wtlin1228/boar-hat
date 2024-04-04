@@ -82,17 +82,7 @@
     </tr>
     <tr>
       <th scope="row">Binary Tree</th>
-      <td>
-        <math>
-          <mi>n</mi>
-          <mo>&#8290;</mo>
-          <mrow>
-              <mi>log</mi>
-              <mo>&#8289;</mo>
-              <mi>n</mi>
-          </mrow>
-        </math>
-      </td>
+      <td>n log n</td>
       <td>h</td>
       <td>h</td>
       <td>h</td>
@@ -101,34 +91,10 @@
     <tr>
       <th scope="row">AVL Tree</th>
       <td>n</td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-      </td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-      </td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-      </td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-      </td>
+      <td>log n</td>
+      <td>log n</td>
+      <td>log n</td>
+      <td>log n</td>
     </tr>
   </tbody>
 </table>
@@ -194,33 +160,11 @@
     </tr>
     <tr>
       <th scope="row">Sorted Array</th>
-      <td>
-        <math>
-          <mi>n</mi>
-          <mo>&#8290;</mo>
-          <mrow>
-              <mi>log</mi>
-              <mo>&#8289;</mo>
-              <mi>n</mi>
-          </mrow>
-        </math>
-      </td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-      </td>
+      <td>n log n</td>
+      <td>log n</td>
       <td>n</td>
       <td>1</td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-      </td>
+      <td>log n</td>
     </tr>
     <tr>
       <th scope="row">Direct Access Array</th>
@@ -248,45 +192,11 @@
     </tr>
     <tr>
       <th scope="row">AVL Tree</th>
-      <td>
-        <math>
-          <mi>n</mi>
-          <mo>&#8290;</mo>
-          <mrow>
-              <mi>log</mi>
-              <mo>&#8289;</mo>
-              <mi>n</mi>
-          </mrow>
-        </math>
-      </td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-      </td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-      </td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-      </td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-      </td>
+      <td>n log n</td>
+      <td>log n</td>
+      <td>log n</td>
+      <td>log n</td>
+      <td>log n</td>
     </tr>
   </tbody>
 </table>
@@ -310,7 +220,7 @@
 
 Running time is
 
-${T_{build} + n * T_{insert} <= n * T_{insert} + n * T_{delete\_max}}$
+${T_{build} + n * T_{insert} <= n * T_{insert} + n * T_{delete-max}}$
 
 <table>
   <caption>
@@ -336,114 +246,34 @@ ${T_{build} + n * T_{insert} <= n * T_{insert} + n * T_{delete\_max}}$
       <td>n</td>
       <td>1</td>
       <td>n</td>
-      <td>
-        <math>
-          <msup>
-            <mi>n</mi>
-            <mn>2</mn>
-          </msup>
-        </math>
-      </td>
+      <td>n^2</td>
       <td>✅</td>
       <td>Selection Sort</td>
     </tr>
     <tr>
       <th scope="row">Sorted Dynamic Array</th>
-      <td>
-        <math>
-          <mi>n</mi>
-          <mo>&#8290;</mo>
-          <mrow>
-              <mi>log</mi>
-              <mo>&#8289;</mo>
-              <mi>n</mi>
-          </mrow>
-        </math>
-      </td>
+      <td>n log n</td>
       <td>n</td>
       <td>1 (a)</td>
-      <td>
-        <math>
-          <msup>
-            <mi>n</mi>
-            <mn>2</mn>
-          </msup>
-        </math>
-      </td>
+      <td>n^2</td>
       <td>✅</td>
       <td>Insertion Sort</td>
     </tr>
     <tr>
       <th scope="row">Set AVL Tree</th>
-      <td>
-        <math>
-          <mi>n</mi>
-          <mo>&#8290;</mo>
-          <mrow>
-              <mi>log</mi>
-              <mo>&#8289;</mo>
-              <mi>n</mi>
-          </mrow>
-        </math>
-      </td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-      </td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-      </td>
-      <td>
-        <math>
-          <mi>n</mi>
-          <mo>&#8290;</mo>
-          <mrow>
-              <mi>log</mi>
-              <mo>&#8289;</mo>
-              <mi>n</mi>
-          </mrow>
-        </math>
-      </td>
+      <td>n log n</td>
+      <td>log n</td>
+      <td>log n</td>
+      <td>n log n</td>
       <td>❌</td>
       <td>AVL Sort</td>
     </tr>
     <tr>
       <th scope="row">Binary Heap</th>
       <td>n</td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-        (a)
-      </td>
-      <td>
-        <math>
-          <mi>log</mi>
-          <mo>&#8289;</mo>
-          <mi>n</mi>
-        </math>
-        (a)
-      </td>
-      <td>
-        <math>
-          <mi>n</mi>
-          <mo>&#8290;</mo>
-          <mrow>
-              <mi>log</mi>
-              <mo>&#8289;</mo>
-              <mi>n</mi>
-          </mrow>
-        </math>
-      </td>
+      <td>log n (a)</td>
+      <td>log n (a)</td>
+      <td>n log n</td>
       <td>✅</td>
       <td>Heap Sort</td>
     </tr>
