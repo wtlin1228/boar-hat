@@ -77,12 +77,22 @@
       <td>n</td>
       <td>1</td>
       <td>n</td>
-      <td>1(a)</td>
+      <td>1 (a)</td>
       <td>n</td>
     </tr>
     <tr>
       <th scope="row">Binary Tree</th>
-      <td>n log n</td>
+      <td>
+        <math>
+          <mi>n</mi>
+          <mo>&#8290;</mo>
+          <mrow>
+              <mi>log</mi>
+              <mo>&#8289;</mo>
+              <mi>n</mi>
+          </mrow>
+        </math>
+      </td>
       <td>h</td>
       <td>h</td>
       <td>h</td>
@@ -91,10 +101,34 @@
     <tr>
       <th scope="row">AVL Tree</th>
       <td>n</td>
-      <td>log n</td>
-      <td>log n</td>
-      <td>log n</td>
-      <td>log n</td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+      </td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+      </td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+      </td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+      </td>
     </tr>
   </tbody>
 </table>
@@ -160,11 +194,33 @@
     </tr>
     <tr>
       <th scope="row">Sorted Array</th>
-      <td>n log n</td>
-      <td>log n</td>
+      <td>
+        <math>
+          <mi>n</mi>
+          <mo>&#8290;</mo>
+          <mrow>
+              <mi>log</mi>
+              <mo>&#8289;</mo>
+              <mi>n</mi>
+          </mrow>
+        </math>
+      </td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+      </td>
       <td>n</td>
       <td>1</td>
-      <td>log n</td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+      </td>
     </tr>
     <tr>
       <th scope="row">Direct Access Array</th>
@@ -176,9 +232,9 @@
     </tr>
     <tr>
       <th scope="row">Hash Table</th>
-      <td>n(e)</td>
-      <td>1(e)</td>
-      <td>1(a)(e)</td>
+      <td>n (e)</td>
+      <td>1 (e)</td>
+      <td>1 (a) (e)</td>
       <td>n</td>
       <td>n</td>
     </tr>
@@ -192,11 +248,204 @@
     </tr>
     <tr>
       <th scope="row">AVL Tree</th>
-      <td>n log n</td>
-      <td>log n</td>
-      <td>log n</td>
-      <td>log n</td>
-      <td>log n</td>
+      <td>
+        <math>
+          <mi>n</mi>
+          <mo>&#8290;</mo>
+          <mrow>
+              <mi>log</mi>
+              <mo>&#8289;</mo>
+              <mi>n</mi>
+          </mrow>
+        </math>
+      </td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+      </td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+      </td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+      </td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+# Priority Queue Interface
+
+- Keep track of many items, quickly access/remove the most important
+  - Example: router with limited bandwidth, must prioritize certain kinds of messages
+  - Example: process scheduling in operating system kernels
+  - Example: discrete-event simulation (when is next occurring event?)
+  - Example: graph algorithms
+- Order items by key = priority so Set interface (not Sequence interface)
+- Optimized for a particular subset of Set operations:
+  - build(X): build priority queue from iterable X
+  - insert(x): add item x to data structure
+  - delete_max(): remove and return stored item with largest key
+  - find_max(): return stored item with largest key
+- Usually optimized for max or min, not both
+
+## Priority Queue Sort
+
+Running time is
+
+${T_{build} + n * T_{insert} <= n * T_{insert} + n * T_{delete\_max}}$
+
+<table>
+  <caption>
+    Priority Queue Data Structure
+  </caption>
+  <thead>
+    <tr>
+      <th scope="col" rowspan="2">Priority Queue Data Structure</th>
+      <th scope="col" colspan="3">Operations O(·)</th>
+      <th scope="col" colspan="2">Priority Queue Sort</th>
+    </tr>
+    <tr>
+      <th scope="col">build(X)</th>
+      <th scope="col">insert(x)</th>
+      <th scope="col">delete_max()</th>
+      <th scope="col">Time</th>
+      <th scope="col">In-place?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th scope="row">Dynamic Array</th>
+      <td>n</td>
+      <td>1</td>
+      <td>n</td>
+      <td>
+        <math>
+          <msup>
+            <mi>n</mi>
+            <mn>2</mn>
+          </msup>
+        </math>
+      </td>
+      <td>✅</td>
+      <td>Selection Sort</td>
+    </tr>
+    <tr>
+      <th scope="row">Sorted Dynamic Array</th>
+      <td>
+        <math>
+          <mi>n</mi>
+          <mo>&#8290;</mo>
+          <mrow>
+              <mi>log</mi>
+              <mo>&#8289;</mo>
+              <mi>n</mi>
+          </mrow>
+        </math>
+      </td>
+      <td>n</td>
+      <td>1 (a)</td>
+      <td>
+        <math>
+          <msup>
+            <mi>n</mi>
+            <mn>2</mn>
+          </msup>
+        </math>
+      </td>
+      <td>✅</td>
+      <td>Insertion Sort</td>
+    </tr>
+    <tr>
+      <th scope="row">Set AVL Tree</th>
+      <td>
+        <math>
+          <mi>n</mi>
+          <mo>&#8290;</mo>
+          <mrow>
+              <mi>log</mi>
+              <mo>&#8289;</mo>
+              <mi>n</mi>
+          </mrow>
+        </math>
+      </td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+      </td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+      </td>
+      <td>
+        <math>
+          <mi>n</mi>
+          <mo>&#8290;</mo>
+          <mrow>
+              <mi>log</mi>
+              <mo>&#8289;</mo>
+              <mi>n</mi>
+          </mrow>
+        </math>
+      </td>
+      <td>❌</td>
+      <td>AVL Sort</td>
+    </tr>
+    <tr>
+      <th scope="row">Binary Heap</th>
+      <td>n</td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+        (a)
+      </td>
+      <td>
+        <math>
+          <mi>log</mi>
+          <mo>&#8289;</mo>
+          <mi>n</mi>
+        </math>
+        (a)
+      </td>
+      <td>
+        <math>
+          <mi>n</mi>
+          <mo>&#8290;</mo>
+          <mrow>
+              <mi>log</mi>
+              <mo>&#8289;</mo>
+              <mi>n</mi>
+          </mrow>
+        </math>
+      </td>
+      <td>✅</td>
+      <td>Heap Sort</td>
     </tr>
   </tbody>
 </table>
