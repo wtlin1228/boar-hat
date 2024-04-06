@@ -69,18 +69,17 @@ where
     }
 
     pub fn search(x: &Pointer<K, V>, k: &K) -> Option<(Pointer<K, V>, usize)> {
-        let n = x.borrow().keys.len();
-        let mut i = 0;
-        while i < n && k > &x.borrow().keys[i] {
-            i += 1;
-        }
-        if i < n && k == &x.borrow().keys[i] {
-            return Some((Rc::clone(&x), i));
-        } else if x.borrow().leaf {
-            return None;
-        } else {
-            // DISK-READ(x.c_i)
-            return Self::search(&x.borrow().children.as_ref().unwrap()[i], k);
+        let leaf = x.borrow().leaf;
+        let search_result = x.borrow().keys.binary_search(k);
+        match search_result {
+            Ok(i) => return Some((Rc::clone(&x), i)),
+            Err(i) => match leaf {
+                true => return None,
+                false => {
+                    // DISK-READ(x.c_i)
+                    return Self::search(&x.borrow().children.as_ref().unwrap()[i], k);
+                }
+            },
         }
     }
 
@@ -155,13 +154,6 @@ where
         s
     }
 
-    // y = x.c_i
-    //              ┌─────────┬─────┬─────────┐
-    //  y.keys      │  t - 1  │  1  │  t - 1  │
-    //              └─────────┴─────┴─────────┘
-    //              ┌───────────┐ ┌───────────┐
-    //  y.children  │     t     │ │     t     │
-    //              └───────────┘ └───────────┘
     fn insert_non_full(&self, x: &Pointer<K, V>, k: K, v: V) {
         let is_x_a_leaf = x.borrow().leaf;
         match is_x_a_leaf {
@@ -211,6 +203,10 @@ where
                 };
             }
         }
+    }
+
+    pub fn delete(&mut self, k: &K) -> Result<V, String> {
+        todo!()
     }
 }
 
