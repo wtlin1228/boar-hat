@@ -5,7 +5,7 @@ use std::io::prelude::*;
 #[repr(C)]
 #[repr(packed)]
 #[derive(Debug, Clone, Copy)]
-struct DatabaseHeader {
+struct DatabaseFileHeader {
     header_string: [u8; 16],
     page_size: [u8; 2],
     file_format_write_version: [u8; 1],
@@ -31,14 +31,58 @@ struct DatabaseHeader {
     sqlite_version_number: [u8; 4],
 }
 
-impl DatabaseHeader {
-    const DATABASE_HEADER_SIZE: usize = std::mem::size_of::<DatabaseHeader>();
+#[derive(Debug)]
+enum PageType {
+    InteriorIndexBTreePage,
+    InteriorTableBTreePage,
+    LeafIndexBTreePage,
+    LeafTableBTreePage,
+}
+
+#[derive(Debug)]
+struct BTreePageHeader {
+    page_type: PageType,
+    first_freeblock: u16,
+    cell_count: u16,
+    content_area_start_at: u16,
+    fragmented_free_bytes_count: u8,
+    right_most_pointer: Option<u32>,
+}
+
+impl BTreePageHeader {
+    fn new(data: &[u8]) -> Result<Self> {
+        let page_type = match data[0] {
+            0x02 => PageType::InteriorIndexBTreePage,
+            0x05 => PageType::InteriorTableBTreePage,
+            0x0a => PageType::LeafIndexBTreePage,
+            0x0d => PageType::LeafTableBTreePage,
+            _ => bail!("Any other value for the b-tree page type is an error"),
+        };
+        let right_most_pointer = match page_type {
+            PageType::InteriorIndexBTreePage | PageType::InteriorTableBTreePage => {
+                Some(u32::from_be_bytes([data[8], data[9], data[10], data[11]]))
+            }
+            _ => None,
+        };
+        Ok(Self {
+            page_type,
+            first_freeblock: u16::from_be_bytes([data[1], data[2]]),
+            cell_count: u16::from_be_bytes([data[3], data[4]]),
+            content_area_start_at: u16::from_be_bytes([data[5], data[6]]),
+            fragmented_free_bytes_count: data[7],
+            right_most_pointer,
+        })
+    }
+}
+
+impl DatabaseFileHeader {
+    const DATABASE_FILE_HEADER_SIZE: usize = std::mem::size_of::<DatabaseFileHeader>();
     fn from_bytes(data: &[u8]) -> Result<Self> {
-        if data.len() != Self::DATABASE_HEADER_SIZE {
-            bail!("fail construct database header from input data due to length mismatch");
+        if data.len() != Self::DATABASE_FILE_HEADER_SIZE {
+            bail!("Fail construct database header from input data due to length mismatch");
         }
 
-        let d = data as *const [u8] as *const DatabaseHeader;
+        let d = data as *const [u8] as *const DatabaseFileHeader;
         Ok(unsafe { *d.clone() })
     }
 }
@@ -59,12 +103,14 @@ fn main() -> Result<()> {
             let mut file = File::open(&args[1])?;
             let mut buff = [0; 100];
             file.read_exact(&mut buff)?;
-            let database_header = DatabaseHeader::from_bytes(&buff)?;
+            let database_file_header = DatabaseFileHeader::from_bytes(&buff)?;
+            let page_size = u16::from_be_bytes(database_file_header.page_size);
+            println!("database page size: {}", page_size);
 
-            println!(
-                "database page size: {}",
-                u16::from_be_bytes(database_header.page_size)
-            );
+            let mut buff = vec![0u8; page_size as usize - 100];
+            file.read_exact(&mut buff)?;
+            let btree_page_header = BTreePageHeader::new(&buff)?;
+            println!("number of tables: {}", btree_page_header.cell_count);
         }
         _ => bail!("Missing or invalid command passed: {}", command),
     }
