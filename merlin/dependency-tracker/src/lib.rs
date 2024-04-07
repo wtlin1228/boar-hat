@@ -32,6 +32,10 @@ impl ModuleSymbol {
 
 const MODULE_DEFAULT_EXPORT: &'static str = "MODULE_DEFAULT_EXPORT";
 
+// Note: Here is a memory improvement candidate
+// DependencyTracker is currently using `ModuleSymbol` internally in the `depends_on_table` and `depended_by_table`
+// `ModuleSymbol` can be further reduced to pointers so that each pointer only cost a few bytes, which is much better
+// using String in the current implementation.
 #[derive(Debug)]
 pub struct DependencyTracker {
     root: PathBuf,
