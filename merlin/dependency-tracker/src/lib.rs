@@ -172,4 +172,74 @@ mod tests {
         assert_eq!(graph.len(), expect_graph.len());
         expect_graph.iter().for_each(|p| assert!(graph.contains(p)))
     }
+
+    #[test]
+    fn test_depends_on_module_default_export() {
+        let mut dt = DependencyTracker {
+            root: Path::new("some/where").into(),
+            module_exports_table: HashMap::new(),
+            module_symbol_depends_on_table: HashMap::from([
+                (
+                    "App.tsx".into(),
+                    HashMap::from([(
+                        MODULE_DEFAULT_EXPORT.into(),
+                        HashSet::from([
+                            ModuleSymbol::new("components/Header", MODULE_DEFAULT_EXPORT),
+                            ModuleSymbol::new("components/Main", MODULE_DEFAULT_EXPORT),
+                            ModuleSymbol::new("components/Footer", MODULE_DEFAULT_EXPORT),
+                        ]),
+                    )]),
+                ),
+                (
+                    "components/Header".into(),
+                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
+                ),
+                (
+                    "components/Main".into(),
+                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
+                ),
+                (
+                    "components/Footer".into(),
+                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
+                ),
+            ]),
+            module_symbol_depended_by_table: HashMap::from([
+                (
+                    "App.tsx".into(),
+                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
+                ),
+                (
+                    "components/Header".into(),
+                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
+                ),
+                (
+                    "components/Main".into(),
+                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
+                ),
+                (
+                    "components/Footer".into(),
+                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
+                ),
+            ]),
+        };
+
+        dt.build_depended_by_table();
+        let graph = dt.debug_depended_by(&ModuleSymbol::new(
+            "components/Footer",
+            MODULE_DEFAULT_EXPORT,
+        ));
+        let expect_graph = vec![
+            vec![ModuleSymbol::new(
+                "components/Footer",
+                MODULE_DEFAULT_EXPORT,
+            )],
+            vec![
+                ModuleSymbol::new("App.tsx", MODULE_DEFAULT_EXPORT),
+                ModuleSymbol::new("components/Footer", MODULE_DEFAULT_EXPORT),
+            ],
+        ];
+
+        assert_eq!(graph.len(), expect_graph.len());
+        expect_graph.iter().for_each(|p| assert!(graph.contains(p)));
+    }
 }
