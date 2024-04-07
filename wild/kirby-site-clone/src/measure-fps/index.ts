@@ -62,19 +62,26 @@ class MeasureFPS {
       return
     }
     this.running = true
-
     this.lastTimestamp = initLastTimeStamp
+
+    this.fpsRecord = Array(60).fill(60)
+    this.fpsRecordIndex = 0
+    this.fpsRecordSum = 60 * 60
+
+    this.frameCount = initFrameCount
+
     this.currentFps = initCurrentFps
     this.lowestFps = initLowestFps
     this.averageFpsInLast60Frame = initAverageFpsInLast60Frame
     this.averageFpsOverall = initAverageFpsOverall
-    this.frameCount = initFrameCount
 
     requestAnimationFrame(this.run)
   }
 
   private run = (timeStamp: DOMHighResTimeStamp) => {
-    if (this.lastTimestamp == null) {
+    if (this.running === false) {
+      return
+    } else if (this.lastTimestamp == null) {
       // skip the first frame
       this.lastTimestamp = timeStamp
       requestAnimationFrame(this.run)
@@ -104,9 +111,7 @@ class MeasureFPS {
     this.fpsRecordIndex = (this.fpsRecordIndex + 1) % 60
     this.averageFpsInLast60Frame = this.fpsRecordSum / 60
 
-    if (this.running === true) {
-      requestAnimationFrame(this.run)
-    }
+    requestAnimationFrame(this.run)
   }
 }
 
