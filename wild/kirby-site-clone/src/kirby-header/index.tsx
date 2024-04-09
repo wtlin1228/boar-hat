@@ -1,10 +1,12 @@
 import React from 'react'
 import useIntroAnimation from './useIntroAnimation'
+import BarfyStars from '@/barfy-stars'
 
 function KirbyHeader() {
   const [isIntroFinished, setIsIntroFinished] = React.useState(false)
 
   const containerRef = React.useRef<HTMLDivElement>(null)
+  const learnMoreButtonRef = React.useRef<HTMLDivElement>(null)
 
   useIntroAnimation({
     containerRef,
@@ -13,27 +15,49 @@ function KirbyHeader() {
     },
   })
 
+  React.useEffect(() => {
+    if (learnMoreButtonRef.current) {
+      const learnMoreButton = learnMoreButtonRef.current
+
+      const barfStars = new BarfyStars(learnMoreButtonRef.current, {
+        numParticles: 24,
+        // We have 4 variants of the star particles for now
+        // ref: src/index.css@.BSParticle--
+        numUniqueParticles: 4,
+        // have to be 'BSParticle' since we're providing the styles through the CSS
+        particleBaseClassName: 'BSParticle',
+      })
+
+      learnMoreButton.addEventListener('pointerenter', barfStars.barf)
+      return () => {
+        learnMoreButton.removeEventListener('pointerenter', barfStars.barf)
+      }
+    }
+  }, [])
+
   return (
     <div
       className="hero"
       ref={containerRef}
     >
-      <div className="hero-splat">
-        <div className="hero-splat__img hero-splat__img--incoming">
-          <img
-            src="/assets/img/home/kirby-splat-1.png"
-            alt=""
-            width="717"
-          />
+      {!isIntroFinished && (
+        <div className="hero-splat">
+          <div className="hero-splat__img hero-splat__img--incoming">
+            <img
+              src="/assets/img/home/kirby-splat-1.png"
+              alt=""
+              width="717"
+            />
+          </div>
+          <div className="hero-splat__img hero-splat__img--squished">
+            <img
+              src="/assets/img/home/kirby-splat-2.png"
+              alt=""
+              width="1139"
+            />
+          </div>
         </div>
-        <div className="hero-splat__img hero-splat__img--squished">
-          <img
-            src="/assets/img/home/kirby-splat-2.png"
-            alt=""
-            width="1139"
-          />
-        </div>
-      </div>
+      )}
       <div className="hero-wrapper">
         <div className="hero__bg__container">
           <div className="hero__bg hero__bg--final" />
@@ -119,8 +143,8 @@ function KirbyHeader() {
                 always finding new ways to take on troublemakers.
               </p>
               <div
-                className="cta stars"
-                data-controller="BarfyStars"
+                className="starburst cta stars"
+                ref={learnMoreButtonRef}
               >
                 <a
                   className="button button--blue"

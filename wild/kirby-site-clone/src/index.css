@@ -2826,7 +2826,6 @@ a.button {
 }
 
 .BSParticle::after {
-  background: url('/assets/img/star-single.png');
   background-size: 100% 100%;
   content: '';
   display: block;
@@ -2836,19 +2835,19 @@ a.button {
   width: 102px;
 }
 
-.BSParticle--2::after {
+.BSParticle--1::after {
   background: url('/assets/img/star-single-blue.png');
 }
 
-.BSParticle--3::after {
+.BSParticle--2::after {
   background: url('/assets/img/star-single-green.png');
 }
 
-.BSParticle--4::after {
+.BSParticle--3::after {
   background: url('/assets/img/star-single-pink.png');
 }
 
-.BSParticle--5::after {
+.BSParticle--4::after {
   background: url('/assets/img/star-single-yellow.png');
 }
 
@@ -3029,6 +3028,11 @@ a.button {
   position: relative;
   z-index: 5;
   opacity: 0;
+}
+
+/* particles will burst from the .stars*/
+.stars {
+  position: relative;
 }
 
 .audio-btn {

@@ -174,9 +174,8 @@ export const useIntroAnimation = ({
         { opacity: 0, duration: 0.5, stagger: 0.2 },
         '-=1.4'
       )
-      tl.call(() => {
-        tl.set('.hero-splat', { display: 'none' })
-      })
+
+      tl.set('.hero-splat', { display: 'none' })
 
       tl.play()
     },
