@@ -1,7 +1,10 @@
 pub mod database_file_header;
+mod serial_type_codes;
 
 use anyhow::{bail, Result};
 use database_file_header::DatabaseFileHeader;
+use serial_type_codes::Record;
+use std::io::Cursor;
 
 #[derive(Debug)]
 pub enum PageType {
@@ -38,6 +41,7 @@ impl PageType {
 // 4. Unallocated space
 // 5. The cell content area
 // 6. The reserved region.
+#[derive(Debug)]
 pub struct BTreePage {
     database_file_header: Option<DatabaseFileHeader>,
 
@@ -47,7 +51,7 @@ pub struct BTreePage {
     content_area_start_at: u16,
     fragmented_free_bytes_count: u8,
     right_most_pointer: Option<u32>,
-    cell_pointers: Vec<u16>,
+    pub cell_pointers: Vec<u16>,
 }
 
 impl BTreePage {
@@ -105,7 +109,7 @@ enum ObjectType {
 
 // ref: https://www.sqlite.org/schematab.html
 #[derive(Debug)]
-struct SchemaTable {
+pub struct SchemaTable {
     object_type: ObjectType,
     name: String,
     tbl_name: String,
@@ -113,4 +117,11 @@ struct SchemaTable {
     sql: String,
 }
 
-impl SchemaTable {}
+impl SchemaTable {
+    pub fn from(cell: &[u8]) -> Result<Self> {
+        let mut reader = Cursor::new(cell);
+        let my_first_record = Record::from(&mut reader)?;
+        println!("my first record is {:?}", my_first_record);
+        todo!()
+    }
+}

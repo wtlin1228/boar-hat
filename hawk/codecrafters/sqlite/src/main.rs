@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::os::unix::fs::FileExt;
 
 use sqlite_starter_rust::database_file_header::DatabaseFileHeader;
-use sqlite_starter_rust::BTreePage;
+use sqlite_starter_rust::{BTreePage, SchemaTable};
 
 fn main() -> Result<()> {
     // Parse arguments
@@ -42,6 +42,10 @@ fn main() -> Result<()> {
             let mut buff = vec![0u8; page_size as usize];
             file.read_exact_at(&mut buff, 0)?;
             let page = BTreePage::new(&buff, Some(database_file_header))?;
+
+            let my_first_cell =
+                &buff[page.cell_pointers[2] as usize..page.cell_pointers[1] as usize];
+            SchemaTable::from(my_first_cell)?;
         }
         _ => bail!("Missing or invalid command passed: {}", command),
     }
