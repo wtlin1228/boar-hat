@@ -1,10 +1,11 @@
 pub mod database_file_header;
-mod serial_type_codes;
+mod utils;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Ok, Result};
 use database_file_header::DatabaseFileHeader;
-use serial_type_codes::Record;
-use std::io::Cursor;
+use std::io::{Cursor, Seek};
+
+use crate::utils::{read_one_varint, SerialValue};
 
 #[derive(Debug)]
 pub enum PageType {
@@ -35,12 +36,12 @@ impl PageType {
     }
 }
 
-// 1. The 100-byte database file header (found on page 1 only)
-// 2. The 8 or 12 byte b-tree page header
-// 3. The cell pointer array
-// 4. Unallocated space
-// 5. The cell content area
-// 6. The reserved region.
+/// 1. The 100-byte database file header (found on page 1 only)
+/// 2. The 8 or 12 byte b-tree page header
+/// 3. The cell pointer array
+/// 4. Unallocated space
+/// 5. The cell content area
+/// 6. The reserved region.
 #[derive(Debug)]
 pub struct BTreePage {
     database_file_header: Option<DatabaseFileHeader>,
@@ -107,12 +108,24 @@ enum ObjectType {
     Trigger,
 }
 
-// ref: https://www.sqlite.org/schematab.html
+impl ObjectType {
+    fn from(text: &str) -> Result<Self> {
+        match text {
+            "table" => Ok(Self::Table),
+            "index" => Ok(Self::Index),
+            "view" => Ok(Self::View),
+            "trigger" => Ok(Self::Trigger),
+            _ => bail!("Invalid object type: {}", text),
+        }
+    }
+}
+
+/// ref: https://www.sqlite.org/schematab.html
 #[derive(Debug)]
 pub struct SchemaTable {
     object_type: ObjectType,
     name: String,
-    tbl_name: String,
+    pub tbl_name: String,
     rootpage: Option<usize>,
     sql: String,
 }
@@ -120,8 +133,69 @@ pub struct SchemaTable {
 impl SchemaTable {
     pub fn from(cell: &[u8]) -> Result<Self> {
         let mut reader = Cursor::new(cell);
-        let my_first_record = Record::from(&mut reader)?;
-        println!("my first record is {:?}", my_first_record);
-        todo!()
+        let _payload_size = read_one_varint(&mut reader).context("Read varint - payload size")?;
+        let _row_id = read_one_varint(&mut reader).context("Read varint - rowid")?;
+
+        let header_start = reader.stream_position()?;
+        let header_size = read_one_varint(&mut reader).context("Read varint - header size")?;
+
+        let mut serial_types = vec![];
+        while reader.stream_position()? < header_start + header_size as u64 {
+            let serial_type = read_one_varint(&mut reader).context("Read varint - serial type")?;
+            serial_types.push(serial_type);
+        }
+        assert_eq!(
+            serial_types.len(),
+            5,
+            "SchemaTable should have exactly 5 columns"
+        );
+
+        let object_type = match SerialValue::from(&mut reader, serial_types[0])
+            .context("Read serial value - object type")?
+        {
+            SerialValue::Text(text) => ObjectType::from(&text),
+            _ => bail!("Object type should be text"),
+        }?;
+
+        let name = match SerialValue::from(&mut reader, serial_types[1])
+            .context("Read serial value - name")?
+        {
+            SerialValue::Text(text) => text,
+            _ => bail!("Name should be text"),
+        };
+
+        let tbl_name = match SerialValue::from(&mut reader, serial_types[2])
+            .context("Read serial value - tbl name")?
+        {
+            SerialValue::Text(text) => text,
+            _ => bail!("tbl name should be text"),
+        };
+
+        let rootpage = match SerialValue::from(&mut reader, serial_types[3])
+            .context("Read serial value - rootpage")?
+        {
+            SerialValue::Int8(n) => Some(n as usize),
+            SerialValue::Int16(n) => Some(n as usize),
+            SerialValue::Int24(n) => Some(n as usize),
+            SerialValue::Int32(n) => Some(n as usize),
+            SerialValue::Int48(n) => Some(n as usize),
+            SerialValue::Int64(n) => Some(n as usize),
+            _ => None,
+        };
+
+        let sql = match SerialValue::from(&mut reader, serial_types[4])
+            .context("Read serial value - sql")?
+        {
+            SerialValue::Text(text) => text,
+            _ => bail!("sql should be text"),
+        };
+
+        Ok(Self {
+            object_type,
+            name,
+            tbl_name,
+            rootpage,
+            sql,
+        })
     }
 }

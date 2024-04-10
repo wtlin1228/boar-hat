@@ -1,8 +1,44 @@
 use anyhow::{bail, Context, Result};
 use std::io::Read;
 
+pub fn read_bytes(reader: &mut impl Read, n_bytes: usize) -> Result<Vec<u8>> {
+    let mut buf = vec![0; n_bytes];
+    reader.read_exact(&mut buf)?;
+    Ok(buf)
+}
+
+pub fn read_one_byte(reader: &mut impl Read) -> Result<u8> {
+    Ok(read_bytes(reader, 1)?[0])
+}
+
+/// A variable-length integer or "varint" is a static Huffman encoding of 64-bit twos-complement
+/// integers that uses less space for small positive values. A varint is between 1 and 9 bytes in
+/// length. The varint consists of either zero or more bytes which have the high-order bit set
+/// followed by a single byte with the high-order bit clear, or nine bytes, whichever is shorter.
+/// The lower seven bits of each of the first eight bytes and all 8 bits of the ninth byte are used
+/// to reconstruct the 64-bit twos-complement integer. Varints are big-endian: bits taken from the
+/// earlier byte of the varint are more significant than bits taken from the later bytes.
+pub fn read_one_varint(reader: &mut impl Read) -> Result<u64> {
+    let mut res: u64 = 0;
+    // only take the lower 7 bits of each of the first eight bytes
+    for _ in 1..=8 {
+        let byte = read_one_byte(reader)?;
+        res <<= 7;
+        res += (byte & 0b0111_1111) as u64;
+        if byte & 0b1000_0000 == 0 {
+            return Ok(res);
+        }
+    }
+    // take all 8 bits of the ninth byte
+    let byte = read_one_byte(reader)?;
+    res <<= 8;
+    res += byte as u64;
+    Ok(res)
+}
+
+/// https://www.sqlite.org/fileformat2.html#record_format
 #[derive(Debug)]
-pub enum Record {
+pub enum SerialValue {
     Null,
     Int8(i8),
     Int16(i16),
@@ -17,8 +53,8 @@ pub enum Record {
     Text(String),
 }
 
-impl Record {
-    pub fn from(reader: &mut impl Read) -> Result<Self> {
+impl SerialValue {
+    pub fn from(reader: &mut impl Read, serial_type: u64) -> Result<Self> {
         macro_rules! read_exact {
             ($size:expr) => {{
                 let mut buff = [0; $size];
@@ -36,12 +72,6 @@ impl Record {
             }};
         }
 
-        // TODO: need to implement the variable-length integer (varint) to read those
-        // values, ref: https://www.sqlite.org/fileformat2.html#varint
-        let payload_size = i64::from_be_bytes(read_exact!(8));
-        let row_id = i64::from_be_bytes(read_exact!(8));
-        let expected_header_size = i64::from_be_bytes(read_exact!(8));
-        let serial_type = i64::from_be_bytes(read_exact!(8));
         match serial_type {
             0 => Ok(Self::Null),
             1 => Ok(Self::Int8(i8::from_be_bytes(read_exact!(1)))),
