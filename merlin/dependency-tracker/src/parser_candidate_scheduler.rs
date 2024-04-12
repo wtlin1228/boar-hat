@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use swc_core::{
     common::{
         errors::{ColorConfig, Handler},
@@ -10,6 +10,8 @@ use swc_core::{
 };
 use swc_core::{ecma::ast::*, ecma::visit::Visit};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
+
+use crate::path_resolver::PathResolver;
 
 type Candidate = PathBuf;
 
@@ -97,9 +99,9 @@ impl ParserCandidateScheduler {
 }
 
 struct BlockedByVisitor {
-    base_url: PathBuf,
     current_path: PathBuf,
     blocked_by: HashSet<PathBuf>,
+    path_resolver: PathResolver,
 }
 
 impl BlockedByVisitor {
@@ -140,9 +142,9 @@ impl BlockedByVisitor {
             .expect("failed to parser module");
 
         let mut visitor = Self {
-            base_url: root.clone(),
             current_path: path.clone(),
             blocked_by: HashSet::new(),
+            path_resolver: PathResolver::new(root.to_str().unwrap()),
         };
         module.visit_with(&mut visitor);
 
@@ -150,50 +152,14 @@ impl BlockedByVisitor {
     }
 
     fn add_to_blocked_by_if_needed(&mut self, import_src: &str) {
-        let import_src = Path::new(import_src);
-        match import_src.starts_with(".") {
-            true => {
-                // import * as Components from './components'
-                // import * as Components from '../components'
-                // import * as Components from '../../components'
-
-                // current path: "boar/hat/hawk/readme.md"
-                // import src: "./components"
-                // p: "boar/hat/hawk/./components"
-                let p = Path::new(&self.current_path).with_file_name(import_src);
-
-                // try "boar/hat/hawk/components/index.js"
-                if let Ok(resolved_path) = p.join("index.js").canonicalize() {
-                    self.blocked_by.insert(resolved_path);
-                    return;
-                }
-
-                // try "boar/hat/hawk/components/index.ts"
-                if let Ok(resolved_path) = p.join("index.ts").canonicalize() {
-                    self.blocked_by.insert(resolved_path);
-                    return;
-                }
-
-                // try "boar/hat/hawk/components.ts"
-                // try "boar/hat/hawk/components.tsx"
-                // try "boar/hat/hawk/components.js"
-                // try "boar/hat/hawk/components.jsx"
-                for extension in ["ts", "tsx", "js", "jsx"] {
-                    let mut p = p.clone();
-                    p.set_extension(extension);
-                    if let Ok(resolved_path) = p.canonicalize() {
-                        self.blocked_by.insert(resolved_path);
-                        return;
-                    }
-                }
-            }
-            false => {
-                // import * as Components from 'components'
-                if let Ok(resolved_path) = Path::new(&self.base_url).join(import_src).canonicalize()
-                {
-                    self.blocked_by.insert(resolved_path);
-                }
-            }
+        if let Ok(resolved_path) = self
+            .path_resolver
+            .resolve_path(&self.current_path, import_src)
+        {
+            self.blocked_by.insert(resolved_path);
+        } else {
+            // Ignore the unresolvable module on purpose.
+            // You can catch the unresolvable module here and adjust the PathResolver for your use case.
         }
     }
 }
@@ -219,7 +185,7 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let root = Path::new("./test-project/everybodyyyy/src")
+        let root = PathBuf::from("./test-project/everybodyyyy/src")
             .canonicalize()
             .unwrap();
         let scheduler = ParserCandidateScheduler::new(&root);
@@ -280,7 +246,7 @@ mod tests {
                 "components/titles/big-title.tsx",
                 vec!["components/titles/index.ts"],
             ),
-            ("components", vec!["App.tsx"]),
+            ("components/index.ts", vec!["App.tsx"]),
             (
                 "components/links/react.tsx",
                 vec!["components/links/index.ts"],
@@ -326,9 +292,12 @@ mod tests {
             ),
         ]
         .into_iter()
-        .for_each(|(key, value)| {
-            let value: Vec<PathBuf> = value.into_iter().map(|x| root.join(x)).collect();
-            assert_eq!(scheduler.blocking_table.get(&root.join(key)), Some(&value));
+        .for_each(|(module, blocking_list)| {
+            let module = root.join(module);
+            let expected_blocking_list: Vec<PathBuf> =
+                blocking_list.iter().map(|x| root.join(x)).collect();
+            let actual_blocking_list = scheduler.blocking_table.get(&module).unwrap();
+            assert_eq!(actual_blocking_list, &expected_blocking_list);
         });
     }
 }

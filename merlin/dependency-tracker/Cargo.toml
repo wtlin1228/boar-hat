@@ -11,3 +11,4 @@ swc_core = { version = "0.90", features = [
     "ecma_plugin_transform"
 ]}
 swc_ecma_parser = { version = "0.143.5", features = ["typescript"] }
+anyhow = "1"

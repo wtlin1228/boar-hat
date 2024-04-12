@@ -1,4 +1,5 @@
 pub mod parser_candidate_scheduler;
+mod path_resolver;
 pub mod visitors;
 
 use std::{
