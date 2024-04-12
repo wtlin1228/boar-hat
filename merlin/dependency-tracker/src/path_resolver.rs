@@ -1,24 +1,22 @@
 use anyhow::{self, bail};
 use std::path::{Path, PathBuf};
 
-pub trait ResolvePath {
-    fn resolve_path(&self, current_path: &PathBuf, import_src: &str) -> anyhow::Result<PathBuf>;
-}
-
-pub struct SimplePathResolver {
+pub struct PathResolver {
     base_url: String,
 }
 
-impl SimplePathResolver {
+impl PathResolver {
     pub fn new(base_url: &str) -> Self {
         Self {
-            base_url: base_url.into(),
+            base_url: base_url.to_string(),
         }
     }
-}
 
-impl ResolvePath for SimplePathResolver {
-    fn resolve_path(&self, current_path: &PathBuf, import_src: &str) -> anyhow::Result<PathBuf> {
+    pub fn resolve_path(
+        &self,
+        current_path: &PathBuf,
+        import_src: &str,
+    ) -> anyhow::Result<PathBuf> {
         let p = match import_src.starts_with(".") {
             true => Path::new(current_path).with_file_name(import_src),
             false => Path::new(&self.base_url).join(import_src),
@@ -50,7 +48,7 @@ mod tests {
 
     #[test]
     fn test_resolve_relative_path() {
-        let resolver = SimplePathResolver::new("");
+        let resolver = PathResolver::new("");
 
         assert_eq!(
             resolver
@@ -91,7 +89,7 @@ mod tests {
 
     #[test]
     fn test_resolve_alias_path() {
-        let resolver = SimplePathResolver::new("test-project/everybodyyyy/src");
+        let resolver = PathResolver::new("test-project/everybodyyyy/src");
 
         assert_eq!(
             resolver

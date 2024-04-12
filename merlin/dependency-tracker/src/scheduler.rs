@@ -11,7 +11,7 @@ use swc_core::{
 use swc_core::{ecma::ast::*, ecma::visit::Visit};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 
-use crate::path_resolver::{ResolvePath, SimplePathResolver};
+use super::path_resolver::PathResolver;
 
 type Candidate = PathBuf;
 
@@ -40,11 +40,11 @@ impl ParserCandidateScheduler {
             blocking_table: HashMap::new(),
         };
 
-        let path_resolver = SimplePathResolver::new(root.to_str().unwrap());
+        let path_resolver = PathResolver::new(root.to_str().unwrap());
 
         for path in paths.iter() {
             if Self::is_valid_path(path) {
-                match Self::get_blocked_by(root, path, &path_resolver) {
+                match Self::get_blocked_by(path, &path_resolver) {
                     Some(blocked_by_vec) => {
                         scheduler
                             .blocked_candidates
@@ -68,12 +68,8 @@ impl ParserCandidateScheduler {
         scheduler
     }
 
-    fn get_blocked_by(
-        root: &PathBuf,
-        path: &PathBuf,
-        path_resolver: &SimplePathResolver,
-    ) -> Option<Vec<PathBuf>> {
-        let blocked_by = BlockedByVisitor::get_blocked_by(root, path, &path_resolver);
+    fn get_blocked_by(path: &PathBuf, path_resolver: &PathResolver) -> Option<Vec<PathBuf>> {
+        let blocked_by = BlockedByVisitor::get_blocked_by(path, &path_resolver);
         match blocked_by.len() {
             0 => None,
             _ => Some(blocked_by.into_iter().collect()),
@@ -107,15 +103,11 @@ impl ParserCandidateScheduler {
 struct BlockedByVisitor<'r> {
     current_path: PathBuf,
     blocked_by: HashSet<PathBuf>,
-    path_resolver: &'r SimplePathResolver,
+    path_resolver: &'r PathResolver,
 }
 
 impl<'r> BlockedByVisitor<'r> {
-    fn get_blocked_by(
-        root: &PathBuf,
-        path: &PathBuf,
-        path_resolver: &'r SimplePathResolver,
-    ) -> HashSet<PathBuf> {
+    fn get_blocked_by(path: &PathBuf, path_resolver: &'r PathResolver) -> HashSet<PathBuf> {
         let cm: Lrc<SourceMap> = Default::default();
         let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
 

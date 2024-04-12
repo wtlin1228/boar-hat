@@ -1,94 +1,168 @@
-pub mod parser_candidate_scheduler;
 mod path_resolver;
+mod scheduler;
 pub mod visitors;
 
-use std::{
-    collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
-};
+use anyhow::{self, bail, Context, Ok};
+use std::collections::{HashMap, HashSet};
 
-pub type ModulePath = String;
-pub type SymbolName = String;
+const DEFAULT_EXPORT: &'static str = "____DEFAULT__EXPORT____";
 
-#[derive(Eq, PartialEq, Hash, Clone)]
-pub struct ModuleSymbol {
-    module_path: String,
-    symbol_name: String,
+#[derive(Debug, PartialEq, Eq)]
+enum ImportType {
+    NamedImport(String),
+    DefaultImport,
+    NameSpaceImport(Vec<String>),
 }
 
-impl std::fmt::Debug for ModuleSymbol {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}.{}", self.module_path, self.symbol_name))
+#[derive(Debug, PartialEq, Eq)]
+struct Import {
+    from: String,
+    import_type: ImportType,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct Symbol {
+    name: String,
+    is_exported: bool,
+    import_from: Option<Import>,
+    depend_on: Option<HashSet<String>>,
+}
+
+impl Symbol {
+    fn is_namespace_import(&self) -> bool {
+        match self.import_from {
+            Some(ref import_type) => match import_type.import_type {
+                ImportType::NameSpaceImport(_) => true,
+                _ => false,
+            },
+            None => false,
+        }
     }
-}
 
-impl ModuleSymbol {
-    pub fn new(m: &str, s: &str) -> Self {
-        Self {
-            module_path: m.to_string(),
-            symbol_name: s.to_string(),
+    fn get_symbol_names_depend_on_the_namespace(&self) -> anyhow::Result<Vec<&str>> {
+        match self.import_from {
+            Some(ref import_type) => match import_type.import_type {
+                ImportType::NameSpaceImport(ref names) => {
+                    Ok(names.iter().map(|name| name.as_str()).collect())
+                }
+                _ => bail!("This method is only available for ImportType::NameSpaceImport"),
+            },
+            None => bail!("This method is only available for ImportType::NameSpaceImport"),
         }
     }
 }
 
-const MODULE_DEFAULT_EXPORT: &'static str = "MODULE_DEFAULT_EXPORT";
+#[derive(Debug)]
+struct Module {
+    has_namespace_import: bool,
+    symbols: HashMap<String, Symbol>,
+}
 
-// Note: Here is a memory improvement candidate
-// DependencyTracker is currently using `ModuleSymbol` internally in the `depends_on_table` and `depended_by_table`
-// `ModuleSymbol` can be further reduced to pointers so that each pointer only cost a few bytes, which is much better
-// using String in the current implementation.
 #[derive(Debug)]
 pub struct DependencyTracker {
-    root: PathBuf,
+    root: String,
 
-    // This table will only be used when we encounter those cases when we're building
-    // the `module_symbols_table`
-    //     - `import * as Foo from 'somewhere'`
-    //     - `export * from 'elsewhere'`
-    module_exports_table: HashMap<ModulePath, Vec<SymbolName>>,
-
-    module_symbol_depends_on_table: HashMap<ModulePath, HashMap<SymbolName, HashSet<ModuleSymbol>>>,
-
-    // This table stores the reversed pointers from `module_symbol_depends_on_table`.
-    // It can be built by calling `Self::build_depended_by_table(&Self)`.
-    module_symbol_depended_by_table:
-        HashMap<ModulePath, HashMap<SymbolName, HashSet<ModuleSymbol>>>,
+    // module -> symbols in the module
+    parsed_modules: HashMap<String, Module>,
 }
 
 impl DependencyTracker {
-    pub fn debug_depended_by(&self, ms: &ModuleSymbol) -> Vec<Vec<ModuleSymbol>> {
-        let depended_by = &self
-            .module_symbol_depended_by_table
-            .get(&ms.module_path)
-            .unwrap()
-            .get(&ms.symbol_name)
-            .unwrap();
+    fn expand_namespace(&mut self, module_name: &str) -> anyhow::Result<()> {
+        let module = self
+            .parsed_modules
+            .get_mut(module_name)
+            .context(format!("Module {} not found", module_name))?;
 
-        let mut res = vec![];
-        for depended_by_ms in depended_by.iter() {
-            for mut r in self.debug_depended_by(depended_by_ms).into_iter() {
-                r.push(ms.clone());
-                res.push(r);
-            }
+        if !module.has_namespace_import {
+            return Ok(());
         }
 
-        res.push(vec![ms.clone()]);
-        res
-    }
+        let namespace_import_symbol_names: Vec<String> = module
+            .symbols
+            .iter()
+            .filter(|&(_, s)| s.is_namespace_import())
+            .map(|(name, _)| name.clone())
+            .collect();
+        let mut namespace_import_symbols: Vec<Symbol> = vec![];
+        for symbol_name in namespace_import_symbol_names.iter() {
+            namespace_import_symbols.push(module.symbols.remove(symbol_name).unwrap());
+        }
 
-    pub fn build_depended_by_table(&mut self) {
-        for (module_path, symbol_table) in self.module_symbol_depends_on_table.iter() {
-            for (symbol_name, dependency) in symbol_table.iter() {
-                for ms in dependency.iter() {
-                    self.module_symbol_depended_by_table
-                        .get_mut(&ms.module_path)
-                        .unwrap()
-                        .get_mut(&ms.symbol_name)
-                        .unwrap()
-                        .insert(ModuleSymbol::new(&module_path, &symbol_name));
+        for namespace_import_symbol in namespace_import_symbols.iter() {
+            let import = namespace_import_symbol
+                .import_from
+                .as_ref()
+                .context("Namespace import must import from some module")?;
+
+            let import_from_module = self
+                .parsed_modules
+                .get(&import.from)
+                .context(format!("The imported module {} not found", &import.from))?;
+
+            if import_from_module.has_namespace_import {
+                bail!(
+                    "The imported module {} hasn't expand its own namespace import yet",
+                    &import.from
+                )
+            }
+
+            let mut collect_exported_symbols: Vec<Symbol> = vec![];
+            let mut collect_exported_symbol_names: Vec<String> = vec![];
+            for (symbol_name, _) in import_from_module
+                .symbols
+                .iter()
+                .filter(|&(_, symbol)| symbol.is_exported)
+            {
+                collect_exported_symbol_names.push(symbol_name.clone());
+                collect_exported_symbols.push(Symbol {
+                    name: symbol_name.clone(),
+                    is_exported: false,
+                    import_from: Some(Import {
+                        from: import.from.clone(),
+                        import_type: ImportType::NamedImport(symbol_name.clone()),
+                    }),
+                    depend_on: None,
+                })
+            }
+
+            let module = self
+                .parsed_modules
+                .get_mut(module_name)
+                .context(format!("Module {} not found", module_name))?;
+
+            for to_update_symbol_name in
+                namespace_import_symbol.get_symbol_names_depend_on_the_namespace()?
+            {
+                let depend_on = module
+                    .symbols
+                    .get_mut(to_update_symbol_name)
+                    .context(format!(
+                        "Symbol {} not found in Module {}",
+                        to_update_symbol_name, module_name
+                    ))?
+                    .depend_on
+                    .as_mut()
+                    .unwrap();
+                depend_on.remove(&namespace_import_symbol.name);
+                collect_exported_symbol_names.iter().for_each(|name| {
+                    depend_on.insert(name.clone());
+                });
+            }
+
+            collect_exported_symbols.into_iter().for_each(|symbol| {
+                let module_has_symbol_already = module.symbols.get(&symbol.name);
+                if module_has_symbol_already.is_none() {
+                    module.symbols.insert(symbol.name.clone(), symbol);
                 }
-            }
+            })
         }
+
+        self.parsed_modules
+            .get_mut(module_name)
+            .context(format!("Module {} not found", module_name))?
+            .has_namespace_import = false;
+
+        Ok(())
     }
 }
 
@@ -96,155 +170,314 @@ impl DependencyTracker {
 mod tests {
     use super::*;
 
-    macro_rules! ms {
-        ($x:expr) => {{
-            let mut x = $x.split(".");
-            ModuleSymbol::new(x.next().unwrap(), x.next().unwrap())
-        }};
-    }
-
-    //
-    //
-    //  A  ┌────a1────────────►a2
-    //     │     │              │
-    //     │     ├──────┐┌──────┤
-    //     │     │      ││      │
-    //     │     ▼      ▼▼      ▼
-    //  B  │    b1      b2     b3
-    //     │             │      │
-    //     │             │      │
-    //     │             │      │
-    //  C  └───►c1◄──────┴──────┘
-    //
-    //
     #[test]
-    fn test_build_depended_by_table() {
-        let mut dt = DependencyTracker {
-            root: Path::new("some/where").into(),
-            module_exports_table: HashMap::new(),
-            module_symbol_depends_on_table: HashMap::from([
+    fn test_namespace_import_expansion() {
+        let mut d = DependencyTracker {
+            root: "depend/dency/track/ker".to_string(),
+            parsed_modules: HashMap::from([
                 (
-                    "A".into(),
-                    HashMap::from([
-                        (
-                            "a1".into(),
-                            HashSet::from([ms!("A.a2"), ms!("B.b1"), ms!("B.b2"), ms!("C.c1")]),
-                        ),
-                        ("a2".into(), HashSet::from([ms!("B.b2"), ms!("B.b3")])),
-                    ]),
-                ),
-                (
-                    "B".into(),
-                    HashMap::from([
-                        ("b1".into(), HashSet::new()),
-                        ("b2".into(), HashSet::from([ms!("C.c1")])),
-                        ("b3".into(), HashSet::from([ms!("C.c1")])),
-                    ]),
-                ),
-                ("C".into(), HashMap::from([("c1".into(), HashSet::new())])),
-            ]),
-            module_symbol_depended_by_table: HashMap::from([
-                (
-                    "A".into(),
-                    HashMap::from([("a1".into(), HashSet::new()), ("a2".into(), HashSet::new())]),
-                ),
-                (
-                    "B".into(),
-                    HashMap::from([
-                        ("b1".into(), HashSet::new()),
-                        ("b2".into(), HashSet::new()),
-                        ("b3".into(), HashSet::new()),
-                    ]),
-                ),
-                ("C".into(), HashMap::from([("c1".into(), HashSet::new())])),
-            ]),
-        };
-
-        dt.build_depended_by_table();
-        let graph = dt.debug_depended_by(&ms!("C.c1"));
-        let expect_graph = vec![
-            vec![ms!("A.a1"), ms!("A.a2"), ms!("B.b2"), ms!("C.c1")],
-            vec![ms!("A.a2"), ms!("B.b2"), ms!("C.c1")],
-            vec![ms!("A.a1"), ms!("B.b2"), ms!("C.c1")],
-            vec![ms!("B.b2"), ms!("C.c1")],
-            vec![ms!("A.a1"), ms!("A.a2"), ms!("B.b3"), ms!("C.c1")],
-            vec![ms!("A.a2"), ms!("B.b3"), ms!("C.c1")],
-            vec![ms!("B.b3"), ms!("C.c1")],
-            vec![ms!("A.a1"), ms!("C.c1")],
-            vec![ms!("C.c1")],
-        ];
-
-        assert_eq!(graph.len(), expect_graph.len());
-        expect_graph.iter().for_each(|p| assert!(graph.contains(p)))
-    }
-
-    #[test]
-    fn test_depends_on_module_default_export() {
-        let mut dt = DependencyTracker {
-            root: Path::new("some/where").into(),
-            module_exports_table: HashMap::new(),
-            module_symbol_depends_on_table: HashMap::from([
-                (
-                    "App.tsx".into(),
-                    HashMap::from([(
-                        MODULE_DEFAULT_EXPORT.into(),
-                        HashSet::from([
-                            ModuleSymbol::new("components/Header", MODULE_DEFAULT_EXPORT),
-                            ModuleSymbol::new("components/Main", MODULE_DEFAULT_EXPORT),
-                            ModuleSymbol::new("components/Footer", MODULE_DEFAULT_EXPORT),
+                    "Module X".to_string(),
+                    Module {
+                        has_namespace_import: false,
+                        symbols: HashMap::from([
+                            (
+                                DEFAULT_EXPORT.to_string(),
+                                Symbol {
+                                    name: DEFAULT_EXPORT.to_string(),
+                                    is_exported: false,
+                                    import_from: None,
+                                    depend_on: Some(HashSet::from(["x1".to_string()])),
+                                },
+                            ),
+                            (
+                                "x1".to_string(),
+                                Symbol {
+                                    name: "x1".to_string(),
+                                    is_exported: true,
+                                    import_from: None,
+                                    depend_on: None,
+                                },
+                            ),
+                            (
+                                "x2".to_string(),
+                                Symbol {
+                                    name: "x2".to_string(),
+                                    is_exported: true,
+                                    import_from: None,
+                                    depend_on: None,
+                                },
+                            ),
+                            (
+                                "x3".to_string(),
+                                Symbol {
+                                    name: "x3".to_string(),
+                                    is_exported: true,
+                                    import_from: None,
+                                    depend_on: None,
+                                },
+                            ),
                         ]),
-                    )]),
+                    },
                 ),
                 (
-                    "components/Header".into(),
-                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
+                    "Module Y".to_string(),
+                    Module {
+                        has_namespace_import: false,
+                        symbols: HashMap::from([
+                            (
+                                DEFAULT_EXPORT.to_string(),
+                                Symbol {
+                                    name: DEFAULT_EXPORT.to_string(),
+                                    is_exported: false,
+                                    import_from: None,
+                                    depend_on: Some(HashSet::from(["y1".to_string()])),
+                                },
+                            ),
+                            (
+                                "y1".to_string(),
+                                Symbol {
+                                    name: "y1".to_string(),
+                                    is_exported: true,
+                                    import_from: None,
+                                    depend_on: None,
+                                },
+                            ),
+                            (
+                                "y2".to_string(),
+                                Symbol {
+                                    name: "y2".to_string(),
+                                    is_exported: true,
+                                    import_from: None,
+                                    depend_on: None,
+                                },
+                            ),
+                            (
+                                "y3".to_string(),
+                                Symbol {
+                                    name: "y3".to_string(),
+                                    is_exported: true,
+                                    import_from: None,
+                                    depend_on: None,
+                                },
+                            ),
+                        ]),
+                    },
                 ),
                 (
-                    "components/Main".into(),
-                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
+                    "Module Z".to_string(),
+                    Module {
+                        has_namespace_import: false,
+                        symbols: HashMap::from([
+                            (
+                                DEFAULT_EXPORT.to_string(),
+                                Symbol {
+                                    name: DEFAULT_EXPORT.to_string(),
+                                    is_exported: false,
+                                    import_from: None,
+                                    depend_on: Some(HashSet::from(["z1".to_string()])),
+                                },
+                            ),
+                            (
+                                "z1".to_string(),
+                                Symbol {
+                                    name: "z1".to_string(),
+                                    is_exported: true,
+                                    import_from: None,
+                                    depend_on: None,
+                                },
+                            ),
+                            (
+                                "z2".to_string(),
+                                Symbol {
+                                    name: "z2".to_string(),
+                                    is_exported: true,
+                                    import_from: None,
+                                    depend_on: None,
+                                },
+                            ),
+                            (
+                                "z3".to_string(),
+                                Symbol {
+                                    name: "z3".to_string(),
+                                    is_exported: false,
+                                    import_from: None,
+                                    depend_on: None,
+                                },
+                            ),
+                        ]),
+                    },
                 ),
                 (
-                    "components/Footer".into(),
-                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
-                ),
-            ]),
-            module_symbol_depended_by_table: HashMap::from([
-                (
-                    "App.tsx".into(),
-                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
-                ),
-                (
-                    "components/Header".into(),
-                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
-                ),
-                (
-                    "components/Main".into(),
-                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
-                ),
-                (
-                    "components/Footer".into(),
-                    HashMap::from([(MODULE_DEFAULT_EXPORT.into(), HashSet::new())]),
+                    "Module A".to_string(),
+                    Module {
+                        has_namespace_import: true,
+                        symbols: HashMap::from([
+                            (
+                                DEFAULT_EXPORT.to_string(),
+                                Symbol {
+                                    name: DEFAULT_EXPORT.to_string(),
+                                    is_exported: false,
+                                    import_from: None,
+                                    depend_on: Some(HashSet::from(["A".to_string()])),
+                                },
+                            ),
+                            (
+                                "A".to_string(),
+                                Symbol {
+                                    name: "A".to_string(),
+                                    is_exported: false,
+                                    import_from: None,
+                                    depend_on: Some(HashSet::from(["C".to_string()])),
+                                },
+                            ),
+                            (
+                                "B".to_string(),
+                                Symbol {
+                                    name: "B".to_string(),
+                                    is_exported: false,
+                                    import_from: None,
+                                    depend_on: Some(HashSet::from([
+                                        "C".to_string(),
+                                        "z".to_string(),
+                                    ])),
+                                },
+                            ),
+                            (
+                                "C".to_string(),
+                                Symbol {
+                                    name: "C".to_string(),
+                                    is_exported: false,
+                                    import_from: None,
+                                    depend_on: Some(HashSet::from([
+                                        "x".to_string(),
+                                        "y".to_string(),
+                                    ])),
+                                },
+                            ),
+                            (
+                                "D".to_string(),
+                                Symbol {
+                                    name: "D".to_string(),
+                                    is_exported: false,
+                                    import_from: None,
+                                    depend_on: Some(HashSet::from(["z1".to_string()])),
+                                },
+                            ),
+                            (
+                                "x".to_string(),
+                                Symbol {
+                                    name: "x".to_string(),
+                                    is_exported: false,
+                                    import_from: Some(Import {
+                                        from: "Module X".to_string(),
+                                        import_type: ImportType::DefaultImport,
+                                    }),
+                                    depend_on: None,
+                                },
+                            ),
+                            (
+                                "y".to_string(),
+                                Symbol {
+                                    name: "y".to_string(),
+                                    is_exported: false,
+                                    import_from: Some(Import {
+                                        from: "Module Y".to_string(),
+                                        import_type: ImportType::NamedImport("y1".to_string()),
+                                    }),
+                                    depend_on: None,
+                                },
+                            ),
+                            (
+                                "z1".to_string(),
+                                Symbol {
+                                    name: "z1".to_string(),
+                                    is_exported: true,
+                                    import_from: Some(Import {
+                                        from: "Module Z".to_string(),
+                                        import_type: ImportType::NamedImport("z1".to_string()),
+                                    }),
+                                    depend_on: None,
+                                },
+                            ),
+                            // It's a NameSpaceImport, so it will be expanded to z1, z2, z3.
+                            // Then each symbol depends on z will then depend on z1, z2, z3 instead.
+                            // Don't need to update those depend on z1, z2, z3 directly.
+                            (
+                                "z".to_string(),
+                                Symbol {
+                                    name: "z".to_string(),
+                                    is_exported: false,
+                                    import_from: Some(Import {
+                                        from: "Module Z".to_string(),
+                                        import_type: ImportType::NameSpaceImport(vec![
+                                            "B".to_string()
+                                        ]),
+                                    }),
+                                    depend_on: None,
+                                },
+                            ),
+                        ]),
+                    },
                 ),
             ]),
         };
 
-        dt.build_depended_by_table();
-        let graph = dt.debug_depended_by(&ModuleSymbol::new(
-            "components/Footer",
-            MODULE_DEFAULT_EXPORT,
-        ));
-        let expect_graph = vec![
-            vec![ModuleSymbol::new(
-                "components/Footer",
-                MODULE_DEFAULT_EXPORT,
-            )],
-            vec![
-                ModuleSymbol::new("App.tsx", MODULE_DEFAULT_EXPORT),
-                ModuleSymbol::new("components/Footer", MODULE_DEFAULT_EXPORT),
-            ],
-        ];
+        d.expand_namespace("Module A").unwrap();
 
-        assert_eq!(graph.len(), expect_graph.len());
-        expect_graph.iter().for_each(|p| assert!(graph.contains(p)));
+        let module_a = d.parsed_modules.get("Module A").unwrap();
+        assert!(
+            module_a.symbols.get("z1").unwrap().is_exported,
+            "z1 shouldn't be override during the expansion of namespace import of z"
+        );
+        assert!(
+            module_a.symbols.contains_key("z2"),
+            "z2 should be expanded during the expansion of namespace import of z"
+        );
+        assert!(
+            !module_a.symbols.contains_key("z3"),
+            "z3 is not exported by Module Z"
+        );
+
+        let module_a_symbol_b_depend_on = module_a
+            .symbols
+            .get("B")
+            .as_ref()
+            .unwrap()
+            .depend_on
+            .as_ref()
+            .unwrap();
+        assert!(
+            module_a_symbol_b_depend_on.contains("C"),
+            "The original dependency of Symbol B should not be affected"
+        );
+        assert!(
+            !module_a_symbol_b_depend_on.contains("z"),
+            "Symbol B shouldn't depend on the whole namespace z anymore"
+        );
+        assert!(
+            module_a_symbol_b_depend_on.contains("z1"),
+            "Symbol B should depend on the z1 directly"
+        );
+        assert!(
+            module_a_symbol_b_depend_on.contains("z2"),
+            "Symbol B should depend on the z2 directly"
+        );
+
+        let module_a_symbol_d_depend_on = module_a
+            .symbols
+            .get("D")
+            .as_ref()
+            .unwrap()
+            .depend_on
+            .as_ref()
+            .unwrap();
+        assert!(
+            module_a_symbol_d_depend_on.contains("z1"),
+            "Symbol D's dependency shouldn't be affected during the expansion of namespace import of z"
+        );
+        assert!(
+            !module_a_symbol_d_depend_on.contains("z2"),
+            "Symbol D's dependency shouldn't be affected during the expansion of namespace import of z"
+        );
     }
 }
