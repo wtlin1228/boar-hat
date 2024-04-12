@@ -142,7 +142,10 @@ impl DependencyTracker {
                     ))?
                     .depend_on
                     .as_mut()
-                    .unwrap();
+                    .context(format!(
+                        "Symbol {} will at least depend on the namespace {}",
+                        to_update_symbol_name, namespace_import_symbol.name
+                    ))?;
                 depend_on.remove(&namespace_import_symbol.name);
                 collect_exported_symbol_names.iter().for_each(|name| {
                     depend_on.insert(name.clone());
@@ -425,6 +428,10 @@ mod tests {
         d.expand_namespace("Module A").unwrap();
 
         let module_a = d.parsed_modules.get("Module A").unwrap();
+        assert!(
+            !module_a.has_namespace_import,
+            "Module A should have no more namespace imports"
+        );
         assert!(
             module_a.symbols.get("z1").unwrap().is_exported,
             "z1 shouldn't be override during the expansion of namespace import of z"
