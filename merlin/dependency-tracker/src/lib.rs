@@ -238,71 +238,18 @@
 //! into "module-a". Another important thing is `Symbol A`'s dependency is also updated.
 //!
 
+mod module;
 mod path_resolver;
 mod scheduler;
 pub mod visitors;
 
 use anyhow::{self, bail, Context, Ok};
-use std::collections::{HashMap, HashSet};
-
-const DEFAULT_EXPORT: &'static str = "____DEFAULT__EXPORT____";
-
-#[derive(Debug, PartialEq, Eq)]
-enum ImportType {
-    NamedImport(String),
-    DefaultImport,
-    NamespaceImport(Vec<String>),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct Import {
-    from: String,
-    import_type: ImportType,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct Symbol {
-    name: String,
-    is_exported: bool,
-    import_from: Option<Import>,
-    depend_on: Option<HashSet<String>>,
-}
-
-impl Symbol {
-    fn is_namespace_import(&self) -> bool {
-        match self.import_from {
-            Some(ref import_type) => match import_type.import_type {
-                ImportType::NamespaceImport(_) => true,
-                _ => false,
-            },
-            None => false,
-        }
-    }
-
-    fn get_symbol_names_depend_on_the_namespace(&self) -> anyhow::Result<Vec<&str>> {
-        match self.import_from {
-            Some(ref import_type) => match import_type.import_type {
-                ImportType::NamespaceImport(ref names) => {
-                    Ok(names.iter().map(|name| name.as_str()).collect())
-                }
-                _ => bail!("This method is only available for ImportType::NamespaceImport"),
-            },
-            None => bail!("This method is only available for ImportType::NamespaceImport"),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct Module {
-    has_namespace_import: bool,
-    symbols: HashMap<String, Symbol>,
-}
+use module::{Import, ImportType, Module, Symbol};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct DependencyTracker {
     root: String,
-
-    // module -> symbols in the module
     parsed_modules: HashMap<String, Module>,
 }
 
@@ -351,6 +298,9 @@ impl DependencyTracker {
             for (symbol_name, _) in import_from_module
                 .symbols
                 .iter()
+                // The reason we can just filter out the symbol whose `is_exported`
+                // is true is because the `is_exported` of symbol "DEFAULT_EXPORT"
+                // is always `false`.
                 .filter(|&(_, symbol)| symbol.is_exported)
             {
                 collect_exported_symbol_names.push(symbol_name.clone());
@@ -411,7 +361,9 @@ impl DependencyTracker {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::module::{Import, ImportType, Module, Symbol, DEFAULT_EXPORT};
+    use super::DependencyTracker;
+    use std::collections::{HashMap, HashSet};
 
     #[test]
     fn test_namespace_import_expansion() {
