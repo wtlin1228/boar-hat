@@ -14,16 +14,30 @@ Those latency are added intensionally, see the `backend/src/main.rs`.
 
 Time for users to see boar hat feed: 8.5s
 
-= `index.html`(0.5s)
-
-\+ `js/Consumer.js`(2s)
-
-\+ `js/PostFeed.js`(3s)
-
-\+ `GET /api/posts`(2s)
-
-\+ `images`(1s)
+```
+8.5s =
+    index.html(0.5s)
+    + js/Consumer.js(2s)
+    + js/PostFeed.js(3s)
+    + GET /api/posts(2s)
+    + images(1s)
+```
 
 ![v0 network](./v0_network.png)
 
 # v1 - Preload
+
+Time for users to see boar hat feed: 4.5s
+
+```
+4.5s =
+    index.html(0.5s)
+    + Max(
+        js/Consumer.js(2s),
+        js/PostFeed.js(3s),
+        GET /api/posts(2s)
+    )
+    + images(1s)
+```
+
+![v1 network](./v1_network.png)
