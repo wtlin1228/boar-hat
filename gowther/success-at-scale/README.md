@@ -1,1 +1,0 @@
-# Making Instagram.com Faster

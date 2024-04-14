@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+
+    <link rel="stylesheet" href="/css/index.css" />
+
+    <!-- https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/preload#cors-enabled_fetches -->
+    <link
+      rel="preload"
+      href="/api/posts"
+      as="fetch"
+      type="application/json"
+      crossorigin
+    />
+    <!-- https://web.dev/articles/modulepreload -->
+    <link rel="modulepreload" href="/js/PostFeed.js" />
+
+    <!-- critical path scripts to load the initial page -->
+    <script src="/js/Common.js" type="module"></script>
+    <script src="/js/Consumer.js" type="module"></script>
+  </head>
+  <body>
+    <div id="resource-loading-state">
+      <div id="Common-js">Common.js <span>❓</span></div>
+      <div id="Consumer-js">Consumer.js <span>❓</span></div>
+      <div id="PostFeed-js">PostFeed.js <span>❓</span></div>
+      <div id="get-posts-api">GET /api/posts <span>❓</span></div>
+    </div>
+    <header>Header</header>
+    <main></main>
+    <footer>Footer</footer>
+  </body>
+</html>

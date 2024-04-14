@@ -41,3 +41,5 @@ Time for users to see boar hat feed: 4.5s
 ```
 
 ![v1 network](./v1_network.png)
+
+# v2 - Image Prefetching
