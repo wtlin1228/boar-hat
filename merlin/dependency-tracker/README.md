@@ -9,7 +9,9 @@ This tool is currently used internally inside my own projects. So maybe some of 
 
 # Symbol
 
-Symbol is the basic unit used internally in `DependencyTracker`. We can get the information about "Is it exported?", "Does it depends on other symbols in the same module?", "Is it imported from other module?".
+Symbol is the basic unit used internally in `DependencyTracker`. We can get the
+information about "Is it exported?", "Does it depends on other symbols in the
+same module?", "Is it imported from other module?".
 
 ## Examples
 
@@ -24,7 +26,7 @@ In symbol representation:
 ```rs
 Symbol {
   name: "A",
-  is_exported: false,
+  is_named_exported: false,
   import_from: Some(
     Import {
       from: "module-a",
@@ -45,7 +47,7 @@ In symbol representation:
 ```rs
 Symbol {
   name: "B",
-  is_exported: false,
+  is_named_exported: false,
   import_from: Some(
     Import {
       from: "module-a",
@@ -66,7 +68,7 @@ In symbol representation:
 ```rs
 Symbol {
   name: "A",
-  is_exported: false,
+  is_named_exported: false,
   import_from: Some(
     Import {
       from: "module-a",
@@ -87,7 +89,7 @@ In symbol representation:
 ```rs
 Symbol {
   name: "A",
-  is_exported: true,
+  is_named_exported: true,
   import_from: None,
   depend_on: None
 }
@@ -104,7 +106,7 @@ In symbol representation:
 ```rs
 Symbol {
   name: "____DEFAULT__EXPORT____",
-  is_exported: true,
+  is_named_exported: false,
   import_from: None,
   depend_on: None
 }
@@ -121,7 +123,7 @@ In symbol representation:
 ```rs
 Symbol {
   name: "B",
-  is_exported: true,
+  is_named_exported: true,
   import_from: None,
   depend_on: Some(HashSet(["A"]))
 }
@@ -138,7 +140,7 @@ In symbol representation:
 ```rs
 Symbol {
   name: "B",
-  is_exported: true,
+  is_named_exported: true,
   import_from: Some(
     Import {
       from: "module-a",
@@ -159,7 +161,7 @@ In symbol representation:
 ```rs
 Symbol {
   name: "A",
-  is_exported: true,
+  is_named_exported: true,
   import_from: Some(
     Import {
       from: "module-a",
@@ -195,9 +197,9 @@ Let's continue with the "module-a" and "module-b" example in the parsing order s
 "module-b" will be parsed into the symbol representation like this:
 
 ```rs
-Symbol { name: "Header", is_exported: true, import_from: None, depend_on: None }
-Symbol { name: "Body", is_exported: true, import_from: None, depend_on: None }
-Symbol { name: "Footer", is_exported: true, import_from: None, depend_on: None }
+Symbol { name: "Header", is_named_exported: true, import_from: None, depend_on: None }
+Symbol { name: "Body", is_named_exported: true, import_from: None, depend_on: None }
+Symbol { name: "Footer", is_named_exported: true, import_from: None, depend_on: None }
 ```
 
 And "module-a" will be parsed into the symbol representation like this:
@@ -205,14 +207,14 @@ And "module-a" will be parsed into the symbol representation like this:
 ```rs
 Symbol {
   name: "A",
-  is_exported: false,
+  is_named_exported: false,
   import_from: None,
   depend_on: Some(HashSet(["UI"]))
 }
 
 Symbol {
   name: "UI",
-  is_exported: false,
+  is_named_exported: false,
   import_from: Some(
     Import {
       from: "module-name"
@@ -227,13 +229,43 @@ After the expansion of "module-a", the new symbol representation becomes:
 ```rs
 Symbol {
   name: "A",
-  is_exported: false,
+  is_named_exported: false,
   import_from: None,
   depend_on: Some(HashSet(["Header", "Body", "Footer"]))
 }
-Symbol { name: "Header", is_exported: true, import_from: None, depend_on: None }
-Symbol { name: "Body", is_exported: true, import_from: None, depend_on: None }
-Symbol { name: "Footer", is_exported: true, import_from: None, depend_on: None }
+
+Symbol {
+  name: "Header",
+  is_named_exported: false,
+  import_from: Some(
+    Import {
+      from: "module-name"
+      import_type: ImportType::NamedImport("Header")
+  }),
+  depend_on: None
+}
+
+Symbol {
+  name: "Body",
+  is_named_exported: false,
+  import_from: Some(
+    Import {
+      from: "module-name"
+      import_type: ImportType::NamedImport("Body")
+  }),
+  depend_on: None
+}
+
+Symbol {
+  name: "Footer",
+  is_named_exported: false,
+  import_from: Some(
+    Import {
+      from: "module-name"
+      import_type: ImportType::NamedImport("Footer")
+  }),
+  depend_on: None
+}
 ```
 
 You should notice that the `Symbol UI` in "module-a" is removed. Instead, all the

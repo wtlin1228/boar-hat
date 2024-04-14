@@ -21,7 +21,7 @@
 //! ```rs
 //! Symbol {
 //!   name: "A",
-//!   is_exported: false,
+//!   is_named_exported: false,
 //!   import_from: Some(
 //!     Import {
 //!       from: "module-a",
@@ -42,7 +42,7 @@
 //! ```rs
 //! Symbol {
 //!   name: "B",
-//!   is_exported: false,
+//!   is_named_exported: false,
 //!   import_from: Some(
 //!     Import {
 //!       from: "module-a",
@@ -63,7 +63,7 @@
 //! ```rs
 //! Symbol {
 //!   name: "A",
-//!   is_exported: false,
+//!   is_named_exported: false,
 //!   import_from: Some(
 //!     Import {
 //!       from: "module-a",
@@ -84,7 +84,7 @@
 //! ```rs
 //! Symbol {
 //!   name: "A",
-//!   is_exported: true,
+//!   is_named_exported: true,
 //!   import_from: None,
 //!   depend_on: None
 //! }
@@ -101,7 +101,7 @@
 //! ```rs
 //! Symbol {
 //!   name: "____DEFAULT__EXPORT____",
-//!   is_exported: true,
+//!   is_named_exported: false,
 //!   import_from: None,
 //!   depend_on: None
 //! }
@@ -118,7 +118,7 @@
 //! ```rs
 //! Symbol {
 //!   name: "B",
-//!   is_exported: true,
+//!   is_named_exported: true,
 //!   import_from: None,
 //!   depend_on: Some(HashSet(["A"]))
 //! }
@@ -135,7 +135,7 @@
 //! ```rs
 //! Symbol {
 //!   name: "B",
-//!   is_exported: true,
+//!   is_named_exported: true,
 //!   import_from: Some(
 //!     Import {
 //!       from: "module-a",
@@ -156,7 +156,7 @@
 //! ```rs
 //! Symbol {
 //!   name: "A",
-//!   is_exported: true,
+//!   is_named_exported: true,
 //!   import_from: Some(
 //!     Import {
 //!       from: "module-a",
@@ -192,9 +192,9 @@
 //! "module-b" will be parsed into the symbol representation like this:
 //!
 //! ```rs
-//! Symbol { name: "Header", is_exported: true, import_from: None, depend_on: None }
-//! Symbol { name: "Body", is_exported: true, import_from: None, depend_on: None }
-//! Symbol { name: "Footer", is_exported: true, import_from: None, depend_on: None }
+//! Symbol { name: "Header", is_named_exported: true, import_from: None, depend_on: None }
+//! Symbol { name: "Body", is_named_exported: true, import_from: None, depend_on: None }
+//! Symbol { name: "Footer", is_named_exported: true, import_from: None, depend_on: None }
 //! ```
 //!
 //! And "module-a" will be parsed into the symbol representation like this:
@@ -202,14 +202,14 @@
 //! ```rs
 //! Symbol {
 //!   name: "A",
-//!   is_exported: false,
+//!   is_named_exported: false,
 //!   import_from: None,
 //!   depend_on: Some(HashSet(["UI"]))
 //! }
 //!
 //! Symbol {
 //!   name: "UI",
-//!   is_exported: false,
+//!   is_named_exported: false,
 //!   import_from: Some(
 //!     Import {
 //!       from: "module-name"
@@ -224,13 +224,43 @@
 //! ```rs
 //! Symbol {
 //!   name: "A",
-//!   is_exported: false,
+//!   is_named_exported: false,
 //!   import_from: None,
 //!   depend_on: Some(HashSet(["Header", "Body", "Footer"]))
 //! }
-//! Symbol { name: "Header", is_exported: true, import_from: None, depend_on: None }
-//! Symbol { name: "Body", is_exported: true, import_from: None, depend_on: None }
-//! Symbol { name: "Footer", is_exported: true, import_from: None, depend_on: None }
+//!
+//! Symbol {
+//!   name: "Header",
+//!   is_named_exported: false,
+//!   import_from: Some(
+//!     Import {
+//!       from: "module-name"
+//!       import_type: ImportType::NamedImport("Header")
+//!   }),
+//!   depend_on: None
+//! }
+//!
+//! Symbol {
+//!   name: "Body",
+//!   is_named_exported: false,
+//!   import_from: Some(
+//!     Import {
+//!       from: "module-name"
+//!       import_type: ImportType::NamedImport("Body")
+//!   }),
+//!   depend_on: None
+//! }
+//!
+//! Symbol {
+//!   name: "Footer",
+//!   is_named_exported: false,
+//!   import_from: Some(
+//!     Import {
+//!       from: "module-name"
+//!       import_type: ImportType::NamedImport("Footer")
+//!   }),
+//!   depend_on: None
+//! }
 //! ```
 //!
 //! You should notice that the `Symbol UI` in "module-a" is removed. Instead, all the
@@ -298,15 +328,15 @@ impl DependencyTracker {
             for (symbol_name, _) in import_from_module
                 .symbols
                 .iter()
-                // The reason we can just filter out the symbol whose `is_exported`
-                // is true is because the `is_exported` of symbol "DEFAULT_EXPORT"
+                // The reason we can just filter out the symbol whose `is_named_exported`
+                // is true is because the `is_named_exported` of symbol "DEFAULT_EXPORT"
                 // is always `false`.
-                .filter(|&(_, symbol)| symbol.is_exported)
+                .filter(|&(_, symbol)| symbol.is_named_exported)
             {
                 collect_exported_symbol_names.push(symbol_name.clone());
                 collect_exported_symbols.push(Symbol {
                     name: symbol_name.clone(),
-                    is_exported: false,
+                    is_named_exported: false,
                     import_from: Some(Import {
                         from: import.from.clone(),
                         import_type: ImportType::NamedImport(symbol_name.clone()),
@@ -379,7 +409,7 @@ mod tests {
                                 DEFAULT_EXPORT.to_string(),
                                 Symbol {
                                     name: DEFAULT_EXPORT.to_string(),
-                                    is_exported: false,
+                                    is_named_exported: false,
                                     import_from: None,
                                     depend_on: Some(HashSet::from(["x1".to_string()])),
                                 },
@@ -388,7 +418,7 @@ mod tests {
                                 "x1".to_string(),
                                 Symbol {
                                     name: "x1".to_string(),
-                                    is_exported: true,
+                                    is_named_exported: true,
                                     import_from: None,
                                     depend_on: None,
                                 },
@@ -397,7 +427,7 @@ mod tests {
                                 "x2".to_string(),
                                 Symbol {
                                     name: "x2".to_string(),
-                                    is_exported: true,
+                                    is_named_exported: true,
                                     import_from: None,
                                     depend_on: None,
                                 },
@@ -406,7 +436,7 @@ mod tests {
                                 "x3".to_string(),
                                 Symbol {
                                     name: "x3".to_string(),
-                                    is_exported: true,
+                                    is_named_exported: true,
                                     import_from: None,
                                     depend_on: None,
                                 },
@@ -423,7 +453,7 @@ mod tests {
                                 DEFAULT_EXPORT.to_string(),
                                 Symbol {
                                     name: DEFAULT_EXPORT.to_string(),
-                                    is_exported: false,
+                                    is_named_exported: false,
                                     import_from: None,
                                     depend_on: Some(HashSet::from(["y1".to_string()])),
                                 },
@@ -432,7 +462,7 @@ mod tests {
                                 "y1".to_string(),
                                 Symbol {
                                     name: "y1".to_string(),
-                                    is_exported: true,
+                                    is_named_exported: true,
                                     import_from: None,
                                     depend_on: None,
                                 },
@@ -441,7 +471,7 @@ mod tests {
                                 "y2".to_string(),
                                 Symbol {
                                     name: "y2".to_string(),
-                                    is_exported: true,
+                                    is_named_exported: true,
                                     import_from: None,
                                     depend_on: None,
                                 },
@@ -450,7 +480,7 @@ mod tests {
                                 "y3".to_string(),
                                 Symbol {
                                     name: "y3".to_string(),
-                                    is_exported: true,
+                                    is_named_exported: true,
                                     import_from: None,
                                     depend_on: None,
                                 },
@@ -467,7 +497,7 @@ mod tests {
                                 DEFAULT_EXPORT.to_string(),
                                 Symbol {
                                     name: DEFAULT_EXPORT.to_string(),
-                                    is_exported: false,
+                                    is_named_exported: false,
                                     import_from: None,
                                     depend_on: Some(HashSet::from(["z1".to_string()])),
                                 },
@@ -476,7 +506,7 @@ mod tests {
                                 "z1".to_string(),
                                 Symbol {
                                     name: "z1".to_string(),
-                                    is_exported: true,
+                                    is_named_exported: true,
                                     import_from: None,
                                     depend_on: None,
                                 },
@@ -485,7 +515,7 @@ mod tests {
                                 "z2".to_string(),
                                 Symbol {
                                     name: "z2".to_string(),
-                                    is_exported: true,
+                                    is_named_exported: true,
                                     import_from: None,
                                     depend_on: None,
                                 },
@@ -494,7 +524,7 @@ mod tests {
                                 "z3".to_string(),
                                 Symbol {
                                     name: "z3".to_string(),
-                                    is_exported: false,
+                                    is_named_exported: false,
                                     import_from: None,
                                     depend_on: None,
                                 },
@@ -511,7 +541,7 @@ mod tests {
                                 DEFAULT_EXPORT.to_string(),
                                 Symbol {
                                     name: DEFAULT_EXPORT.to_string(),
-                                    is_exported: false,
+                                    is_named_exported: false,
                                     import_from: None,
                                     depend_on: Some(HashSet::from(["A".to_string()])),
                                 },
@@ -520,7 +550,7 @@ mod tests {
                                 "A".to_string(),
                                 Symbol {
                                     name: "A".to_string(),
-                                    is_exported: false,
+                                    is_named_exported: false,
                                     import_from: None,
                                     depend_on: Some(HashSet::from(["C".to_string()])),
                                 },
@@ -529,7 +559,7 @@ mod tests {
                                 "B".to_string(),
                                 Symbol {
                                     name: "B".to_string(),
-                                    is_exported: false,
+                                    is_named_exported: false,
                                     import_from: None,
                                     depend_on: Some(HashSet::from([
                                         "C".to_string(),
@@ -541,7 +571,7 @@ mod tests {
                                 "C".to_string(),
                                 Symbol {
                                     name: "C".to_string(),
-                                    is_exported: false,
+                                    is_named_exported: false,
                                     import_from: None,
                                     depend_on: Some(HashSet::from([
                                         "x".to_string(),
@@ -553,7 +583,7 @@ mod tests {
                                 "D".to_string(),
                                 Symbol {
                                     name: "D".to_string(),
-                                    is_exported: false,
+                                    is_named_exported: false,
                                     import_from: None,
                                     depend_on: Some(HashSet::from(["z1".to_string()])),
                                 },
@@ -562,7 +592,7 @@ mod tests {
                                 "x".to_string(),
                                 Symbol {
                                     name: "x".to_string(),
-                                    is_exported: false,
+                                    is_named_exported: false,
                                     import_from: Some(Import {
                                         from: "Module X".to_string(),
                                         import_type: ImportType::DefaultImport,
@@ -574,7 +604,7 @@ mod tests {
                                 "y".to_string(),
                                 Symbol {
                                     name: "y".to_string(),
-                                    is_exported: false,
+                                    is_named_exported: false,
                                     import_from: Some(Import {
                                         from: "Module Y".to_string(),
                                         import_type: ImportType::NamedImport("y1".to_string()),
@@ -586,7 +616,7 @@ mod tests {
                                 "z1".to_string(),
                                 Symbol {
                                     name: "z1".to_string(),
-                                    is_exported: true,
+                                    is_named_exported: true,
                                     import_from: Some(Import {
                                         from: "Module Z".to_string(),
                                         import_type: ImportType::NamedImport("z1".to_string()),
@@ -601,7 +631,7 @@ mod tests {
                                 "z".to_string(),
                                 Symbol {
                                     name: "z".to_string(),
-                                    is_exported: false,
+                                    is_named_exported: false,
                                     import_from: Some(Import {
                                         from: "Module Z".to_string(),
                                         import_type: ImportType::NamespaceImport(vec![
@@ -625,7 +655,7 @@ mod tests {
             "Module A should have no more namespace imports"
         );
         assert!(
-            module_a.symbols.get("z1").unwrap().is_exported,
+            module_a.symbols.get("z1").unwrap().is_named_exported,
             "z1 shouldn't be override during the expansion of namespace import of z"
         );
         assert!(

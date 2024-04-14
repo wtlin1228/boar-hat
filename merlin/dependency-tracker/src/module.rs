@@ -1,4 +1,4 @@
-use anyhow::{self, bail, Context, Ok};
+use anyhow::{self, bail, Ok};
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -7,12 +7,12 @@ use swc_core::{
     common::{
         errors::{ColorConfig, Handler},
         sync::Lrc,
-        FileName, Globals, Mark, SourceMap, GLOBALS,
+        Globals, Mark, SourceMap, GLOBALS,
     },
     ecma::{
         ast,
         transforms::base::resolver,
-        visit::{FoldWith, Visit, VisitWith},
+        visit::{FoldWith, Visit},
     },
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
@@ -35,8 +35,9 @@ pub struct Import {
 #[derive(Debug, PartialEq, Eq)]
 pub struct Symbol {
     pub name: String,
-    pub is_exported: bool,
+    pub is_named_exported: bool,
     pub import_from: Option<Import>,
+    // a symbol can only depend on the symbols in the same module
     pub depend_on: Option<HashSet<String>>,
 }
 
@@ -131,9 +132,8 @@ struct ModuleSymbolsVisitor {
     has_namespace_import: bool,
     symbols: HashMap<String, Symbol>,
 
-    // Can't just use `Symbol.name` for building the dependency graph
-    // We need the `SyntaxContext` in `Id.1` when looking into each
-    // symbol declaration.
+    // Can't just use `Symbol.name` to build the dependency graph.
+    // We need the `SyntaxContext` in `Id.1` when looking into each symbol declaration.
     //
     // ```js
     // let a#1 = 5
@@ -189,28 +189,28 @@ impl ModuleSymbolsVisitor {
             name.to_string(),
             Symbol {
                 name: name.to_string(),
-                is_exported: false,
+                is_named_exported: false,
                 import_from: None,
                 depend_on: None,
             },
         );
     }
 
-    fn add_export_symbol(&mut self, name: &str) {
+    fn add_named_exported_symbol(&mut self, name: &str) {
         assert_ne!(
             name, DEFAULT_EXPORT,
-            "Please use `add_symbol()`. The default export is special, it's is_exported must be false."
+            "Please use `add_symbol()`. The default export is special, it's is_named_exported must be false."
         );
         match self.symbols.get_mut(name) {
             Some(symbol) => {
-                symbol.is_exported = true;
+                symbol.is_named_exported = true;
             }
             None => {
                 self.symbols.insert(
                     name.to_string(),
                     Symbol {
                         name: name.to_string(),
-                        is_exported: true,
+                        is_named_exported: true,
                         import_from: None,
                         depend_on: None,
                     },
@@ -225,7 +225,7 @@ impl ModuleSymbolsVisitor {
             name.to_string(),
             Symbol {
                 name: name.to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: Some(Import {
                     from: src.to_string(),
                     import_type: ImportType::DefaultImport,
@@ -241,7 +241,7 @@ impl ModuleSymbolsVisitor {
             name.to_string(),
             Symbol {
                 name: name.to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: Some(Import {
                     from: src.to_string(),
                     import_type: ImportType::NamedImport(name.to_string()),
@@ -258,7 +258,7 @@ impl ModuleSymbolsVisitor {
             name.to_string(),
             Symbol {
                 name: name.to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: Some(Import {
                     from: src.to_string(),
                     import_type: ImportType::NamespaceImport(vec![]),
@@ -316,12 +316,12 @@ impl Visit for ModuleSymbolsVisitor {
                             // export class A {}
                             ast::Decl::Class(ast::ClassDecl { ident, .. }) => {
                                 self.track_id(ident, false);
-                                self.add_export_symbol(ident.to_id().0.as_str());
+                                self.add_named_exported_symbol(ident.to_id().0.as_str());
                             }
                             // export function A() {}
                             ast::Decl::Fn(ast::FnDecl { ident, .. }) => {
                                 self.track_id(ident, false);
-                                self.add_export_symbol(ident.to_id().0.as_str());
+                                self.add_named_exported_symbol(ident.to_id().0.as_str());
                             }
                             // export const A = init
                             // export const A = () => {}
@@ -330,7 +330,7 @@ impl Visit for ModuleSymbolsVisitor {
                                 match &first_var_decl.name {
                                     ast::Pat::Ident(ast::BindingIdent { id, .. }) => {
                                         self.track_id(id, false);
-                                        self.add_export_symbol(id.to_id().0.as_str());
+                                        self.add_named_exported_symbol(id.to_id().0.as_str());
                                     }
                                     _ => (),
                                 }
@@ -363,7 +363,7 @@ impl Visit for ModuleSymbolsVisitor {
                                                         }
                                                         // export { A as B }
                                                         _ => {
-                                                            self.add_export_symbol(
+                                                            self.add_named_exported_symbol(
                                                                 exported_ident.to_id().0.as_str(),
                                                             );
                                                             self.add_symbol_dependency(
@@ -377,7 +377,9 @@ impl Visit for ModuleSymbolsVisitor {
                                             }
                                             // export { A }
                                             None => {
-                                                self.add_export_symbol(ident.to_id().0.as_str());
+                                                self.add_named_exported_symbol(
+                                                    ident.to_id().0.as_str(),
+                                                );
                                             }
                                         },
                                         _ => (),
@@ -528,7 +530,7 @@ mod tests {
             visitor.symbols.get("A").unwrap(),
             &Symbol {
                 name: "A".to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: Some(Import {
                     from: "module-a".to_string(),
                     import_type: ImportType::DefaultImport,
@@ -552,7 +554,7 @@ mod tests {
             visitor.symbols.get("A").unwrap(),
             &Symbol {
                 name: "A".to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: Some(Import {
                     from: "module-a".to_string(),
                     import_type: ImportType::NamedImport("A".to_string()),
@@ -576,7 +578,7 @@ mod tests {
             visitor.symbols.get("A").unwrap(),
             &Symbol {
                 name: "A".to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: Some(Import {
                     from: "module-a".to_string(),
                     import_type: ImportType::NamespaceImport(vec![]),
@@ -600,7 +602,7 @@ mod tests {
             visitor.symbols.get("A").unwrap(),
             &Symbol {
                 name: "A".to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: None,
                 depend_on: None
             }
@@ -621,7 +623,7 @@ mod tests {
             visitor.symbols.get("A").unwrap(),
             &Symbol {
                 name: "A".to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: None,
                 depend_on: None
             }
@@ -642,7 +644,7 @@ mod tests {
             visitor.symbols.get("A").unwrap(),
             &Symbol {
                 name: "A".to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: None,
                 depend_on: None
             }
@@ -663,7 +665,7 @@ mod tests {
             visitor.symbols.get("A").unwrap(),
             &Symbol {
                 name: "A".to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: None,
                 depend_on: None
             }
@@ -684,7 +686,7 @@ mod tests {
             visitor.symbols.get("A").unwrap(),
             &Symbol {
                 name: "A".to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: None,
                 depend_on: None
             }
@@ -705,7 +707,7 @@ mod tests {
             visitor.symbols.get("B").unwrap(),
             &Symbol {
                 name: "B".to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: None,
                 depend_on: Some(HashSet::from(["A".to_string()]))
             }
@@ -726,7 +728,7 @@ mod tests {
             visitor.symbols.get("B").unwrap(),
             &Symbol {
                 name: "B".to_string(),
-                is_exported: true,
+                is_named_exported: true,
                 import_from: None,
                 depend_on: Some(HashSet::from(["A".to_string()]))
             }
@@ -747,7 +749,7 @@ mod tests {
             visitor.symbols.get(DEFAULT_EXPORT).unwrap(),
             &Symbol {
                 name: DEFAULT_EXPORT.to_string(),
-                is_exported: false,
+                is_named_exported: false,
                 import_from: None,
                 depend_on: Some(HashSet::from(["A".to_string()]))
             }
@@ -768,7 +770,7 @@ mod tests {
             visitor.symbols.get(DEFAULT_EXPORT).unwrap(),
             &Symbol {
                 name: DEFAULT_EXPORT.to_string(),
-                is_exported: false,
+                is_named_exported: false,
                 import_from: None,
                 depend_on: Some(HashSet::from(["A".to_string()]))
             }
@@ -777,7 +779,7 @@ mod tests {
             visitor.symbols.get("A").unwrap(),
             &Symbol {
                 name: "A".to_string(),
-                is_exported: false,
+                is_named_exported: false,
                 import_from: None,
                 depend_on: None
             }
@@ -798,7 +800,7 @@ mod tests {
             visitor.symbols.get(DEFAULT_EXPORT).unwrap(),
             &Symbol {
                 name: DEFAULT_EXPORT.to_string(),
-                is_exported: false,
+                is_named_exported: false,
                 import_from: None,
                 depend_on: None
             }
@@ -819,7 +821,7 @@ mod tests {
             visitor.symbols.get(DEFAULT_EXPORT).unwrap(),
             &Symbol {
                 name: DEFAULT_EXPORT.to_string(),
-                is_exported: false,
+                is_named_exported: false,
                 import_from: None,
                 depend_on: Some(HashSet::from(["A".to_string()]))
             }
@@ -828,7 +830,7 @@ mod tests {
             visitor.symbols.get("A").unwrap(),
             &Symbol {
                 name: "A".to_string(),
-                is_exported: false,
+                is_named_exported: false,
                 import_from: None,
                 depend_on: None
             }
@@ -849,7 +851,7 @@ mod tests {
             visitor.symbols.get(DEFAULT_EXPORT).unwrap(),
             &Symbol {
                 name: DEFAULT_EXPORT.to_string(),
-                is_exported: false,
+                is_named_exported: false,
                 import_from: None,
                 depend_on: None
             }
