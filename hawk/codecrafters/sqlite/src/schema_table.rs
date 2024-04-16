@@ -110,4 +110,8 @@ impl SchemaTable {
     pub fn get_tbl_name(&self) -> &str {
         &self.tbl_name
     }
+
+    pub fn get_root_page(&self) -> Option<usize> {
+        self.rootpage
+    }
 }

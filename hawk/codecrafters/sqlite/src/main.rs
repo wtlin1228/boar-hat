@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use sqlite_starter_rust::SQLiteDB;
 
 fn main() -> Result<()> {
@@ -27,7 +27,19 @@ fn main() -> Result<()> {
                 }
             }
         }
-        _ => bail!("Missing or invalid command passed: {}", command),
+        _ => {
+            let db = SQLiteDB::new(&args[1])?;
+            let tables = db.get_tables()?;
+            let table_name = command.split(" ").last().context("Missing <table name>")?;
+            let table_root_page = tables
+                .iter()
+                .find(|&x| x.get_tbl_name() == table_name)
+                .context(format!("Invalid table name {}", table_name))?
+                .get_root_page()
+                .context("Table has no root page")?;
+            let page = db.get_page(table_root_page)?;
+            println!("{}", page.cell_count);
+        }
     }
 
     Ok(())
