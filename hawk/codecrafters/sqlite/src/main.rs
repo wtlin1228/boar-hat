@@ -68,10 +68,11 @@ fn main() -> Result<()> {
 
                     let rows = root_page.get_rows()?;
                     for row in rows.iter() {
+                        let mut output = vec![];
                         for column_idx in selected_columns.iter() {
-                            print!("{}", row.columns[*column_idx]);
+                            output.push(format!("{}", row.columns[*column_idx]));
                         }
-                        println!();
+                        println!("{}", output.join("|"));
                     }
                 }
             }
