@@ -1,10 +1,10 @@
-use super::{reader_utils::ReadeInto, serial_value::SerialValue};
+use super::{reader_utils::ReadeInto, serial_value::SerialValue, sql_parser::SQLParser};
 use anyhow::{bail, Context, Ok, Result};
 use std::io::prelude::*;
 use std::io::Cursor;
 
 #[derive(Debug)]
-enum ObjectType {
+pub enum ObjectType {
     Table,
     Index,
     View,
@@ -26,14 +26,16 @@ impl ObjectType {
 /// ref: https://www.sqlite.org/schematab.html
 #[derive(Debug)]
 pub struct SchemaTable {
-    object_type: ObjectType,
-    name: String,
-    tbl_name: String,
-    rootpage: Option<usize>,
-    sql: String,
+    pub object_type: ObjectType,
+    pub name: String,
+    pub tbl_name: String,
+    pub rootpage: Option<usize>,
+    pub sql: String,
+    pub column_def: Vec<String>,
 }
 
 impl SchemaTable {
+    // Can also use `super::cell::TableLeafCell::parse` then fill each column into SchemaTable's fields.
     pub fn from(cell: &[u8]) -> Result<Self> {
         let mut reader = Cursor::new(cell);
         let _payload_size = reader.read_varint().context("Read varint - payload size")?;
@@ -98,20 +100,15 @@ impl SchemaTable {
             _ => bail!("sql should be text"),
         };
 
+        let column_def = SQLParser::parse_create_table_stmt(&sql)?.column_def;
+
         Ok(Self {
             object_type,
             name,
             tbl_name,
             rootpage,
             sql,
+            column_def,
         })
-    }
-
-    pub fn get_tbl_name(&self) -> &str {
-        &self.tbl_name
-    }
-
-    pub fn get_root_page(&self) -> Option<usize> {
-        self.rootpage
     }
 }

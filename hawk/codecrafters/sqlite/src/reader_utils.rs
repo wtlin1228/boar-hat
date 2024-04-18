@@ -1,7 +1,6 @@
+use super::serial_value::SerialValue;
 use anyhow::{bail, Result};
 use std::io::Read;
-
-use super::serial_value::SerialValue;
 
 pub trait ReadeInto {
     fn read_byte(&mut self) -> Result<u8>;

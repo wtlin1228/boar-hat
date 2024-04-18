@@ -1,8 +1,10 @@
 mod btree_page;
+mod cell;
 mod database_file_header;
 mod reader_utils;
 mod schema_table;
 mod serial_value;
+pub mod sql_parser;
 
 use anyhow::{Ok, Result};
 use btree_page::PageType;

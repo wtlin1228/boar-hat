@@ -1,4 +1,4 @@
-use super::schema_table::SchemaTable;
+use super::{cell::TableLeafCell, schema_table::SchemaTable};
 use anyhow::{bail, Ok, Result};
 
 #[derive(Debug, PartialEq)]
@@ -65,5 +65,23 @@ impl BTreePage {
             tables.push(SchemaTable::from(cell)?);
         }
         Ok(tables)
+    }
+
+    pub fn get_rows(&self) -> Result<Vec<TableLeafCell>> {
+        assert_eq!(
+            self.page_type,
+            PageType::LeafTableBTreePage,
+            "Can only parse the rows from a leaf table b-tree page now"
+        );
+
+        let mut rows = vec![];
+        for i in 0..self.cell_pointers.len() {
+            let cell = match i {
+                0 => &self.data[self.cell_pointers[0] as usize..],
+                _ => &self.data[self.cell_pointers[i] as usize..self.cell_pointers[i - 1] as usize],
+            };
+            rows.push(TableLeafCell::parse(cell)?);
+        }
+        Ok(rows)
     }
 }
