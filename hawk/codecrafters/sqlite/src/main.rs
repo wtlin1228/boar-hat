@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use sqlite_starter_rust::{
-    sql_parser::{AggregateFunction, Expr, SQLParser, SelectStmt, Stmt},
+    sql_parser::{AggregateFunction, Expr, SQLParser, SelectStmt, Stmt, WhereClause},
     SQLiteDB,
 };
 
@@ -37,6 +37,7 @@ fn main() -> Result<()> {
                 Stmt::Select(SelectStmt {
                     from,
                     result_column,
+                    where_clause,
                 }) => {
                     let tables = db.get_tables()?;
                     let schema_table = tables
@@ -51,7 +52,7 @@ fn main() -> Result<()> {
                     for expr in result_column.iter() {
                         match expr {
                             Expr::Function(AggregateFunction::Count(count)) => match count {
-                                Some(n) => unimplemented!(),
+                                Some(_) => unimplemented!(),
                                 None => {
                                     println!("{}", root_page.cell_count);
                                     return Ok(());
@@ -66,7 +67,18 @@ fn main() -> Result<()> {
                         }
                     }
 
-                    let rows = root_page.get_rows()?;
+                    let mut rows = root_page.get_rows()?;
+                    if let Some(WhereClause { column, value }) = where_clause {
+                        let column_idx = match column_def.iter().position(|x| x == &column) {
+                            Some(column_idx) => column_idx,
+                            None => bail!("Where condition column {} doesn't exist", column),
+                        };
+                        rows = rows
+                            .into_iter()
+                            .filter(|row| format!("{}", row.columns[column_idx]) == value)
+                            .collect();
+                    }
+
                     for row in rows.iter() {
                         let mut output = vec![];
                         for column_idx in selected_columns.iter() {

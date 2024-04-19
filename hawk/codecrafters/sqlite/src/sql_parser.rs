@@ -20,6 +20,7 @@ pub struct CreateTableStmt {
 pub struct SelectStmt {
     pub from: String,
     pub result_column: Vec<Expr>,
+    pub where_clause: Option<WhereClause>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -34,6 +35,12 @@ pub enum AggregateFunction {
     // count(X): The count(X) function returns a count of the number of times that X is not NULL in a group.
     // count(*): The count(*) function (with no arguments) returns the total number of rows in the group.
     Count(Option<usize>),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct WhereClause {
+    pub column: String,
+    pub value: String,
 }
 
 #[derive(Debug, PartialEq)]
@@ -84,9 +91,9 @@ peg::parser! {
 
         // https://www.sqlite.org/lang_select.html
         pub rule select_stmt() -> SelectStmt
-            = ("SELECT" / "select") _ result_column:result_column_list() _ ("FROM" / "from") _ from:ident()
+            = ("SELECT" / "select") _ result_column:result_column_list() _ ("FROM" / "from") _ from:ident() _ where_clause:where_clause()?
                 {
-                    SelectStmt { from, result_column }
+                    SelectStmt { from, result_column, where_clause }
                 }
 
         rule result_column_list() -> Vec<Expr>
@@ -107,6 +114,12 @@ peg::parser! {
             / column:ident()
                 {
                     Expr::Column(column.to_string())
+                }
+
+        rule where_clause() -> WhereClause
+            = ("WHERE" / "where") _ column:ident() _ "=" _ "'" value:$([^'\'']*) "'"
+                {
+                    WhereClause { column, value: value.to_string() }
                 }
 
         rule ident() -> String
@@ -170,7 +183,8 @@ mod tests {
                 result_column: vec![
                     Expr::Column(String::from("name")),
                     Expr::Column(String::from("color"))
-                ]
+                ],
+                where_clause: None
             })
         );
     }
@@ -211,7 +225,8 @@ mod tests {
             ),
             Ok(SelectStmt {
                 from: String::from("apples"),
-                result_column: vec![Expr::Function(AggregateFunction::Count(None))]
+                result_column: vec![Expr::Function(AggregateFunction::Count(None))],
+                where_clause: None
             })
         );
 
@@ -224,7 +239,8 @@ mod tests {
             ),
             Ok(SelectStmt {
                 from: String::from("apples"),
-                result_column: vec![Expr::Function(AggregateFunction::Count(Some(32)))]
+                result_column: vec![Expr::Function(AggregateFunction::Count(Some(32)))],
+                where_clause: None
             })
         );
 
@@ -237,7 +253,8 @@ mod tests {
             ),
             Ok(SelectStmt {
                 from: String::from("apples"),
-                result_column: vec![Expr::Column(String::from("name"))]
+                result_column: vec![Expr::Column(String::from("name"))],
+                where_clause: None
             })
         );
 
@@ -253,7 +270,28 @@ mod tests {
                 result_column: vec![
                     Expr::Column(String::from("name")),
                     Expr::Column(String::from("color"))
-                ]
+                ],
+                where_clause: None
+            })
+        );
+
+        assert_eq!(
+            sql::select_stmt(
+                r#"
+                SELECT name, color FROM apples WHERE color = 'Yellow'
+                "#
+                .trim()
+            ),
+            Ok(SelectStmt {
+                from: String::from("apples"),
+                result_column: vec![
+                    Expr::Column(String::from("name")),
+                    Expr::Column(String::from("color"))
+                ],
+                where_clause: Some(WhereClause {
+                    column: String::from("color"),
+                    value: String::from("Yellow")
+                })
             })
         );
     }
