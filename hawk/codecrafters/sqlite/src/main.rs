@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
 use sqlite_starter_rust::{
+    cell::TableLeafCell,
     sql_parser::{AggregateFunction, Expr, SQLParser, SelectStmt, Stmt, WhereClause},
     SQLiteDB,
 };
@@ -68,18 +69,20 @@ fn main() -> Result<()> {
                         }
                     }
 
-                    let mut rows = db.get_table_rows(&schema_table)?;
-                    if let Some(WhereClause { column, value }) = where_clause {
-                        let column_idx = match column_def.iter().position(|x| x == &column) {
-                            Some(column_idx) => column_idx,
-                            None => bail!("Where condition column {} doesn't exist", column),
-                        };
-                        rows = rows
-                            .into_iter()
-                            .filter(|row| format!("{}", row.columns[column_idx]) == value)
-                            .collect();
-                    }
+                    let row_filter = match where_clause {
+                        Some(WhereClause { column, value }) => {
+                            let column_idx = match column_def.iter().position(|x| x == &column) {
+                                Some(column_idx) => column_idx,
+                                None => bail!("Where condition column {} doesn't exist", column),
+                            };
+                            Some(move |row: &TableLeafCell| {
+                                format!("{}", row.columns[column_idx]) == value
+                            })
+                        }
+                        None => None,
+                    };
 
+                    let rows = db.get_table_rows(&schema_table, row_filter.as_ref())?;
                     for row in rows.iter() {
                         let mut output = vec![];
                         for column_idx in selected_columns.iter() {

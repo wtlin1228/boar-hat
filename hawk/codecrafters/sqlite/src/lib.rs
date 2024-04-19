@@ -1,5 +1,5 @@
 mod btree_page;
-mod cell;
+pub mod cell;
 mod database_file_header;
 mod reader_utils;
 mod schema_table;
@@ -85,7 +85,11 @@ impl SQLiteDB {
         self.page_size
     }
 
-    pub fn get_table_rows(&self, table: &SchemaTable) -> Result<Vec<TableLeafCell>> {
+    pub fn get_table_rows(
+        &self,
+        table: &SchemaTable,
+        filter: Option<&impl Fn(&TableLeafCell) -> bool>,
+    ) -> Result<Vec<TableLeafCell>> {
         assert!(
             table.rootpage.is_some(),
             "Can't get rows from a table without rootpage"
@@ -100,9 +104,12 @@ impl SQLiteDB {
                     PageType::InteriorTableBTreePage => {
                         next_pages.append(&mut btree_page.get_child_pages()?);
                     }
-                    PageType::LeafTableBTreePage => {
-                        rows.append(&mut btree_page.get_rows()?);
-                    }
+                    PageType::LeafTableBTreePage => match filter {
+                        Some(f) => {
+                            rows.append(&mut btree_page.get_rows()?.into_iter().filter(f).collect())
+                        }
+                        None => rows.append(&mut btree_page.get_rows()?),
+                    },
                     PageType::LeafIndexBTreePage => unreachable!(),
                     PageType::InteriorIndexBTreePage => unreachable!(),
                 }
