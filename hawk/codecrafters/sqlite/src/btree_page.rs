@@ -1,3 +1,5 @@
+use crate::cell::TableInteriorCell;
+
 use super::{cell::TableLeafCell, schema_table::SchemaTable};
 use anyhow::{bail, Ok, Result};
 
@@ -58,10 +60,7 @@ impl BTreePage {
 
         let mut tables = vec![];
         for i in 0..self.cell_pointers.len() {
-            let cell = match i {
-                0 => &self.data[self.cell_pointers[0] as usize..],
-                _ => &self.data[self.cell_pointers[i] as usize..self.cell_pointers[i - 1] as usize],
-            };
+            let cell = &self.data[self.cell_pointers[i] as usize..];
             tables.push(SchemaTable::from(cell)?);
         }
         Ok(tables)
@@ -76,11 +75,23 @@ impl BTreePage {
 
         let mut rows = vec![];
         for i in 0..self.cell_pointers.len() {
-            let cell = match i {
-                0 => &self.data[self.cell_pointers[0] as usize..],
-                _ => &self.data[self.cell_pointers[i] as usize..self.cell_pointers[i - 1] as usize],
-            };
+            let cell = &self.data[self.cell_pointers[i] as usize..];
             rows.push(TableLeafCell::parse(cell)?);
+        }
+        Ok(rows)
+    }
+
+    pub fn get_child_pages(&self) -> Result<Vec<usize>> {
+        assert_eq!(
+            self.page_type,
+            PageType::InteriorTableBTreePage,
+            "Can only parse the child pages from a interior table b-tree page now"
+        );
+
+        let mut rows = vec![];
+        for i in 0..self.cell_pointers.len() {
+            let cell = &self.data[self.cell_pointers[i] as usize..];
+            rows.push(TableInteriorCell::parse(cell)?.child_page);
         }
         Ok(rows)
     }

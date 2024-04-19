@@ -44,8 +44,6 @@ fn main() -> Result<()> {
                         .iter()
                         .find(|&x| &x.tbl_name == &from)
                         .context(format!("Invalid table name {}", from))?;
-                    let root_page =
-                        db.get_page(schema_table.rootpage.context("Table has no root page")?)?;
 
                     let column_def = &schema_table.column_def;
                     let mut selected_columns: Vec<usize> = vec![];
@@ -54,6 +52,9 @@ fn main() -> Result<()> {
                             Expr::Function(AggregateFunction::Count(count)) => match count {
                                 Some(_) => unimplemented!(),
                                 None => {
+                                    let root_page = db.get_page(
+                                        schema_table.rootpage.context("Table has no root page")?,
+                                    )?;
                                     println!("{}", root_page.cell_count);
                                     return Ok(());
                                 }
@@ -67,7 +68,7 @@ fn main() -> Result<()> {
                         }
                     }
 
-                    let mut rows = root_page.get_rows()?;
+                    let mut rows = db.get_table_rows(&schema_table)?;
                     if let Some(WhereClause { column, value }) = where_clause {
                         let column_idx = match column_def.iter().position(|x| x == &column) {
                             Some(column_idx) => column_idx,
@@ -82,7 +83,10 @@ fn main() -> Result<()> {
                     for row in rows.iter() {
                         let mut output = vec![];
                         for column_idx in selected_columns.iter() {
-                            output.push(format!("{}", row.columns[*column_idx]));
+                            match column_idx {
+                                0 => output.push(row.id.to_string()),
+                                _ => output.push(format!("{}", row.columns[*column_idx])),
+                            }
                         }
                         println!("{}", output.join("|"));
                     }

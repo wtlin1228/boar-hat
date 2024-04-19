@@ -34,3 +34,24 @@ impl TableLeafCell {
         })
     }
 }
+
+#[derive(Debug)]
+pub struct TableInteriorCell {
+    pub id: u64,
+    pub child_page: usize,
+}
+
+impl TableInteriorCell {
+    pub fn parse(cell: &[u8]) -> Result<Self> {
+        let mut reader = Cursor::new(cell);
+        let page_number_of_left_child = reader
+            .read_u32(4)
+            .context("Read page number of left child")?;
+        let row_id = reader.read_varint().context("Read varint - rowid")?;
+
+        Ok(Self {
+            id: row_id,
+            child_page: page_number_of_left_child as usize,
+        })
+    }
+}

@@ -72,7 +72,7 @@ peg::parser! {
 
         // https://www.sqlite.org/lang_createtable.html
         pub rule create_table_stmt() -> CreateTableStmt
-            = "CREATE" _ "TABLE" _ table_name:ident() _ "(" _ column_def:column_def_list() _ ")"
+            = "CREATE" _ "TABLE" _ "\""? table_name:ident() "\""? _ "(" _ column_def:column_def_list() _ ")"
                 {
                     CreateTableStmt { table_name, column_def }
                 }
@@ -291,6 +291,59 @@ mod tests {
                 where_clause: Some(WhereClause {
                     column: String::from("color"),
                     value: String::from("Yellow")
+                })
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_stage8_sql() {
+        assert_eq!(
+            sql::create_table_stmt(
+                r#"
+                CREATE TABLE "superheroes" 
+                (
+                    id integer primary key autoincrement, 
+                    name text not null, 
+                    eye_color text, 
+                    hair_color text, 
+                    appearance_count integer, 
+                    first_appearance text, 
+                    first_appearance_year text
+                )
+                "#
+                .trim()
+            ),
+            Ok(CreateTableStmt {
+                table_name: String::from("superheroes"),
+                column_def: vec![
+                    String::from("id"),
+                    String::from("name"),
+                    String::from("eye_color"),
+                    String::from("hair_color"),
+                    String::from("appearance_count"),
+                    String::from("first_appearance"),
+                    String::from("first_appearance_year"),
+                ],
+            })
+        );
+
+        assert_eq!(
+            sql::select_stmt(
+                r#"
+                SELECT id, name FROM superheroes WHERE eye_color = 'Pink Eyes'
+                "#
+                .trim()
+            ),
+            Ok(SelectStmt {
+                from: String::from("superheroes"),
+                result_column: vec![
+                    Expr::Column(String::from("id")),
+                    Expr::Column(String::from("name"))
+                ],
+                where_clause: Some(WhereClause {
+                    column: String::from("eye_color"),
+                    value: String::from("Pink Eyes")
                 })
             })
         );

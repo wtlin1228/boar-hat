@@ -8,6 +8,7 @@ pub mod sql_parser;
 
 use anyhow::{Ok, Result};
 use btree_page::PageType;
+use cell::TableLeafCell;
 use database_file_header::DatabaseFileHeader;
 use std::fs::File;
 use std::io::prelude::*;
@@ -82,5 +83,33 @@ impl SQLiteDB {
 
     pub fn get_page_size(&self) -> u16 {
         self.page_size
+    }
+
+    pub fn get_table_rows(&self, table: &SchemaTable) -> Result<Vec<TableLeafCell>> {
+        assert!(
+            table.rootpage.is_some(),
+            "Can't get rows from a table without rootpage"
+        );
+        let mut rows = vec![];
+        let mut pages = vec![table.rootpage.unwrap()];
+        while pages.len() > 0 {
+            let mut next_pages = vec![];
+            for page in pages {
+                let btree_page = self.get_page(page)?;
+                match btree_page.page_type {
+                    PageType::InteriorTableBTreePage => {
+                        next_pages.append(&mut btree_page.get_child_pages()?);
+                    }
+                    PageType::LeafTableBTreePage => {
+                        rows.append(&mut btree_page.get_rows()?);
+                    }
+                    PageType::LeafIndexBTreePage => unreachable!(),
+                    PageType::InteriorIndexBTreePage => unreachable!(),
+                }
+            }
+            pages = next_pages;
+        }
+
+        Ok(rows)
     }
 }
