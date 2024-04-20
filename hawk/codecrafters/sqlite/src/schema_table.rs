@@ -1,24 +1,25 @@
-use super::{reader_utils::ReadeInto, serial_value::SerialValue, sql_parser::SQLParser};
+use super::{
+    reader_utils::ReadeInto,
+    serial_value::SerialValue,
+    sql_parser::{CreateIndexStmt, CreateTableStmt, SQLParser},
+};
 use anyhow::{bail, Context, Ok, Result};
 use std::io::prelude::*;
 use std::io::Cursor;
 
 #[derive(Debug)]
 pub enum ObjectType {
-    Table,
-    Index,
+    Table(CreateTableStmt),
+    Index(CreateIndexStmt),
     View,
     Trigger,
 }
 
 impl ObjectType {
-    fn from(text: &str) -> Result<Self> {
-        match text {
-            "table" => Ok(Self::Table),
-            "index" => Ok(Self::Index),
-            "view" => Ok(Self::View),
-            "trigger" => Ok(Self::Trigger),
-            _ => bail!("Invalid object type: {}", text),
+    pub fn is_table(&self) -> bool {
+        match self {
+            ObjectType::Table(_) => true,
+            _ => false,
         }
     }
 }
@@ -31,7 +32,6 @@ pub struct SchemaTable {
     pub tbl_name: String,
     pub rootpage: Option<usize>,
     pub sql: String,
-    pub column_def: Vec<String>,
 }
 
 impl SchemaTable {
@@ -59,9 +59,9 @@ impl SchemaTable {
             .read_serial_value(serial_types[0])
             .context("Read serial value - object type")?
         {
-            SerialValue::Text(text) => ObjectType::from(&text),
+            SerialValue::Text(text) => text,
             _ => bail!("Object type should be text"),
-        }?;
+        };
 
         let name = match reader
             .read_serial_value(serial_types[1])
@@ -100,7 +100,17 @@ impl SchemaTable {
             _ => bail!("sql should be text"),
         };
 
-        let column_def = SQLParser::parse_create_table_stmt(&sql)?.column_def;
+        let object_type = match object_type.as_str() {
+            "table" => ObjectType::Table(SQLParser::parse_create_table_stmt(&sql).context(
+                format!("Fail to parse create table's sql statement: {}", sql),
+            )?),
+            "index" => ObjectType::Index(SQLParser::parse_create_index_stmt(&sql).context(
+                format!("Fail to parse create index's sql statement: {}", sql),
+            )?),
+            "view" => ObjectType::View,
+            "trigger" => ObjectType::Trigger,
+            _ => bail!("Invalid object type: {}", object_type),
+        };
 
         Ok(Self {
             object_type,
@@ -108,7 +118,20 @@ impl SchemaTable {
             tbl_name,
             rootpage,
             sql,
-            column_def,
         })
     }
+
+    pub fn get_table_column_def(&self) -> Result<&[String]> {
+        match self.object_type {
+            ObjectType::Table(ref stmt) => Ok(&stmt.column_def),
+            _ => bail!(
+                "Column definition doesn't be declared on {:?} object type",
+                self.object_type
+            ),
+        }
+    }
+
+    // pub fn get_index(table_name: &str, column_name: &str) -> Option<&SchemaTable> {
+
+    // }
 }

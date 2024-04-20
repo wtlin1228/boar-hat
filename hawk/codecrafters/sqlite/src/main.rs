@@ -20,11 +20,11 @@ fn main() -> Result<()> {
         ".dbinfo" => {
             let db = SQLiteDB::new(&args[1])?;
             println!("database page size: {}", db.get_page_size());
-            println!("number of tables: {}", db.get_tables()?.len());
+            println!("number of tables: {}", db.get_tables().len());
         }
         ".tables" => {
             let db = SQLiteDB::new(&args[1])?;
-            for name in db.get_tables()?.iter().map(|table| &table.tbl_name) {
+            for name in db.get_tables().iter().map(|table| &table.tbl_name) {
                 // ref: https://www.sqlite.org/fileformat2.html#internal_schema_objects
                 if !name.starts_with("sqlite_") {
                     print!("{} ", name);
@@ -35,18 +35,18 @@ fn main() -> Result<()> {
             let db = SQLiteDB::new(&args[1])?;
             match SQLParser::parse_stmt(command)? {
                 Stmt::CreateTable(_) => unimplemented!(),
+                Stmt::CreateIndex(_) => unimplemented!(),
                 Stmt::Select(SelectStmt {
                     from,
                     result_column,
                     where_clause,
                 }) => {
-                    let tables = db.get_tables()?;
-                    let schema_table = tables
-                        .iter()
-                        .find(|&x| &x.tbl_name == &from)
+                    // Search without index
+                    let schema_table = db
+                        .get_table(&from)
                         .context(format!("Invalid table name {}", from))?;
 
-                    let column_def = &schema_table.column_def;
+                    let column_def = &schema_table.get_table_column_def()?;
                     let mut selected_columns: Vec<usize> = vec![];
                     for expr in result_column.iter() {
                         match expr {

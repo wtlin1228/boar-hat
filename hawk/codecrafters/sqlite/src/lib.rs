@@ -6,23 +6,23 @@ mod schema_table;
 mod serial_value;
 pub mod sql_parser;
 
-use anyhow::{Ok, Result};
+use anyhow::{Context, Ok, Result};
+use btree_page::BTreePage;
 use btree_page::PageType;
 use cell::TableLeafCell;
 use database_file_header::DatabaseFileHeader;
+use reader_utils::ReadeInto;
+use schema_table::SchemaTable;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::os::unix::fs::FileExt;
 
-use btree_page::BTreePage;
-use reader_utils::ReadeInto;
-use schema_table::SchemaTable;
-
 pub struct SQLiteDB {
     header: DatabaseFileHeader,
     database_path: String,
     page_size: u16,
+    tables: Vec<SchemaTable>,
 }
 
 impl SQLiteDB {
@@ -34,11 +34,15 @@ impl SQLiteDB {
         let database_file_header = DatabaseFileHeader::from_bytes(&buf)?;
         let page_size = u16::from_be_bytes(database_file_header.page_size);
 
-        Ok(Self {
+        let mut db = Self {
             header: database_file_header,
             database_path: database_path.to_string(),
             page_size,
-        })
+            tables: vec![],
+        };
+        let page1 = db.get_page(1)?;
+        db.tables = page1.get_tables()?;
+        Ok(db)
     }
 
     pub fn get_page(&self, page: usize) -> Result<BTreePage> {
@@ -76,9 +80,15 @@ impl SQLiteDB {
         })
     }
 
-    pub fn get_tables(&self) -> Result<Vec<SchemaTable>> {
-        let page1 = self.get_page(1)?;
-        page1.get_tables()
+    pub fn get_tables(&self) -> &[SchemaTable] {
+        &self.tables
+    }
+
+    pub fn get_table(&self, table_name: &str) -> Option<&SchemaTable> {
+        self.tables
+            .iter()
+            .filter(|&x| x.object_type.is_table())
+            .find(|&x| &x.tbl_name == &table_name)
     }
 
     pub fn get_page_size(&self) -> u16 {
