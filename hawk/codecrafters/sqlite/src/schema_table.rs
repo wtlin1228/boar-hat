@@ -130,8 +130,4 @@ impl SchemaTable {
             ),
         }
     }
-
-    // pub fn get_index(table_name: &str, column_name: &str) -> Option<&SchemaTable> {
-
-    // }
 }

@@ -1,7 +1,6 @@
 use anyhow::{bail, Context, Result};
 use sqlite_starter_rust::{
-    cell::TableLeafCell,
-    sql_parser::{AggregateFunction, Expr, SQLParser, SelectStmt, Stmt, WhereClause},
+    sql_parser::{AggregateFunction, Expr, SQLParser, SelectStmt, Stmt},
     SQLiteDB,
 };
 
@@ -41,12 +40,10 @@ fn main() -> Result<()> {
                     result_column,
                     where_clause,
                 }) => {
-                    // Search without index
                     let schema_table = db
                         .get_table(&from)
                         .context(format!("Invalid table name {}", from))?;
 
-                    let column_def = &schema_table.get_table_column_def()?;
                     let mut selected_columns: Vec<usize> = vec![];
                     for expr in result_column.iter() {
                         match expr {
@@ -61,6 +58,7 @@ fn main() -> Result<()> {
                                 }
                             },
                             Expr::Column(column) => {
+                                let column_def = schema_table.get_table_column_def()?;
                                 match column_def.iter().position(|x| x == column) {
                                     Some(column_idx) => selected_columns.push(column_idx),
                                     None => bail!("Selected column {} doesn't exist", column),
@@ -69,25 +67,12 @@ fn main() -> Result<()> {
                         }
                     }
 
-                    let row_filter = match where_clause {
-                        Some(WhereClause { column, value }) => {
-                            let column_idx = match column_def.iter().position(|x| x == &column) {
-                                Some(column_idx) => column_idx,
-                                None => bail!("Where condition column {} doesn't exist", column),
-                            };
-                            Some(move |row: &TableLeafCell| {
-                                format!("{}", row.columns[column_idx]) == value
-                            })
-                        }
-                        None => None,
-                    };
-
-                    let rows = db.get_table_rows(&schema_table, row_filter.as_ref())?;
+                    let rows = db.get_table_rows(&schema_table, where_clause.as_ref())?;
                     for row in rows.iter() {
                         let mut output = vec![];
                         for column_idx in selected_columns.iter() {
                             match column_idx {
-                                0 => output.push(row.id.to_string()),
+                                0 => output.push(row.row_id.to_string()),
                                 _ => output.push(format!("{}", row.columns[*column_idx])),
                             }
                         }

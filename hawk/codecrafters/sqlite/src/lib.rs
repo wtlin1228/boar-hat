@@ -6,19 +6,23 @@ mod schema_table;
 mod serial_value;
 pub mod sql_parser;
 
-use anyhow::{Context, Ok, Result};
-use btree_page::BTreePage;
-use btree_page::PageType;
-use cell::TableLeafCell;
-use database_file_header::DatabaseFileHeader;
-use reader_utils::ReadeInto;
-use schema_table::SchemaTable;
+use anyhow::{bail, Ok, Result};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::os::unix::fs::FileExt;
 
+use crate::{
+    btree_page::{BTreePage, PageType},
+    cell::{TableInteriorCell, TableLeafCell},
+    database_file_header::DatabaseFileHeader,
+    reader_utils::ReadeInto,
+    schema_table::SchemaTable,
+    sql_parser::{CreateIndexStmt, WhereClause},
+};
+
 pub struct SQLiteDB {
+    #[allow(unused)]
     header: DatabaseFileHeader,
     database_path: String,
     page_size: u16,
@@ -91,42 +95,108 @@ impl SQLiteDB {
             .find(|&x| &x.tbl_name == &table_name)
     }
 
+    pub fn get_index(&self, table_name: &str, column: &str) -> Option<&SchemaTable> {
+        self.tables.iter().find(|&x| match &x.object_type {
+            schema_table::ObjectType::Index(CreateIndexStmt {
+                on, indexed_column, ..
+            }) => on == table_name && indexed_column[0] == column,
+            _ => false,
+        })
+    }
+
     pub fn get_page_size(&self) -> u16 {
         self.page_size
+    }
+
+    fn get_row(&self, table: &SchemaTable, row_id: u64) -> Result<TableLeafCell> {
+        let mut btree_page = self.get_page(table.rootpage.unwrap())?;
+        'outer: while btree_page.page_type.is_interior_page() {
+            for i in 0..btree_page.cell_pointers.len() {
+                let cell = TableInteriorCell::parse(
+                    &btree_page.data[btree_page.cell_pointers[i] as usize..],
+                )?;
+                if cell.row_id > row_id {
+                    btree_page = self.get_page(cell.page_number_of_left_child)?;
+                    continue 'outer;
+                }
+            }
+            btree_page = self.get_page(btree_page.right_most_pointer.unwrap() as usize)?;
+        }
+
+        assert!(!btree_page.page_type.is_interior_page());
+
+        for i in 0..btree_page.cell_pointers.len() {
+            let cell =
+                TableLeafCell::parse(&btree_page.data[btree_page.cell_pointers[i] as usize..])?;
+            if cell.row_id == row_id {
+                return Ok(cell);
+            }
+        }
+
+        bail!("Row with row_id {} not exists", row_id)
     }
 
     pub fn get_table_rows(
         &self,
         table: &SchemaTable,
-        filter: Option<&impl Fn(&TableLeafCell) -> bool>,
+        where_clause: Option<&WhereClause>,
     ) -> Result<Vec<TableLeafCell>> {
         assert!(
             table.rootpage.is_some(),
             "Can't get rows from a table without rootpage"
         );
-        let mut rows = vec![];
-        let mut pages = vec![table.rootpage.unwrap()];
+
+        let column_def = table.get_table_column_def()?;
+        let row_filter = match where_clause {
+            Some(WhereClause { column, value }) => {
+                let column_idx = match column_def.iter().position(|x| x == column) {
+                    Some(column_idx) => column_idx,
+                    None => bail!("Where condition column {} doesn't exist", column),
+                };
+                Some(move |row: &TableLeafCell| {
+                    format!("{}", row.columns[column_idx]) == value.as_str()
+                })
+            }
+            None => None,
+        };
+
+        let mut pages = match where_clause {
+            Some(WhereClause { column, .. }) => {
+                match self.get_index(table.tbl_name.as_ref(), column) {
+                    Some(index) => vec![index.rootpage.unwrap()],
+                    None => vec![table.rootpage.unwrap()],
+                }
+            }
+            None => vec![table.rootpage.unwrap()],
+        };
+
+        let mut rows: Vec<TableLeafCell> = vec![];
         while pages.len() > 0 {
             let mut next_pages = vec![];
             for page in pages {
                 let btree_page = self.get_page(page)?;
                 match btree_page.page_type {
                     PageType::InteriorTableBTreePage => {
-                        next_pages.append(&mut btree_page.get_child_pages()?);
+                        next_pages.append(&mut btree_page.get_table_child_pages()?);
                     }
-                    PageType::LeafTableBTreePage => match filter {
-                        Some(f) => {
-                            rows.append(&mut btree_page.get_rows()?.into_iter().filter(f).collect())
+                    PageType::LeafTableBTreePage => {
+                        rows.append(&mut btree_page.get_table_rows(row_filter.as_ref())?)
+                    }
+                    PageType::LeafIndexBTreePage => {
+                        let where_value = where_clause.unwrap().value.as_str();
+                        for row in btree_page.get_index_rows(where_value)? {
+                            // convert IndexLeafCell to TableLeafCell
+                            rows.push(self.get_row(table, row.row_id)?);
                         }
-                        None => rows.append(&mut btree_page.get_rows()?),
-                    },
-                    PageType::LeafIndexBTreePage => unreachable!(),
-                    PageType::InteriorIndexBTreePage => unreachable!(),
+                    }
+                    PageType::InteriorIndexBTreePage => {
+                        let where_value = where_clause.unwrap().value.as_str();
+                        next_pages.append(&mut btree_page.get_index_child_page(where_value)?);
+                    }
                 }
             }
             pages = next_pages;
         }
-
         Ok(rows)
     }
 }

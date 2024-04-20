@@ -46,9 +46,9 @@ pub struct WhereClause {
 
 #[derive(Debug, PartialEq)]
 pub struct CreateIndexStmt {
-    index_name: String,
-    on: String,
-    indexed_column: Vec<String>,
+    pub index_name: String,
+    pub on: String,
+    pub indexed_column: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]

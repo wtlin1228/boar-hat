@@ -1,3 +1,5 @@
+use anyhow::{bail, Result};
+
 /// https://www.sqlite.org/fileformat2.html#record_format
 #[derive(Debug)]
 pub enum SerialValue {
@@ -31,5 +33,21 @@ impl std::fmt::Display for SerialValue {
             SerialValue::Blob(blob) => write!(f, "{:?}", blob),
             SerialValue::Text(s) => write!(f, "{}", s),
         }
+    }
+}
+
+impl SerialValue {
+    pub fn into_u64(&self) -> Result<u64> {
+        Ok(match self {
+            SerialValue::Zero => 0,
+            SerialValue::One => 1,
+            SerialValue::Int8(n) => *n as u64,
+            SerialValue::Int16(n) => *n as u64,
+            SerialValue::Int24(n) => *n as u64,
+            SerialValue::Int32(n) => *n as u64,
+            SerialValue::Int48(n) => *n as u64,
+            SerialValue::Int64(n) => *n as u64,
+            _ => bail!("{} can't be transformed into u64", self),
+        })
     }
 }

@@ -1,6 +1,7 @@
-use crate::cell::TableInteriorCell;
-
-use super::{cell::TableLeafCell, schema_table::SchemaTable};
+use super::{
+    cell::{IndexInteriorCell, IndexLeafCell, TableInteriorCell, TableLeafCell},
+    schema_table::SchemaTable,
+};
 use anyhow::{bail, Ok, Result};
 
 #[derive(Debug, PartialEq)]
@@ -66,33 +67,98 @@ impl BTreePage {
         Ok(tables)
     }
 
-    pub fn get_rows(&self) -> Result<Vec<TableLeafCell>> {
+    pub fn get_table_rows(
+        &self,
+        row_filter: Option<&impl Fn(&TableLeafCell) -> bool>,
+    ) -> Result<Vec<TableLeafCell>> {
         assert_eq!(
             self.page_type,
             PageType::LeafTableBTreePage,
             "Can only parse the rows from a leaf table b-tree page now"
         );
 
-        let mut rows = vec![];
+        let mut rows: Vec<TableLeafCell> = vec![];
         for i in 0..self.cell_pointers.len() {
             let cell = &self.data[self.cell_pointers[i] as usize..];
-            rows.push(TableLeafCell::parse(cell)?);
+            let row = TableLeafCell::parse(cell)?;
+            match row_filter {
+                Some(f) => match f(&row) {
+                    true => rows.push(row),
+                    false => (),
+                },
+                None => rows.push(row),
+            }
         }
         Ok(rows)
     }
 
-    pub fn get_child_pages(&self) -> Result<Vec<usize>> {
+    pub fn get_table_child_pages(&self) -> Result<Vec<usize>> {
         assert_eq!(
             self.page_type,
             PageType::InteriorTableBTreePage,
             "Can only parse the child pages from a interior table b-tree page now"
         );
 
-        let mut rows = vec![];
+        let mut rows: Vec<usize> = vec![];
         for i in 0..self.cell_pointers.len() {
             let cell = &self.data[self.cell_pointers[i] as usize..];
-            rows.push(TableInteriorCell::parse(cell)?.child_page);
+            rows.push(TableInteriorCell::parse(cell)?.page_number_of_left_child);
         }
+        rows.push(self.right_most_pointer.unwrap() as usize);
         Ok(rows)
     }
+
+    pub fn get_index_rows(&self, where_value: &str) -> Result<Vec<IndexLeafCell>> {
+        assert_eq!(self.page_type, PageType::LeafIndexBTreePage);
+
+        // Could use binary search here, but since the disk read dominates so let's just keep it simple.
+        let mut rows: Vec<IndexLeafCell> = vec![];
+        for i in 0..self.cell_pointers.len() {
+            let cell = &self.data[self.cell_pointers[i] as usize..];
+            let row = IndexLeafCell::parse(cell)?;
+            if row.get_first_column_value() == where_value {
+                rows.push(row);
+            }
+        }
+
+        Ok(rows)
+    }
+
+    pub fn get_index_child_page(&self, where_value: &str) -> Result<Vec<usize>> {
+        assert_eq!(self.page_type, PageType::InteriorIndexBTreePage);
+
+        // Could use binary search here, but since the disk read dominates so let's just keep it simple.
+        let mut parsed_cells: Vec<IndexInteriorCell> = vec![];
+        for i in 0..self.cell_pointers.len() {
+            let cell = &self.data[self.cell_pointers[i] as usize..];
+            let cell = IndexInteriorCell::parse(cell)?;
+            parsed_cells.push(cell);
+        }
+
+        let low =
+            parsed_cells.partition_point(|x| x.get_first_column_value().as_str() < where_value);
+        let high =
+            parsed_cells.partition_point(|x| x.get_first_column_value().as_str() <= where_value);
+
+        let mut pages = vec![];
+        for i in low..=high {
+            match i == parsed_cells.len() {
+                false => {
+                    pages.push(parsed_cells[i].page_number_of_left_child);
+                }
+                true => pages.push(self.right_most_pointer.unwrap() as usize),
+            }
+        }
+
+        Ok(pages)
+    }
+}
+
+#[test]
+fn test_range() {
+    let v = [1, 2, 3, 4, 5, 5, 5, 6, 7];
+    let lo = v.partition_point(|x| x < &5);
+    assert_eq!(lo, 4);
+    let hi = v.partition_point(|x| x <= &5);
+    assert_eq!(hi, 7);
 }
