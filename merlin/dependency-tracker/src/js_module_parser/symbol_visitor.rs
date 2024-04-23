@@ -5,8 +5,8 @@ use swc_core::ecma::{ast, visit::Visit};
 
 #[derive(Debug)]
 pub struct ModuleSymbolsVisitor {
-    has_namespace_import: bool,
-    symbols: HashMap<String, Symbol>,
+    pub has_namespace_import: bool,
+    pub symbols: HashMap<String, Symbol>,
 
     // Can't just use `Symbol.name` to build the dependency graph.
     // We need the `SyntaxContext` in `Id.1` when looking into each symbol declaration.
@@ -19,14 +19,14 @@ pub struct ModuleSymbolsVisitor {
     // ```
     //
     // ref: https://rustdoc.swc.rs/swc_core/ecma/ast/struct.Ident.html
-    tracked_ids: HashSet<ast::Id>,
+    pub tracked_ids: HashSet<ast::Id>,
 
     // In order to trace one level more for namespaces later
-    namespace_ids: HashSet<ast::Id>,
+    pub namespace_ids: HashSet<ast::Id>,
 }
 
 impl ModuleSymbolsVisitor {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             has_namespace_import: false,
             symbols: HashMap::new(),
@@ -146,7 +146,7 @@ impl ModuleSymbolsVisitor {
 }
 
 impl Visit for ModuleSymbolsVisitor {
-    fn visit_module(&mut self, n: &swc_core::ecma::ast::Module) {
+    fn visit_module(&mut self, n: &ast::Module) {
         for module_item in &n.body {
             match module_item {
                 ast::ModuleItem::ModuleDecl(module_decl) => {
