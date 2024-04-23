@@ -268,13 +268,13 @@
 //! into "module-a". Another important thing is `Symbol A`'s dependency is also updated.
 //!
 
-mod module;
+mod js_module_parser;
 mod path_resolver;
 mod scheduler;
 pub mod visitors;
 
 use anyhow::{self, bail, Context, Ok};
-use module::{Import, ImportType, Module, Symbol};
+use js_module_parser::module::{Import, ImportType, Module, Symbol};
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -391,7 +391,7 @@ impl DependencyTracker {
 
 #[cfg(test)]
 mod tests {
-    use super::module::{Import, ImportType, Module, Symbol, DEFAULT_EXPORT};
+    use super::js_module_parser::module::{Import, ImportType, Module, Symbol, DEFAULT_EXPORT};
     use super::DependencyTracker;
     use std::collections::{HashMap, HashSet};
 
