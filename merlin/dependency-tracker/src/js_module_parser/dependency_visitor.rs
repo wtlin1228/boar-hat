@@ -7,19 +7,17 @@ use swc_core::ecma::{
 #[derive(Debug)]
 pub struct SymbolDependencyVisitor {
     current_id: Option<Id>,
-    namespace_ids: HashSet<Id>,
     pub dependency: HashMap<Id, HashSet<Id>>,
 }
 
 impl SymbolDependencyVisitor {
-    pub fn new(namespace_ids: HashSet<Id>, tracked_ids: HashSet<Id>) -> Self {
+    pub fn new(tracked_ids: HashSet<Id>) -> Self {
         let mut dependency = HashMap::new();
         for id in tracked_ids.iter() {
             dependency.insert(id.clone(), HashSet::new());
         }
         Self {
             current_id: None,
-            namespace_ids,
             dependency,
         }
     }

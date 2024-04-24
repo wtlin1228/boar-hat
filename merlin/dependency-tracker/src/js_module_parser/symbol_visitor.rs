@@ -5,7 +5,9 @@ use swc_core::ecma::{ast, visit::Visit};
 
 #[derive(Debug)]
 pub struct ModuleSymbolsVisitor {
-    pub has_namespace_import: bool,
+    pub re_exporting_all_from: Vec<String>,
+
+    // symbol name = `Id` without `SyntaxContext`
     pub symbols: HashMap<String, Symbol>,
 
     // Can't just use `Symbol.name` to build the dependency graph.
@@ -20,22 +22,22 @@ pub struct ModuleSymbolsVisitor {
     //
     // ref: https://rustdoc.swc.rs/swc_core/ecma/ast/struct.Ident.html
     pub tracked_ids: HashSet<ast::Id>,
-
-    // In order to trace one level more for namespaces later
-    pub namespace_ids: HashSet<ast::Id>,
 }
 
 impl ModuleSymbolsVisitor {
     pub fn new() -> Self {
         Self {
-            has_namespace_import: false,
+            re_exporting_all_from: vec![],
             symbols: HashMap::new(),
             tracked_ids: HashSet::new(),
-            namespace_ids: HashSet::new(),
         }
     }
 
-    fn track_id(&mut self, ident: &ast::Ident, is_namespace_id: bool) {
+    fn add_re_exporting_all_from(&mut self, src: &str) {
+        self.re_exporting_all_from.push(src.to_string());
+    }
+
+    fn track_id(&mut self, ident: &ast::Ident) {
         let id = ident.to_id();
         assert!(
             !self.tracked_ids.contains(&id),
@@ -43,9 +45,6 @@ impl ModuleSymbolsVisitor {
             id.0
         );
         self.tracked_ids.insert(id);
-        if is_namespace_id {
-            self.namespace_ids.insert(ident.to_id());
-        }
     }
 
     fn add_symbol_dependency(&mut self, symbol_name: &str, depend_on_name: &str) {
@@ -129,7 +128,6 @@ impl ModuleSymbolsVisitor {
 
     fn add_namespace_import_symbol(&mut self, name: &str, src: &str) {
         assert!(!self.symbols.contains_key(name));
-        self.has_namespace_import = true;
         self.symbols.insert(
             name.to_string(),
             Symbol {
@@ -137,7 +135,23 @@ impl ModuleSymbolsVisitor {
                 is_named_exported: true,
                 import_from: Some(Import {
                     from: src.to_string(),
-                    import_type: ImportType::NamespaceImport(vec![]),
+                    import_type: ImportType::NamespaceImport,
+                }),
+                depend_on: None,
+            },
+        );
+    }
+
+    fn add_re_exporting_all_as_symbol(&mut self, name: &str, src: &str) {
+        assert!(!self.symbols.contains_key(name));
+        self.symbols.insert(
+            name.to_string(),
+            Symbol {
+                name: name.to_string(),
+                is_named_exported: true,
+                import_from: Some(Import {
+                    from: src.to_string(),
+                    import_type: ImportType::ReExportingAllAs,
                 }),
                 depend_on: None,
             },
@@ -147,6 +161,7 @@ impl ModuleSymbolsVisitor {
 
 impl Visit for ModuleSymbolsVisitor {
     fn visit_module(&mut self, n: &ast::Module) {
+        println!("{:#?}", n);
         for module_item in &n.body {
             match module_item {
                 ast::ModuleItem::ModuleDecl(module_decl) => {
@@ -154,32 +169,32 @@ impl Visit for ModuleSymbolsVisitor {
                         ast::ModuleDecl::Import(import_decl) => {
                             for specifier in &import_decl.specifiers {
                                 match specifier {
-                                    // import { A } from 'module-a';
+                                    // import { A } from 'module-a'
                                     ast::ImportSpecifier::Named(ast::ImportNamedSpecifier {
                                         local,
                                         ..
                                     }) => {
-                                        self.track_id(local, false);
+                                        self.track_id(local);
                                         self.add_named_import_symbol(
                                             local.to_id().0.as_str(),
                                             import_decl.src.value.as_str(),
                                         );
                                     }
-                                    // import A from 'module-a';
+                                    // import A from 'module-a'
                                     ast::ImportSpecifier::Default(
                                         ast::ImportDefaultSpecifier { local, .. },
                                     ) => {
-                                        self.track_id(local, false);
+                                        self.track_id(local);
                                         self.add_default_import_symbol(
                                             local.to_id().0.as_str(),
                                             import_decl.src.value.as_str(),
                                         )
                                     }
-                                    // import * as A from 'module-a';
+                                    // import * as A from 'module-a'
                                     ast::ImportSpecifier::Namespace(
                                         ast::ImportStarAsSpecifier { local, .. },
                                     ) => {
-                                        self.track_id(local, true);
+                                        self.track_id(local);
                                         self.add_namespace_import_symbol(
                                             local.to_id().0.as_str(),
                                             import_decl.src.value.as_str(),
@@ -188,15 +203,19 @@ impl Visit for ModuleSymbolsVisitor {
                                 }
                             }
                         }
+                        // export * from 'module-a'
+                        ast::ModuleDecl::ExportAll(ast::ExportAll { src, .. }) => {
+                            self.add_re_exporting_all_from(src.value.as_str());
+                        }
                         ast::ModuleDecl::ExportDecl(ast::ExportDecl { decl, .. }) => match decl {
                             // export class A {}
                             ast::Decl::Class(ast::ClassDecl { ident, .. }) => {
-                                self.track_id(ident, false);
+                                self.track_id(ident);
                                 self.add_named_exported_symbol(ident.to_id().0.as_str());
                             }
                             // export function A() {}
                             ast::Decl::Fn(ast::FnDecl { ident, .. }) => {
-                                self.track_id(ident, false);
+                                self.track_id(ident);
                                 self.add_named_exported_symbol(ident.to_id().0.as_str());
                             }
                             // export const A = init
@@ -205,7 +224,7 @@ impl Visit for ModuleSymbolsVisitor {
                                 let first_var_decl = var_decl.decls.get(0).unwrap();
                                 match &first_var_decl.name {
                                     ast::Pat::Ident(ast::BindingIdent { id, .. }) => {
-                                        self.track_id(id, false);
+                                        self.track_id(id);
                                         self.add_named_exported_symbol(id.to_id().0.as_str());
                                     }
                                     _ => (),
@@ -213,10 +232,22 @@ impl Visit for ModuleSymbolsVisitor {
                             }
                             _ => (),
                         },
-                        ast::ModuleDecl::ExportNamed(ast::NamedExport { specifiers, .. }) => {
+                        ast::ModuleDecl::ExportNamed(ast::NamedExport {
+                            specifiers, src, ..
+                        }) => {
                             for specifier in specifiers {
                                 match specifier {
-                                    ast::ExportSpecifier::Namespace(_) => todo!(),
+                                    ast::ExportSpecifier::Namespace(
+                                        ast::ExportNamespaceSpecifier { name, .. },
+                                    ) => match (name, src) {
+                                        // export * as A from 'module-a'
+                                        (ast::ModuleExportName::Ident(ident), Some(src)) => self
+                                            .add_re_exporting_all_as_symbol(
+                                                ident.to_id().0.as_str(),
+                                                src.value.as_str(),
+                                            ),
+                                        _ => todo!(),
+                                    },
                                     ast::ExportSpecifier::Default(_) => todo!(),
                                     ast::ExportSpecifier::Named(ast::ExportNamedSpecifier {
                                         orig,
@@ -273,7 +304,7 @@ impl Visit for ModuleSymbolsVisitor {
                                         // We need to track the class A since it could be used inside the same module.
                                         // In this case we set the symbol "DEFAULT_EXPORT" to depend on symbol "A",
                                         // so if other symbol depends on "A", they can follow "A"'s dependency.
-                                        self.track_id(ident, false);
+                                        self.track_id(ident);
                                         self.add_symbol(ident.to_id().0.as_str());
                                         self.add_symbol(DEFAULT_EXPORT);
                                         self.add_symbol_dependency(
@@ -294,7 +325,7 @@ impl Visit for ModuleSymbolsVisitor {
                                         // We need to track the function A since it could be used inside the same module.
                                         // In this case we set the symbol "DEFAULT_EXPORT" to depend on symbol "A",
                                         // so if other symbol depends on "A", they can follow "A"'s dependency.
-                                        self.track_id(ident, false);
+                                        self.track_id(ident);
                                         self.add_symbol(ident.to_id().0.as_str());
                                         self.add_symbol(DEFAULT_EXPORT);
                                         self.add_symbol_dependency(
@@ -393,15 +424,40 @@ mod tests {
     use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 
     #[test]
+    fn test_statements_are_handled() {
+        let inputs = vec![
+            "import A from 'module-a'",
+            "import { A } from 'module-a'",
+            "import * as A from 'module-a'",
+            "export class A {}",
+            "export function A() {}",
+            "export const A = init",
+            "export const A = () => {}",
+            "export { A }",
+            "export { A as B }",
+            "export { A as Default }",
+            "export default class A {}",
+            "export default class {}",
+            "export default function A() {}",
+            "export default function() {}",
+            "export * from 'module-a'",
+            "export * as A from 'module-a'",
+        ];
+        inputs.iter().for_each(|&input| {
+            let mut visitor = ModuleSymbolsVisitor::new();
+            parse_with_visitors![input, visitor];
+        });
+    }
+
+    #[test]
     fn test_default_import() {
         let input = "
             import A from 'module-a';
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, ["A"]);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get("A").unwrap(),
             &Symbol {
@@ -423,9 +479,8 @@ mod tests {
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, ["A"]);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get("A").unwrap(),
             &Symbol {
@@ -447,9 +502,8 @@ mod tests {
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, ["A"]);
-        assert_ast_ids!(visitor.namespace_ids, ["A"]);
-        assert!(visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get("A").unwrap(),
             &Symbol {
@@ -457,7 +511,7 @@ mod tests {
                 is_named_exported: true,
                 import_from: Some(Import {
                     from: "module-a".to_string(),
-                    import_type: ImportType::NamespaceImport(vec![]),
+                    import_type: ImportType::NamespaceImport,
                 }),
                 depend_on: None
             }
@@ -471,9 +525,8 @@ mod tests {
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, ["A"]);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get("A").unwrap(),
             &Symbol {
@@ -492,9 +545,8 @@ mod tests {
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, ["A"]);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get("A").unwrap(),
             &Symbol {
@@ -513,9 +565,8 @@ mod tests {
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, ["A"]);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get("A").unwrap(),
             &Symbol {
@@ -534,9 +585,8 @@ mod tests {
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, ["A"]);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get("A").unwrap(),
             &Symbol {
@@ -555,9 +605,8 @@ mod tests {
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, []);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get("A").unwrap(),
             &Symbol {
@@ -570,36 +619,14 @@ mod tests {
     }
 
     #[test]
-    fn test_export_named_as() {
-        let input = "
-            export { A as B }
-        ";
-        let mut visitor = ModuleSymbolsVisitor::new();
-        parse_with_visitors![input, visitor];
-        assert_ast_ids!(visitor.tracked_ids, []);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
-        assert_eq!(
-            visitor.symbols.get("B").unwrap(),
-            &Symbol {
-                name: "B".to_string(),
-                is_named_exported: true,
-                import_from: None,
-                depend_on: Some(HashSet::from(["A".to_string()]))
-            }
-        );
-    }
-
-    #[test]
     fn test_export_named_as_another_name() {
         let input = "
             export { A as B }
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, []);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get("B").unwrap(),
             &Symbol {
@@ -618,9 +645,8 @@ mod tests {
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, []);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get(DEFAULT_EXPORT).unwrap(),
             &Symbol {
@@ -639,9 +665,8 @@ mod tests {
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, ["A"]);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get(DEFAULT_EXPORT).unwrap(),
             &Symbol {
@@ -669,9 +694,8 @@ mod tests {
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, []);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get(DEFAULT_EXPORT).unwrap(),
             &Symbol {
@@ -690,9 +714,8 @@ mod tests {
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, ["A"]);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get(DEFAULT_EXPORT).unwrap(),
             &Symbol {
@@ -720,15 +743,52 @@ mod tests {
         ";
         let mut visitor = ModuleSymbolsVisitor::new();
         parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
         assert_ast_ids!(visitor.tracked_ids, []);
-        assert_ast_ids!(visitor.namespace_ids, []);
-        assert!(!visitor.has_namespace_import);
         assert_eq!(
             visitor.symbols.get(DEFAULT_EXPORT).unwrap(),
             &Symbol {
                 name: DEFAULT_EXPORT.to_string(),
                 is_named_exported: false,
                 import_from: None,
+                depend_on: None
+            }
+        );
+    }
+
+    #[test]
+    fn test_re_exporting_all() {
+        let input = "
+            export * from 'module-a'
+        ";
+        let mut visitor = ModuleSymbolsVisitor::new();
+        parse_with_visitors![input, visitor];
+        assert_eq!(
+            visitor.re_exporting_all_from,
+            vec![String::from("module-a")]
+        );
+        assert_ast_ids!(visitor.tracked_ids, []);
+        assert!(visitor.symbols.len() == 0);
+    }
+
+    #[test]
+    fn test_re_exporting_all_as() {
+        let input = "
+            export * as A from 'module-a'
+        ";
+        let mut visitor = ModuleSymbolsVisitor::new();
+        parse_with_visitors![input, visitor];
+        assert!(visitor.re_exporting_all_from.len() == 0);
+        assert_ast_ids!(visitor.tracked_ids, []);
+        assert_eq!(
+            visitor.symbols.get("A").unwrap(),
+            &Symbol {
+                name: "A".to_string(),
+                is_named_exported: true,
+                import_from: Some(Import {
+                    from: "module-a".to_string(),
+                    import_type: ImportType::ReExportingAllAs,
+                }),
                 depend_on: None
             }
         );

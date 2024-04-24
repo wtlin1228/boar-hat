@@ -250,16 +250,15 @@ Scheduler marks `x.js` as parsing candidate. So we need to parse `x.js` through 
 
 ```js
 // x.js
-export * from "./a";
+export * from "./a"; // will be added to module's `re_exporting_all_from` field
 export * as B from "./b";
 export { default as b3 } from "./b";
 ```
 
-| `x.js` |         symbol name          | is exported |  import from / import type  | depend on |
-| ------ | :--------------------------: | :---------: | :-------------------------: | :-------: |
-|        | TODO: give it a random name? |    True     | `./a.js` / Re-exporting all |    N/A    |
-|        |              B               |    True     | `./b.js` / Re-exporting all |    N/A    |
-|        |              b3              |    True     |     `./b.js` / Default      |    N/A    |
+| `x.js` | symbol name | is exported |  import from / import type  | depend on |
+| ------ | :---------: | :---------: | :-------------------------: | :-------: |
+|        |      B      |    True     | `./b.js` / ReExportingAllAs |    N/A    |
+|        |     b3      |    True     |     `./b.js` / Default      |    N/A    |
 
 ### Step2.2: Trace symbols' dependency
 
@@ -270,6 +269,8 @@ Nothing changed for `Module x`.
 Main thread receives `Module x`.
 
 ### Step2.4: Expand the re-exporting all statement and resolve the import from path
+
+Expand `re_exporting_all_from` and `ReExportingAllAs` import type in this step.
 
 | `x.js` | symbol name | is exported | import from / import type | depend on |
 | ------ | :---------: | :---------: | :-----------------------: | :-------: |
@@ -354,9 +355,7 @@ We can now find all the paths depends on the `module_a.symbol_localVar1` by trav
 
 # Symbol
 
-Symbol is the basic unit used internally in `DependencyTracker`. We can get the
-information about "Is it exported?", "Does it depends on other symbols in the
-same module?", "Is it imported from other module?".
+Symbol is the basic unit used internally in `DependencyTracker`. We can get the information about "Is it exported?", "Does it depends on other symbols in the same module?", "Is it imported from other module?".
 
 ## Examples
 

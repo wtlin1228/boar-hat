@@ -55,7 +55,7 @@ pub fn parse_module(
         .expect("failed to parser module");
 
     let mut parsed_module = Module {
-        has_namespace_import: false,
+        re_exporting_all_from: None,
         symbols: HashMap::new(),
     };
 
@@ -69,8 +69,7 @@ pub fn parse_module(
 
         println!("{:#?}", symbol_visitor);
 
-        let mut dependency_visitor =
-            SymbolDependencyVisitor::new(symbol_visitor.namespace_ids, symbol_visitor.tracked_ids);
+        let mut dependency_visitor = SymbolDependencyVisitor::new(symbol_visitor.tracked_ids);
         ast_module.visit_with(&mut dependency_visitor);
 
         // println!("{:#?}", dependency_visitor);
@@ -84,8 +83,6 @@ pub fn parse_module(
                     .collect::<Vec<&str>>()
             )
         }
-
-        parsed_module.has_namespace_import = symbol_visitor.has_namespace_import;
     });
 
     Ok(parsed_module)
