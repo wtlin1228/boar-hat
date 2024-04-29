@@ -1,8 +1,8 @@
 # Making Instagram.com Faster
 
-1. Preload critical resources. (see [making-instagram-faster/v1](/making-instagram-faster/v1))
-2. Prefetch images with correct resolution and only prefetch off-screen images when browser is idle. (see [making-instagram-faster/v2](/making-instagram-faster/v2))
-3. Pushing data using Early Flushing and Progressive HTML. (see [making-instagram-faster/v3](/making-instagram-faster/v3))
+1. Preload critical resources. (see [making-instagram-faster/v1](/gowther/success-at-scale/making-instagram-faster/v1))
+2. Prefetch images with correct resolution and only prefetch off-screen images when browser is idle. (see [making-instagram-faster/v2](/gowther/success-at-scale/making-instagram-faster/v2))
+3. Pushing data using Early Flushing and Progressive HTML. (see [making-instagram-faster/v3](/gowther/success-at-scale/making-instagram-faster/v3))
 4. Send API response directly from server to client by streaming. It saves one round trip since server starts preparing the API response right after it receives the first request.
 
 # Shopify: Want to Improve UI Performance? Start by Understanding Your User
@@ -34,4 +34,4 @@
 2. Try to inline the author image compressed with AVIF then base64, resulting 3KB weight to the HTML. It's a good approach, but LCP issue is still there. Note that inlining is a double-edged sword and must be used with caution. It beefs up the page and means subsequent page view do not benefit from the fact that data is already downloaded.
 3. Move author image below the fold. Figure out what's the "right LCP element", which is the article title. It's also a good approach, but LCP issue is still there.
 4. Find out the LCP issue is caused by the mobile (Chrome only) users from those countries without good connectivity by collecting RUM data with `web-vitals` then post it back to Google Analytics for analysis. Those mobile (Chrome only) traffic comes from India(31%), United States(13%), Philippines(8%), ..., so that also means countries with more iPhones (like the USA) will have a much smaller proportion of their mobile users represented in CrUX and so in core web vitals.
-5. Smashing Magazine then fixed this LCP issue by `Save-Data` and `prefers-reduced-data`. (see [a-smashing-magazine-case-study/v1](/a-smashing-magazine-case-study/README.md#v1---save-data-and-prefers-reduced-data))
+5. Smashing Magazine then fixed this LCP issue by `Save-Data` and `prefers-reduced-data`. (see [a-smashing-magazine-case-study/v1](/gowther/success-at-scale/a-smashing-magazine-case-study/README.md#v1---save-data-and-prefers-reduced-data))
