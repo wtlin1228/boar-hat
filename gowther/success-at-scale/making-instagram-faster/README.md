@@ -23,7 +23,7 @@ Time for users to see boar hat feed: 8.5s
     + images(1s)
 ```
 
-![v0 network](./v0_network.png)
+![v0 network](./v0_network.avif)
 
 # v1 - Preload
 
@@ -40,7 +40,7 @@ Time for users to see boar hat feed: 4.5s
     + images(1s)
 ```
 
-![v1 network](./v1_network.png)
+![v1 network](./v1_network.avif)
 
 # v2 - Image Prefetching
 
@@ -48,7 +48,7 @@ Time for users to see boar hat feed: 4.5s (unchanged)
 
 Posts under-the-fold are lazily loaded by default with `requestIdleCallback`. We increase the priority of this prefetch task to high by canceling the pending idle callback and thus firing off the fetch immediately.
 
-![v2 network](./v2_network.png)
+![v2 network](./v2_network.avif)
 
 # v3 - Pushing Data Using Early Flushing and Progressive HTML
 
@@ -65,4 +65,4 @@ Time for users to see boar hat feed: 4s
     + images(1s)
 ```
 
-![v3 network](./v3_network.png)
+![v3 network](./v3_network.avif)
