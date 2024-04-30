@@ -1,68 +1,39 @@
-use dependency_tracker::visitors::{
-    dependency_visitor::DependencyVisitor, track_id_visitor::TrackIdVisitor,
+use std::path::PathBuf;
+
+use dependency_tracker::{
+    depend_on_graph::DependOnGraph,
+    dependency_tracker::{DependencyTracker, TraceTarget},
+    parser::parse,
+    path_resolver::{PathResolver, ResolvePath, ToCanonicalString},
+    scheduler::ParserCandidateScheduler,
+    spreadsheet::write_to_spreadsheet,
+    used_by_graph::UsedByGraph,
 };
-use std::path::Path;
 
-use swc_core::{
-    common::{
-        errors::{ColorConfig, Handler},
-        sync::Lrc,
-        Globals, Mark, SourceMap, GLOBALS,
-    },
-    ecma::{
-        transforms::base::resolver,
-        visit::{FoldWith, VisitWith},
-    },
-};
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
+const ROOT: &'static str = "./test-project/everybodyyyy/src";
 
-fn main() {
-    let cm: Lrc<SourceMap> = Default::default();
-    let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
-
-    let fm = cm
-        .load_file(Path::new("./test-inputs/foo.jsx"))
-        .expect("failed to load ./test-inputs/foo.jsx");
-
-    let lexer = Lexer::new(
-        Syntax::Typescript(TsConfig {
-            tsx: true,
-            decorators: false,
-            dts: false,
-            no_early_errors: true,
-            disallow_ambiguous_jsx_like: true,
-        }),
-        // EsVersion defaults to es5
-        Default::default(),
-        StringInput::from(&*fm),
-        None,
-    );
-
-    let mut parser = Parser::new_from(lexer);
-
-    for e in parser.take_errors() {
-        e.into_diagnostic(&handler).emit();
-    }
-
-    let module = parser
-        .parse_module()
-        .map_err(|e| {
-            // Unrecoverable fatal error occurred
-            e.into_diagnostic(&handler).emit()
-        })
-        .expect("failed to parser module");
-
-    GLOBALS.set(&Globals::new(), || {
-        let module = module.fold_with(&mut resolver(Mark::new(), Mark::new(), true));
-
-        let mut track_id_visitor = TrackIdVisitor::new();
-        module.visit_with(&mut track_id_visitor);
-
-        let mut dependency_visitor = DependencyVisitor::new(track_id_visitor.tracked_ids);
-        module.visit_with(&mut dependency_visitor);
-
-        for d in dependency_visitor.dependency {
-            println!("{:?}\n", d);
+fn main() -> anyhow::Result<()> {
+    let mut scheduler = ParserCandidateScheduler::new(&PathBuf::from(ROOT));
+    let path_resolver = PathResolver::new(&PathBuf::from(ROOT).to_canonical_string()?);
+    let mut depend_on_graph = DependOnGraph::new();
+    loop {
+        match scheduler.get_one_candidate() {
+            Some(c) => {
+                let parsed_module = parse(c.to_str().unwrap())?;
+                depend_on_graph.add_parsed_module(parsed_module, &path_resolver)?;
+                scheduler.mark_candidate_as_parsed(c);
+            }
+            None => break,
         }
-    });
+    }
+    let used_by_graph = UsedByGraph::from(&depend_on_graph);
+    let mut dependency_tracker = DependencyTracker::new(&used_by_graph);
+    let traced_paths = dependency_tracker.trace((
+        path_resolver.resolve_path("", "components/buttons/counter")?,
+        TraceTarget::LocalVar(String::from("Counter")),
+    ))?;
+
+    write_to_spreadsheet("./output.xlsx", &traced_paths);
+
+    Ok(())
 }

@@ -4,11 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-swc_core = { version = "0.90", features = [
+swc_core = { version = "0.91", features = [
     "common", 
     "ecma_ast", 
     "ecma_visit",
     "ecma_plugin_transform"
 ]}
-swc_ecma_parser = { version = "0.143.5", features = ["typescript"] }
+swc_ecma_parser = { version = "0.144", features = ["typescript"] }
 anyhow = "1"
+umya-spreadsheet = "1.2.3"
