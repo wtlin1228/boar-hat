@@ -10,7 +10,7 @@ pub fn bfs<'a, Node>(
 where
     Node: PartialEq + Eq + Hash,
 {
-    let mut parent_level_table: HashMap<&Node, (&Node, usize)> = HashMap::new();
+    let mut parent_level_table: HashMap<&Node, (&Node, usize)> = HashMap::with_capacity(adj.len());
     let mut queue: VecDeque<&'a Node> = VecDeque::from([s]);
     parent_level_table.insert(s, (s, 0));
     while queue.len() > 0 {
