@@ -3,6 +3,7 @@
 - Course on frontend master: https://frontendmasters.com/courses/web-app-testing/
 - Companion repo: https://github.com/wtlin1228/testing-fundamentals
 - Guide to testable code: https://github.com/wtlin1228/guide-to-testable-code
+- Slides: https://drive.google.com/file/d/1ssO7xyK3NPFGcqJWE2hif5BxSC1exLlH/view?usp=drive_link
 
 # My Takeaways
 
@@ -122,3 +123,161 @@ The other one people often talk about is, hey, testing is for QA. Like, this is 
 If you design code in a way that is untestable, there's very little that somebody can do after the fact to add tests. In other words, if you design code in an untestable way, you've essentially created a legacy codebase. That's the reason why legacy code bases are difficult to test, is because, well, they weren't designed with testing in mind.
 
 So there's nothing inherently difficult about testing existing code, as long as the code is written in a testable manner, right?
+
+### I write UI
+
+### Don't Know How
+
+# Types of Tests & Tradeoffs
+
+## Kinds of Tests
+
+- Testing Level
+  - Unit Tests
+  - Integration Tests (functional)
+  - System Tests (e2e)
+  - Acceptance Tests
+- Functionality
+  - Functional: does it do the right thing?
+  - Performance: does it do it fast enough?
+  - Security: does it do it in a secure way?
+  - Usability: does it do it in a way where usability matters?
+  - Accessibility
+- Automation
+  - Automated Tests
+  - Manual Tests
+- Other
+  - Regression: add tests to prevent similar bugs happen again
+  - Smoke: only run a small portion of tests since the system is large and running the tests takes much time
+
+## Tests Level Tradeoffs
+
+- Scope
+  - Unit Tests: Lowest scope, focusing on individual units like functions or classes.
+  - Integration Tests: Broader scope than unit tests, focusing on how units interact within a module or subsystem.
+  - System Tests: Even broader scope, covering the entire system as a whole, integrating all components and functionalities.
+  - E2E Tests: Highest scope, aiming to mimic real user behavior and interactions with the complete system.
+- Speed
+  - Unit Tests: Fastest to write and execute due to their limited scope and isolation.
+  - Integration Tests: Generally faster than system and E2E tests, but slower than unit tests due to increased complexity.
+  - System Tests: Can be slower than integration tests due to the larger scope and potential dependencies on external systems.
+  - E2E Tests: Often the slowest due to their comprehensive nature and potential reliance on real user environments.
+- Isolation
+  - Unit Tests: Highest isolation, focusing on individual units without external dependencies.
+  - Integration Tests: Moderate isolation, testing interactions within a module but potentially having dependencies on external modules or mock objects.
+  - System Tests: Lower isolation, often involving real or simulated external systems and dependencies.
+  - E2E Tests: Lowest isolation, typically running in the actual user environment with real dependencies.
+- Other
+  - Maintainability: Unit tests are generally easier to maintain due to their simpler scope. As the scope increases, maintaining tests can become more complex.
+  - Cost: Unit tests typically have lower development and execution costs due to their faster nature. The cost increases with broader scope and complexity.
+  - Confidence: While each type provides confidence in different aspects, E2E tests often offer higher confidence in the overall user experience due to their comprehensive scope.
+
+# Test Examples
+
+## Unit Tests
+
+Dependency injection!
+
+See https://github.com/wtlin1228/testing-fundamentals/blob/lesson-7/src/routes/github/%5Buser%5D/%5Brepo%5D/github-api.spec.ts
+
+## UI Tests
+
+Storybook!
+
+See https://github.com/wtlin1228/testing-fundamentals/blob/lesson-7/src/clustering/cluster.stories.tsx
+
+## E2E Tests
+
+Playwright and page objects!
+
+See https://github.com/wtlin1228/testing-fundamentals/blob/lesson-7/tests/cluster.spec.ts
+
+# Development Model
+
+The most people as software engineers do is they write code and also produce bugs. And then they have some QA and they expect that the QA will catch their bugs. And then you hire some test engineers and say, why don't you automate all this stuff so we don't have to do it all the time. So, for some reason, when you talk to people, they always assume the testing magic happens at this level. They're like, get some magical software, pay company some money or whatever and this problem will go away, right? This is not the correct mental model, you cannot fix the problem at this level.
+
+And fundamentally, the reason we cannot fix the problem is, I have this opinion, philosophy, I don't know what you wanna call it, which is that the person who creates a mess needs to be the person who suffers the consequences, right? If the two people are different, nothing ever is gonna get better, right? So if the developer is the one that's creating a mess making the code untestable and the automation engineer is suffering the consequences, this isn't gonna get better, right? You need to make sure that the software engineer, not only is responsible for writing the code, but also is responsible for writing the test. And then they see the consequences to their actions, and now they have a closed loop and immediately they can learn and say, I shouldn't do this, it hurts when I do that, don't do that, right?
+
+# Structuring Code for Testability
+
+Get more control of your code by decoupling, dependency injection.
+
+# How to make it hard to test code?
+
+Most people say:
+
+- Make things private
+- Using final keyword
+- Long methods
+- ... ??? ...
+
+Real issues:
+
+- Mixing new with logic
+- Looking for things
+- Work in constructor
+- Global state
+- Singletons
+- Static methods
+- Deep inheritance
+- Too many conditionals
+
+So when you ask people you're an evil developer, what make code is hard to test? They'll say, ooh, make things private, using final keyword would be cool into saying object.freeze in JavaScript. Have methods that are very complicated. And sure, to a lot of degrees, this makes the situation harder because you cannot monkey patch things, because the object is frozen. Or you cannot get a hold of things because they're hidden somewhere in a special property. Or the method is too long then it becomes really complicated to write a test.
+
+But fundamentally, the reason why code is hard to test is because you can't separate it out. You can't isolate it. And the reason you can't isolate it is because the code which is responsible for constructing your application and the code that represents the logic are intermixed, so you can't take it apart.
+
+And the reason why they're intermixed is that you'll have things that looks for other pieces of code, and you'll see a lot of snow as love demeter or the train wreck. You'll have something called A, and you'll say something like A.B.C.D.E.F and you kinda walk the tree to get a hold of something that you want. This can also be done as you call a function that returns another function, which you call another function on it to return whatever you want. And you're just kinda working it instead of just being given the thing that you need in the beginning.
+
+# Deal with Legacy Codebase
+
+## Stage 1: Scenario Tests
+
+Test the whole app as unit by pretending to be a user.
+
+But it's slow and flaky.
+
+- Green:
+  - high confidence happy paths OK
+  - high initial coverage; impossible to get the corner cases
+- Red = Could be Ok, not sure
+  - hard to reproduce failures
+  - need debugger to figure out what went wrong
+
+## Stage 2: Functional Tests
+
+Test a sub-system of the app with simulators for external dependencies.
+
+Can simulate conditions not possible in scenario tests.
+
+Developers can run these before submitting.
+
+Much Faster & A lot less flaky.
+
+- Green:
+  - high confidence sub-system OK
+  - lower app coverage, need more of these
+  - tests focus on class-interaction
+- Red = pretty confident things are bad
+  - easier to reproduce failures
+
+## Stage 3: Unit Tests
+
+Test individual classes in isolation.
+
+Can simulate all error conditions.
+
+Developers can run these after each file modification..
+
+Very Fast & No flakiness.
+
+- Green:
+  - high confidence class OK
+  - lowest app coverage, need a lot of these
+  - sure class is OK, not sure class interaction OK
+- Red = pretty confident things are bad
+  - easy to reproduce failures
+  - no need for debugger to figure out what went wrong
+
+# References
+
+- [In-Memory Databases](https://www.sqlite.org/inmemorydb.html) is one option for mocking the database with speed in concern.
