@@ -9,7 +9,7 @@
 | RWD | ✅ | ✅ | ✅ | ✅ |  |  |  |  |  |
 | Data Visualization | ✅ [Ref][gestalt ds] | ❌ | ✅ [Ref][carbon ds] | ❌ |  |  |  |  |  |
 | Documentation | ✅ [Ref][gestalt doc] | ✅ [Ref][polaris doc] | ✅ [Ref][carbon doc] | ✅ [Ref][joy-ui doc] |  |  |  |  |  |
-| Accessibility | ✅ [Ref][gestalt a11y]  | ✅ [Ref][polaris a11y] | ✅ [Ref][carbon a11y] | ✅ [Ref][joy-ui a11y] |  |  |  |  |  |
+| Accessibility | ✅ [WCAG 2.2 AA][gestalt a11y]  | ✅ [WCAG 2.1 AA][polaris a11y] | ✅ [WCAG 2.2 AA][carbon a11y] | ✅ [Ref][joy-ui a11y] |  |  |  |  |  |
 | Design Principle | ✅ [Ref][gestalt dp] | ✅ [Ref][polaris dp] | ✅ [Ref][carbon dp] |  |  |  |  |  |  |
 | Community | ❌ | ✅ [Ref][polaris com]  | ✅ [Ref][carbon com] | ✅ [Ref][joy-ui com] |  |  |  |  |  |
 | Issues Closed 2024 | | 277 [Ref][polaris issue] | 631 [Ref][carbon issue] | 496 [Ref][joy-ui issue] |  |  |  |  |  |
