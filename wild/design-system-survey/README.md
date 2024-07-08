@@ -1,19 +1,19 @@
 |  | [gestalt][gestalt] | [polaris][polaris] | [carbon][carbon] | [joy-ui][joy-ui] | [primer][primer] | [atlassian][atlassian] | [fluent-ui][fluent-ui] | [chakra-ui][chakra-ui] | [grommet][grommet] |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Owner | Pinterest | Shopify | IBM | MUI | GitHub | Atlassian | Microsoft | Community | Community |
-| Licence | Apache-2.0 | ❌ [Ref][polaris lic] | Apache-2.0 | MIT | MIT |  |  |  |  |
-| Styling | CSS module | CSS module | SCSS | CSS-in-JS | CSS-in-JS |  |  |  |  |
-| Styling Performance | ✅ Plain CSS | ✅ Plain CSS | ✅ Plain CSS | ⚠️ [Ref][joy-ui perf] | ❌ [Ref][primer perf] |  |  |  |  |
-| Types | ✅ | ✅ | ✅ | ✅ | ✅ |  |  |  |  |
-| Figma Kit | ❌ [Ref][gestalt fk] | ✅ [Ref][polaris fk] | ✅ [Ref][carbon fk] | ✅ [Ref][joy-ui fk] | ✅ [Ref][primer fk] |  |  |  |  |
-| RWD | ✅ | ✅ | ✅ | ✅ | ✅ |  |  |  |  |
-| Data Visualization | ✅ [Ref][gestalt ds] | ❌ | ✅ [Ref][carbon ds] | ❌ | ❌ |  |  |  |  |
-| Documentation | ✅ [Ref][gestalt doc] | ✅ [Ref][polaris doc] | ✅ [Ref][carbon doc] | ✅ [Ref][joy-ui doc] | ✅ [Ref][primer doc] |  |  |  |  |
-| Accessibility | ✅ [WCAG 2.2 AA][gestalt a11y]  | ✅ [WCAG 2.1 AA][polaris a11y] | ✅ [WCAG 2.2 AA][carbon a11y] | ✅ [Ref][joy-ui a11y] | ✅ [WCAG 2.1 AA][primer a11y] |  |  |  |  |
-| Design Principle | ✅ [Ref][gestalt dp] | ✅ [Ref][polaris dp] | ✅ [Ref][carbon dp] |  | ✅ [Ref][primer dp] |  |  |  |  |
-| Community | ❌ | ✅ [Ref][polaris com]  | ✅ [Ref][carbon com] | ✅ [Ref][joy-ui com] | ✅ [Ref][primer com] |  |  |  |  |
+| Licence | Apache-2.0 | ❌ [Ref][polaris lic] | Apache-2.0 | MIT | MIT | Apache-2.0 |  |  |  |
+| Styling | CSS module | CSS module | SCSS | CSS-in-JS | CSS-in-JS | CSS-in-JS |  |  |  |
+| Styling Performance | ✅ Plain CSS | ✅ Plain CSS | ✅ Plain CSS | ⚠️ [Ref][joy-ui perf] | ❌ [Ref][primer perf] | ❌ |  |  |  |
+| Types | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |  |  |  |
+| Figma Kit | ❌ [Ref][gestalt fk] | ✅ [Ref][polaris fk] | ✅ [Ref][carbon fk] | ✅ [Ref][joy-ui fk] | ✅ [Ref][primer fk] | ✅ [Ref][atlassian fk] |  |  |  |
+| RWD | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |  |  |  |
+| Data Visualization | ✅ [Ref][gestalt ds] | ❌ | ✅ [Ref][carbon ds] | ❌ | ❌ | ❌ |  |  |  |
+| Documentation | ✅ [Ref][gestalt doc] | ✅ [Ref][polaris doc] | ✅ [Ref][carbon doc] | ✅ [Ref][joy-ui doc] | ✅ [Ref][primer doc] | ✅ [Ref][atlassian doc] |  |  |  |
+| Accessibility | ✅ [WCAG 2.2 AA][gestalt a11y]  | ✅ [WCAG 2.1 AA][polaris a11y] | ✅ [WCAG 2.2 AA][carbon a11y] | ✅ [Ref][joy-ui a11y] | ✅ [WCAG 2.1 AA][primer a11y] | ✅ [WCAG 2.2 AA][atlassian a11y] |  |  |  |
+| Design Principle | ✅ [Ref][gestalt dp] | ✅ [Ref][polaris dp] | ✅ [Ref][carbon dp] |  | ✅ [Ref][primer dp] | ✅ [Ref][atlassian dp] |  |  |  |
+| Community | ❌ | ✅ [Ref][polaris com]  | ✅ [Ref][carbon com] | ✅ [Ref][joy-ui com] | ✅ [Ref][primer com] | ❌ |  |  |  |
 | Issues Closed 2024 | | 277 [Ref][polaris issue] | 631 [Ref][carbon issue] | 496 [Ref][joy-ui issue] | 88 [Ref][primer issue] |  |  |  |  |
-| Platforms | Web, IOS, Andriod | Web | Web | Web | Web |  |  |  |  |
+| Platforms | Web, IOS, Andriod | Web | Web | Web | Web | Web |  |  |  |
 | Open for Contribution | ⚠️ Limited | ✅ [Ref][polaris con] | ✅ [Ref][carbon con] | ✅ [Ref][joy-ui con] | ✅ [Ref][primer con] | ❌ [Ref][atlassian con] |  |  |  |
 
 
@@ -75,6 +75,10 @@
 
 <!-- atlassian -->
 [atlassian]: https://bitbucket.org/atlassian/atlassian-frontend-mirror/src/master/
+[atlassian fk]: https://atlassian.design/resources/figma-library
+[atlassian doc]: https://atlassian.design/components/
+[atlassian a11y]: https://atlassian.design/foundations/accessibility
+[atlassian dp]: https://atlassian.design/foundations/
 [atlassian con]: https://atlassian.design/resources/contribution
 
 <!-- fluent-ui -->
