@@ -1,20 +1,20 @@
 |  | [gestalt][gestalt] | [polaris][polaris] | [carbon][carbon] | [joy-ui][joy-ui] | [primer][primer] | [atlassian][atlassian] | [fluent-ui][fluent-ui] | [chakra-ui][chakra-ui] | [grommet][grommet] |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Owner | Pinterest | Shopify | IBM | MUI | GitHub | Atlassian | Microsoft | Community | Community |
-| Licence | Apache-2.0 | ❌ [Ref][polaris lic] | Apache-2.0 | MIT | MIT | Apache-2.0 | MIT |  |  |
-| Styling | CSS module | CSS module | SCSS | CSS-in-JS | CSS-in-JS | CSS-in-JS | CSS module |  |  |
-| Styling Performance | ✅ Plain CSS | ✅ Plain CSS | ✅ Plain CSS | ⚠️ [Ref][joy-ui perf] | ❌ [Ref][primer perf] | ❌ | ✅ Plain CSS |  |  |
-| Types | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |  |  |
-| Figma Kit | ❌ [Ref][gestalt fk] | ✅ [Ref][polaris fk] | ✅ [Ref][carbon fk] | ✅ [Ref][joy-ui fk] | ✅ [Ref][primer fk] | ✅ [Ref][atlassian fk] | ✅ [Ref][fluent-ui fk] |  |  |
-| RWD | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |  |  |
-| Data Visualization | ✅ [Ref][gestalt ds] | ❌ | ✅ [Ref][carbon ds] | ❌ | ❌ | ❌ | ❌ |  |  |
-| Documentation | ✅ [Ref][gestalt doc] | ✅ [Ref][polaris doc] | ✅ [Ref][carbon doc] | ✅ [Ref][joy-ui doc] | ✅ [Ref][primer doc] | ✅ [Ref][atlassian doc] | ✅ [Ref][fluent-ui doc] |  |  |
-| Accessibility | ✅ [WCAG 2.2 AA][gestalt a11y]  | ✅ [WCAG 2.1 AA][polaris a11y] | ✅ [WCAG 2.2 AA][carbon a11y] | ✅ [Ref][joy-ui a11y] | ✅ [WCAG 2.1 AA][primer a11y] | ✅ [WCAG 2.2 AA][atlassian a11y] | ✅ [WCAG 2.1 AA][fluent-ui a11y] |  |  |
-| Design Principle | ✅ [Ref][gestalt dp] | ✅ [Ref][polaris dp] | ✅ [Ref][carbon dp] |  | ✅ [Ref][primer dp] | ✅ [Ref][atlassian dp] | ✅ [Ref][fluent-ui dp] |  |  |
-| Community | ❌ | ✅ [Ref][polaris com]  | ✅ [Ref][carbon com] | ✅ [Ref][joy-ui com] | ✅ [Ref][primer com] | ❌ | ✅ [Ref][fluent-ui com] |  |  |
-| Issues Closed 2024 | | 277 [Ref][polaris issue] | 631 [Ref][carbon issue] | 496 [Ref][joy-ui issue] | 88 [Ref][primer issue] |  | 696 [Ref][fluent-ui issue] |  |  |
-| Platforms | Web, IOS, Andriod | Web | Web | Web | Web | Web | Web |  |  |
-| Open for Contribution | ⚠️ Limited | ✅ [Ref][polaris con] | ✅ [Ref][carbon con] | ✅ [Ref][joy-ui con] | ✅ [Ref][primer con] | ❌ [Ref][atlassian con] | ✅ [Ref][fluent-ui con] |  |  |
+| Licence | Apache-2.0 | ❌ [Ref][polaris lic] | Apache-2.0 | MIT | MIT | Apache-2.0 | MIT | MIT |  |
+| Styling | CSS module | CSS module | SCSS | CSS-in-JS | CSS-in-JS | CSS-in-JS | CSS module | CSS-in-JS |  |
+| Styling Performance | ✅ Plain CSS | ✅ Plain CSS | ✅ Plain CSS | ⚠️ [Ref][joy-ui perf] | ❌ [Ref][primer perf] | ❌ | ✅ Plain CSS | ❌ [Ref][chakra-ui perf] |  |
+| Types | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |  |
+| Figma Kit | ❌ [Ref][gestalt fk] | ✅ [Ref][polaris fk] | ✅ [Ref][carbon fk] | ✅ [Ref][joy-ui fk] | ✅ [Ref][primer fk] | ✅ [Ref][atlassian fk] | ✅ [Ref][fluent-ui fk] | ✅ [Ref][chakra-ui fk] |  |
+| RWD | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |  |
+| Data Visualization | ✅ [Ref][gestalt ds] | ❌ | ✅ [Ref][carbon ds] | ❌ | ❌ | ❌ | ❌ | ❌ |  |
+| Documentation | ✅ [Ref][gestalt doc] | ✅ [Ref][polaris doc] | ✅ [Ref][carbon doc] | ✅ [Ref][joy-ui doc] | ✅ [Ref][primer doc] | ✅ [Ref][atlassian doc] | ✅ [Ref][fluent-ui doc] | ✅ [Ref][chakra-ui doc] |  |
+| Accessibility | ✅ [WCAG 2.2 AA][gestalt a11y]  | ✅ [WCAG 2.1 AA][polaris a11y] | ✅ [WCAG 2.2 AA][carbon a11y] | ✅ [WAI-ARIA 1.2][joy-ui a11y] | ✅ [WCAG 2.1 AA][primer a11y] | ✅ [WCAG 2.2 AA][atlassian a11y] | ✅ [WCAG 2.1 AA][fluent-ui a11y] | |  |
+| Design Principle | ✅ [Ref][gestalt dp] | ✅ [Ref][polaris dp] | ✅ [Ref][carbon dp] |  | ✅ [Ref][primer dp] | ✅ [Ref][atlassian dp] | ✅ [Ref][fluent-ui dp] | ✅ [Ref][chakra-ui dp] |  |
+| Community | ❌ | ✅ [Ref][polaris com]  | ✅ [Ref][carbon com] | ✅ [Ref][joy-ui com] | ✅ [Ref][primer com] | ❌ | ✅ [Ref][fluent-ui com] | ✅ [Ref][chakra-ui com] |  |
+| Issues Closed 2024 | | 277 [Ref][polaris issue] | 631 [Ref][carbon issue] | 496 [Ref][joy-ui issue] | 88 [Ref][primer issue] |  | 696 [Ref][fluent-ui issue] | 99 [Ref][chakra-ui issue] |  |
+| Platforms | Web, IOS, Andriod | Web | Web | Web | Web | Web | Web | Web |  |
+| Open for Contribution | ⚠️ Limited | ✅ [Ref][polaris con] | ✅ [Ref][carbon con] | ✅ [Ref][joy-ui con] | ✅ [Ref][primer con] | ❌ [Ref][atlassian con] | ✅ [Ref][fluent-ui con] | ✅ [Ref][chakra-ui con] |  |
 
 
 ## Zero-runtime CSS-in-JS 
@@ -93,6 +93,13 @@
 
 <!-- chakra-ui -->
 [chakra-ui]: https://github.com/chakra-ui/chakra-ui
+[chakra-ui perf]: https://github.com/chakra-ui/chakra-ui/issues/7180
+[chakra-ui fk]: https://v2.chakra-ui.com/figma/ui-kit
+[chakra-ui doc]: https://v2.chakra-ui.com/docs/components
+[chakra-ui com]: https://discord.com/invite/chakra-ui
+[chakra-ui dp]: https://v2.chakra-ui.com/getting-started/principles
+[chakra-ui issue]: https://github.com/chakra-ui/chakra-ui/issues?q=is%3Aissue+closed%3A%3E2024-01-01+
+[chakra-ui con]: https://github.com/chakra-ui/chakra-ui/blob/main/CONTRIBUTING.md
 
 <!-- grommet -->
 [grommet]: https://github.com/grommet/grommet
