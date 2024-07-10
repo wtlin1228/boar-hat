@@ -110,7 +110,7 @@
 [grommet con]: https://github.com/grommet/grommet/blob/master/CONTRIBUTING.md
 
 <!-- flowbite -->
-[flowbite]: https://ui.shadcn.com/examples/mail
+[flowbite]: https://github.com/themesberg/flowbite
 [flowbite fk]: https://flowbite.com/figma/
 [flowbite doc]: https://flowbite.com/docs/getting-started/introduction/
 [flowbite ds]: https://flowbite.com/docs/plugins/charts/
