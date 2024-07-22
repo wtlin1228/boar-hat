@@ -22,6 +22,83 @@
 - [\[RFC\] Zero-runtime CSS-in-JS implementation #38137](https://github.com/mui/material-ui/issues/38137)
 - [siddharthkp/css-out-js](https://github.com/siddharthkp/css-out-js)
 
+# [Flowbite React](https://flowbite-react.com/)
+
+- 🚨 Have serious performance issue: https://github.com/themesberg/flowbite-react/issues/1447
+- 😋 Easy to customize component, but need to look into the source code to find out which parts of the theme will be applied to which part of the component
+
+    ```
+    The default structure for button:
+
+    <button> <- base, 
+                disabled, 
+                color, 
+                gradientDuoTone, 
+                gradient, 
+                outline.color, 
+                pill, 
+                fullSized
+      <span> <- inner.base, 
+                outline, 
+                outline.pill, 
+                size, 
+                inner.outline, 
+                isProcessing, 
+                inner.isProcessingPadding, 
+                inner.position
+        <span></span> <- spinnerSlot, 
+                         spinnerLeftPosition
+        <span></span> <- label
+      </span>
+    </button>
+    ```
+
+    ```tsx
+    import * as React from "react";
+    import type { CustomFlowbiteTheme } from "flowbite-react";
+    import { Button as FlowbiteButton, Spinner } from "flowbite-react";
+
+    const customTheme: CustomFlowbiteTheme["button"] = {
+    color: {
+        rose: "bg-rose-500 hover:bg-rose-600", // "rose" is a new variant
+    },
+    outline: {
+        color: {
+            rose: "border border-8 border-rose-300 hover:border-rose-800",
+        },
+    },
+    label: "text-rose-500 group-hover:text-white",
+    };
+
+    export function Button() {
+        const [isProcessing, setIsProcessing] = React.useState(false);
+
+        return (
+            <FlowbiteButton
+                theme={customTheme}
+                label="Click me"
+                color="rose"
+                fullSized
+                isProcessing={isProcessing}
+                processingLabel="Processing..."
+                processingSpinner={<Spinner size="lg" />}
+                outline
+                pill
+                size="lg"
+                onClick={() => {
+                    setIsProcessing(!isProcessing);
+                }}
+            />
+        );
+    }
+    ```
+
+
+
+
+
+
+
 <!-- gestalt -->
 [gestalt]: https://github.com/pinterest/gestalt
 [gestalt fk]: https://gestalt.pinterest.systems/get_started/designers#Private-Figma-plugins
