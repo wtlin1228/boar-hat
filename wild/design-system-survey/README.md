@@ -27,31 +27,36 @@
 - 🚨 Have serious performance issue: https://github.com/themesberg/flowbite-react/issues/1447
 - ⚙️ More like a tool for building design system
 - 🧰 Have many handy blocks ready to be copied and pasted: https://flowbite.com/blocks/
-- 😋 Easy to customize component, but need to look into the source code to find out which parts of the theme will be applied to which part of the component
+- 😋 Flexible to customize component, but not so easy since we need to look into the source code to find out which parts of the theme will be applied to which part of the component
 
     ```
     The default structure for button:
 
     <button> <- base, 
-                disabled, 
-                color, 
-                gradientDuoTone, 
-                gradient, 
-                outline.color, 
-                pill, 
-                fullSized
-      <span> <- inner.base, 
-                outline, 
-                outline.pill, 
-                size, 
-                inner.outline, 
-                isProcessing, 
-                inner.isProcessingPadding, 
-                inner.position
-        <span></span> <- spinnerSlot, 
-                         spinnerLeftPosition
-        <span></span> <- label
-      </span>
+    |           disabled, 
+    |           color, 
+    |           gradientDuoTone, 
+    |           gradient, 
+    |           outline.color, 
+    |           pill, 
+    |           fullSized
+    |
+    |   <span> <- inner.base, 
+    |   |         outline, 
+    |   |         outline.pill, 
+    |   |         size, 
+    |   |         inner.outline, 
+    |   |         isProcessing, 
+    |   |         inner.isProcessingPadding, 
+    |   |         inner.position
+    |   |
+    |   |   <span></span> <- spinnerSlot, 
+    |   |                    spinnerLeftPosition
+    |   |
+    |   |   <span></span> <- label
+    |   |
+    |   </span>
+    |
     </button>
     ```
 
@@ -61,15 +66,18 @@
     import { Button as FlowbiteButton, Spinner } from "flowbite-react";
 
     const customTheme: CustomFlowbiteTheme["button"] = {
-    color: {
-        rose: "bg-rose-500 hover:bg-rose-600", // "rose" is a new variant
-    },
-    outline: {
         color: {
-            rose: "border border-8 border-rose-300 hover:border-rose-800",
+            rose: "bg-rose-500 hover:bg-rose-600", // "rose" is a new variant
         },
-    },
-    label: "text-rose-500 group-hover:text-white",
+        outline: {
+            color: {
+                // need to look into the source code to find out how to customize
+                // the outline color for our new color variant "rose"
+                rose: "border border-8 border-rose-300 hover:border-rose-800",
+            },
+        },
+        // label style here is tightly bound to the "rose" variant 
+        label: "text-rose-500 group-hover:text-white",
     };
 
     export function Button() {
