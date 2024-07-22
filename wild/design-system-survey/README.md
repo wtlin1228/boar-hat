@@ -26,7 +26,7 @@
 | Figma Kit | ❌ [Ref][gestalt fk] | ✅ [Ref][polaris fk] | ✅ [Ref][carbon fk] | ✅ [Ref][joy-ui fk] | ✅ [Ref][primer fk] | ✅ [Ref][atlassian fk] | ✅ [Ref][fluent-ui fk] | ✅ [Ref][chakra-ui fk] | ❌ | ✅ [Ref][flowbite fk] | ✅ [Ref][shadcn-ui fk] |
 | RWD | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Documentation | ✅ [Ref][gestalt doc] | ✅ [Ref][polaris doc] | ✅ [Ref][carbon doc] | ✅ [Ref][joy-ui doc] | ✅ [Ref][primer doc] | ✅ [Ref][atlassian doc] | ✅ [Ref][fluent-ui doc] | ✅ [Ref][chakra-ui doc] | ✅ [Ref][grommet doc] | ✅ [Ref][flowbite doc] | ✅ [Ref][shadcn-ui doc] |
-| Accessibility | ✅ [WCAG 2.2 AA][gestalt a11y]  | ✅ [WCAG 2.1 AA][polaris a11y] | ✅ [WCAG 2.2 AA][carbon a11y] | ✅ [WAI-ARIA 1.2][joy-ui a11y] | ✅ [WCAG 2.1 AA][primer a11y] | ✅ [WCAG 2.2 AA][atlassian a11y] | ✅ [WCAG 2.1 AA][fluent-ui a11y] | ﹖ | ﹖ | ﹖ | ﹖ |
+| Accessibility | ✅ [WCAG 2.2 AA][gestalt a11y]  | ✅ [WCAG 2.1 AA][polaris a11y] | ✅ [WCAG 2.2 AA][carbon a11y] | ✅ [WAI-ARIA 1.2][joy-ui a11y] | ✅ [WCAG 2.1 AA][primer a11y] | ✅ [WCAG 2.2 AA][atlassian a11y] | ✅ [WCAG 2.1 AA][fluent-ui a11y] | ﹖ | ﹖ | ﹖ | ✅ [Ref][shadcn-ui a11y] |
 | Design Principle | ✅ [Ref][gestalt dp] | ✅ [Ref][polaris dp] | ✅ [Ref][carbon dp] | ﹖ | ✅ [Ref][primer dp] | ✅ [Ref][atlassian dp] | ✅ [Ref][fluent-ui dp] | ✅ [Ref][chakra-ui dp] | ﹖ | ❌ | ❌ |
 | Community | ❌ | ✅ [Ref][polaris com]  | ✅ [Ref][carbon com] | ✅ [Ref][joy-ui com] | ✅ [Ref][primer com] | ❌ | ✅ [Ref][fluent-ui com] | ✅ [Ref][chakra-ui com] | ✅ [Ref][grommet com] | ✅ [Ref][fluent-ui com] | ✅ [Ref][shadcn-ui com] |
 | Issues Closed 2024 | ﹖ | 277 [Ref][polaris issue] | 631 [Ref][carbon issue] | 496 [Ref][joy-ui issue] | 88 [Ref][primer issue] | ﹖ | 696 [Ref][fluent-ui issue] | 99 [Ref][chakra-ui issue] | 57 [Ref][grommet issue] | 122 [Ref][flowbite issue] | 1199 [Ref][shadcn-ui issue] |
@@ -133,7 +133,7 @@
 
 # [shadcn/ui][shadcn-ui]
 
-- 🍃 Tailwind based
+- 🍃 Tailwind + Radix Primitives
 - 🧰 Have many handy blocks ready to be copied and pasted: https://ui.shadcn.com/blocks
 - 💡 Not a component library, it's a reference to build our own component libraries
 - 🍺 Designed with `class-variance-authority`: https://cva.style/docs
@@ -311,6 +311,7 @@
 [shadcn-ui]: https://github.com/shadcn-ui/ui
 [shadcn-ui fk]: https://ui.shadcn.com/docs/figma
 [shadcn-ui doc]: https://ui.shadcn.com/docs
+[shadcn-ui a11y]: https://www.radix-ui.com/primitives/docs/overview/accessibility
 [shadcn-ui ds]: https://ui.shadcn.com/charts
 [shadcn-ui com]: https://github.com/shadcn-ui/ui/discussions
 [shadcn-ui issue]: https://github.com/shadcn-ui/ui/issues?q=is%3Aissue+closed%3A%3E2024-01-01+
