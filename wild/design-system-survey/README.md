@@ -25,6 +25,8 @@
 # [Flowbite React](https://flowbite-react.com/)
 
 - 🚨 Have serious performance issue: https://github.com/themesberg/flowbite-react/issues/1447
+- ⚙️ More like a tool for building design system
+- 🧰 Have many handy blocks ready to be copied and pasted: https://flowbite.com/blocks/
 - 😋 Easy to customize component, but need to look into the source code to find out which parts of the theme will be applied to which part of the component
 
     ```
