@@ -51,6 +51,7 @@
 # [flowbite][flowbite]
 
 - 🚨 Have serious performance issue: https://github.com/themesberg/flowbite-react/issues/1447
+- 🍃 Tailwind based
 - ⚙️ More like a tool for building design system
 - 🧰 Have many handy blocks ready to be copied and pasted: https://flowbite.com/blocks/
 - 😋 Flexible to customize component, but not so easy since we need to look into the source code to find out which parts of the theme will be applied to which part of the component
@@ -132,6 +133,7 @@
 
 # [shadcn/ui][shadcn-ui]
 
+- 🍃 Tailwind based
 - 🧰 Have many handy blocks ready to be copied and pasted: https://ui.shadcn.com/blocks
 - 💡 Not a component library, it's a reference to build our own component libraries
 - 🍺 Designed with `class-variance-authority`: https://cva.style/docs
