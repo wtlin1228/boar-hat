@@ -1,28 +1,54 @@
+# Screening Interview for Design Systems
+
+- Owner: Maintained by some big company could be expected to be more stable, performant and well designed.
+- License: Can be used commercially?
+- Styling: Pure CSS is more performant than CSS-in-JS.
+- Styling Performance: Critical for building large applications.
+- Types: Easier to maintain, migrate and develop.
+- Figma Kit: Easier to design and make it possible to leverage modern tools like visual-copilot.
+- RWD: It’s baseline for modern applications.
+- Documentation: Good docs bring good developer experience and productivity.
+- Accessibility: It's a requirement in some countries.
+- Design Principle: Good design principle brings good designer experience.
+- Community: Where to discuss, propose something and ask questions.
+- Issues Closed 2024: Is it still actively maintained in 2024?
+- Data Visualization: It’s nice to have.
+- Platforms: Maybe someday we wanna have our brand identification cross-platform.
+- Open for Contribution: As we are getting more familiar with it, we might wanna contribute back and help fixing some bugs.
+
 |  | [gestalt][gestalt] | [polaris][polaris] | [carbon][carbon] | [joy-ui][joy-ui] | [primer][primer] | [atlassian][atlassian] | [fluent-ui][fluent-ui] | [chakra-ui][chakra-ui] | [grommet][grommet] | [flowbite][flowbite] | [shadcn-ui][shadcn-ui] |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Owner | Pinterest | Shopify | IBM | MUI | GitHub | Atlassian | Microsoft | Community | Community | Themesberg | Community |
-| Licence | Apache-2.0 | ❌ [Ref][polaris lic] | Apache-2.0 | MIT | MIT | Apache-2.0 | MIT | MIT | Apache-2.0 | MIT | MIT |
+| License | Apache-2.0 | ❌ [Ref][polaris lic] | Apache-2.0 | MIT | MIT | Apache-2.0 | MIT | MIT | Apache-2.0 | MIT | MIT |
 | Styling | CSS module | CSS module | SCSS | CSS-in-JS | CSS-in-JS | CSS-in-JS | CSS module | CSS-in-JS | CSS-in-JS | Tailwind CSS | Tailwind CSS |
 | Styling Performance | ✅ Plain CSS | ✅ Plain CSS | ✅ Plain CSS | ⚠️ [Ref][joy-ui perf] | ❌ [Ref][primer perf] | ❌ | ✅ Plain CSS | ❌ [Ref][chakra-ui perf] | ❌ | ✅ Plain CSS | ✅ Plain CSS |
 | Types | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Figma Kit | ❌ [Ref][gestalt fk] | ✅ [Ref][polaris fk] | ✅ [Ref][carbon fk] | ✅ [Ref][joy-ui fk] | ✅ [Ref][primer fk] | ✅ [Ref][atlassian fk] | ✅ [Ref][fluent-ui fk] | ✅ [Ref][chakra-ui fk] | ❌ | ✅ [Ref][flowbite fk] | ✅ [Ref][shadcn-ui fk] |
 | RWD | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Data Visualization | ✅ [Ref][gestalt ds] | ❌ | ✅ [Ref][carbon ds] | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ [Ref][grommet ds] | ✅ [Ref][flowbite ds] | ✅ [Ref][shadcn-ui ds] |
 | Documentation | ✅ [Ref][gestalt doc] | ✅ [Ref][polaris doc] | ✅ [Ref][carbon doc] | ✅ [Ref][joy-ui doc] | ✅ [Ref][primer doc] | ✅ [Ref][atlassian doc] | ✅ [Ref][fluent-ui doc] | ✅ [Ref][chakra-ui doc] | ✅ [Ref][grommet doc] | ✅ [Ref][flowbite doc] | ✅ [Ref][shadcn-ui doc] |
 | Accessibility | ✅ [WCAG 2.2 AA][gestalt a11y]  | ✅ [WCAG 2.1 AA][polaris a11y] | ✅ [WCAG 2.2 AA][carbon a11y] | ✅ [WAI-ARIA 1.2][joy-ui a11y] | ✅ [WCAG 2.1 AA][primer a11y] | ✅ [WCAG 2.2 AA][atlassian a11y] | ✅ [WCAG 2.1 AA][fluent-ui a11y] | ﹖ | ﹖ | ﹖ | ﹖ |
 | Design Principle | ✅ [Ref][gestalt dp] | ✅ [Ref][polaris dp] | ✅ [Ref][carbon dp] | ﹖ | ✅ [Ref][primer dp] | ✅ [Ref][atlassian dp] | ✅ [Ref][fluent-ui dp] | ✅ [Ref][chakra-ui dp] | ﹖ | ❌ | ❌ |
 | Community | ❌ | ✅ [Ref][polaris com]  | ✅ [Ref][carbon com] | ✅ [Ref][joy-ui com] | ✅ [Ref][primer com] | ❌ | ✅ [Ref][fluent-ui com] | ✅ [Ref][chakra-ui com] | ✅ [Ref][grommet com] | ✅ [Ref][fluent-ui com] | ✅ [Ref][shadcn-ui com] |
 | Issues Closed 2024 | ﹖ | 277 [Ref][polaris issue] | 631 [Ref][carbon issue] | 496 [Ref][joy-ui issue] | 88 [Ref][primer issue] | ﹖ | 696 [Ref][fluent-ui issue] | 99 [Ref][chakra-ui issue] | 57 [Ref][grommet issue] | 122 [Ref][flowbite issue] | 1199 [Ref][shadcn-ui issue] |
+| Data Visualization | ✅ [Ref][gestalt ds] | ❌ | ✅ [Ref][carbon ds] | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ [Ref][grommet ds] | ✅ [Ref][flowbite ds] | ✅ [Ref][shadcn-ui ds] |
 | Platforms | Web, IOS, Andriod | Web | Web | Web | Web | Web | Web | Web | Web | Web | Web |
 | Open for Contribution | ⚠️ Limited | ✅ [Ref][polaris con] | ✅ [Ref][carbon con] | ✅ [Ref][joy-ui con] | ✅ [Ref][primer con] | ❌ [Ref][atlassian con] | ✅ [Ref][fluent-ui con] | ✅ [Ref][chakra-ui con] | ✅ [Ref][grommet con] | ✅ [Ref][flowbite con] | ✅ [Ref][shadcn-ui con] |
 
+## Screening Result
 
-## Zero-runtime CSS-in-JS 
+- gestalt: ❌ Figma Kit
+- polaris: ❌ License
+- carbon: ✅
+- joy-ui: ✅
+- primer: ❌ Styling Performance
+- atlassian: ❌ Styling Performance
+- fluent-ui: ✅
+- chakra-ui: ❌ Styling Performance
+- grommet: ❌ Styling Performance
+- flowbite: ✅
+- shadcn-ui: ✅
 
-- [\[RFC\] Zero-runtime CSS-in-JS implementation #38137](https://github.com/mui/material-ui/issues/38137)
-- [siddharthkp/css-out-js](https://github.com/siddharthkp/css-out-js)
-
-# [Flowbite React](https://flowbite-react.com/)
+# [flowbite][flowbite]
 
 - 🚨 Have serious performance issue: https://github.com/themesberg/flowbite-react/issues/1447
 - ⚙️ More like a tool for building design system
@@ -104,8 +130,18 @@
     ```
 
 
+# [shadcn/ui][shadcn-ui]
 
 
+
+
+
+# Notes
+
+## Zero-runtime CSS-in-JS 
+
+- [\[RFC\] Zero-runtime CSS-in-JS implementation #38137](https://github.com/mui/material-ui/issues/38137)
+- [siddharthkp/css-out-js](https://github.com/siddharthkp/css-out-js)
 
 
 
