@@ -199,7 +199,44 @@
 
 
 
-# Notes
+# Performance Discussion of CSS-in-JS
+
+```jsx
+function Backdrop({ opacity, color, children }) {
+    return (
+        <Wrapper opacity={opacity} color={color}>
+            {children}
+        </Wrapper>
+    )
+}
+const Wrapper = styled.div`
+    opacity: ${p => p.opacity};
+    background-color: ${p => p.color};
+`;
+```
+
+Whenever these values change, `styled-components` will need to re-generate the class and re-inject it into the document's `<head>`, which can be a performance liability in certain cases (eg. doing JS animations).
+
+Here's another way to solve the problem, using CSS variables:
+
+```jsx
+function Backdrop({ opacity, color, children }) {
+    return (
+        <Wrapper
+            style={{
+                '--color': color,
+                '--opacity': opacity,
+            }}
+        >
+            {children}
+        </Wrapper>
+    )
+}
+const Wrapper = styled.div`
+    opacity: var(--opacity, 0.75);
+    background-color: var(--color, var(--color-gray-900));
+`;
+```
 
 ## Zero-runtime CSS-in-JS 
 
