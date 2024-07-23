@@ -215,7 +215,7 @@ const Wrapper = styled.div`
 `;
 ```
 
-Whenever these values change, `styled-components` will need to re-generate the class and re-inject it into the document's `<head>`, which can be a performance liability in certain cases (eg. doing JS animations).
+Whenever these values change, `styled-components` will need to re-generate the class and re-inject it into the document's `styleSheets`, which can be a performance liability in certain cases (eg. doing JS animations).
 
 Here's another way to solve the problem, using CSS variables:
 
