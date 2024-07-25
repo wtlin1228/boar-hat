@@ -48,6 +48,12 @@
 - flowbite: ✅
 - shadcn-ui: ✅
 
+# [fluent-ui][fluent-ui]
+
+- Trigger Pattern with React.cloneElement()
+- useContextSelector()
+- controlled / uncontrolled components, `onChange: (e, data) => { setData(data) }`
+
 # [flowbite][flowbite]
 
 - 🚨 Have serious performance issue: https://github.com/themesberg/flowbite-react/issues/1447
@@ -197,9 +203,93 @@
     export { Button, buttonVariants };
     ```
 
+# Styling
 
+A design system provides the base styles, but sometimes we still want to override some components.
 
-# Performance Discussion of CSS-in-JS
+```css
+/* base-styles.css */
+.ui.vertical.menu {
+    color: #ccc;
+    margin: 0;
+}
+
+/* overrides.css */
+.menu { margin: 5px; }    /* ❌, not enough specific */
+.ui.menu { margin: 5px; } /* ❌, not enough specific */
+
+.ui.vertical.menu { margin: 5px; } /* ✅, that works */
+#foo-menu { margin: 5px; }         /* ✅, that works, too */
+```
+
+CSS needs help from more high-level tools and techniques, such as CSS-in-JS, or predecessors to make it closer to a programmer language.
+
+## BEM (Block Element Modifier)
+
+BEM is a set of rules for naming CSS classes, but everything is a single class and nothing is nested. It's recommended to avoid combine selectors, and as a design system, we can follow this rule. The most important thing about this approach is to ensure that developers will follow it. We can use some lint rules to enforce that, but that's not 100% guaranteed. And also there's no guarantee that a developer from team A won't use the same name from team B.
+
+```css
+.button {
+    color: #ccc;
+}
+.button.primary {
+    color: #fff;
+}
+
+/* BEM approach */
+.button {
+    color: #ccc;
+}
+.button--primary {
+    color: #fff;
+}
+```
+
+## CSS modules
+
+CSS modules solves the naming problem by assigning random name through CSS class. All class names and animation names are scoped locally by default. CSS modules perfectly solve the naming problem but unfortunately not the specificity problem. So the common practice is to combine the CSS modules and BEM. This works for simple cases. For more complex ones, it does not, as selectors could be combined.
+
+```css
+/* "MODULE" represents hash produced */
+/* by CSS modules */
+
+/* Combined selectors */
+.MODULE__button.MODULE__primary {
+    color: #fff;
+}
+
+/* ⬇️ To a single selector with BEM */
+.MODULE__button--primary {
+    color: #fff;
+}
+```
+
+## CSS-in-JS
+
+This is where CSS-in-JS libraries like `Emotion` enter the game, to offer solutions for specificity problems. Well, at least a few of them. Emotion is blazing fast and very close to plain CSS in terms of performance. So, why cannot we use it?
+
+1. It does a significant amount of runtime work.
+2. It outputs monolithic classes.
+
+```css
+.base {
+    color: red;
+    font-size: 32px;
+}
+.overrides {
+    color: blue;
+}
+
+/* merge to */
+.base-n-overrides {
+    color: red;
+    font-size: 32px;
+    /* 👇 wins based on order */
+    color: blue;
+}
+```
+
+### a trick to improve performance by CSS variables
 
 ```jsx
 function Backdrop({ opacity, color, children }) {
@@ -242,6 +332,8 @@ const Wrapper = styled.div`
 
 - [\[RFC\] Zero-runtime CSS-in-JS implementation #38137](https://github.com/mui/material-ui/issues/38137)
 - [siddharthkp/css-out-js](https://github.com/siddharthkp/css-out-js)
+
+
 
 
 
@@ -350,4 +442,5 @@ const Wrapper = styled.div`
 [shadcn-ui com]: https://github.com/shadcn-ui/ui/discussions
 [shadcn-ui issue]: https://github.com/shadcn-ui/ui/issues?q=is%3Aissue+closed%3A%3E2024-01-01+
 [shadcn-ui con]: https://github.com/shadcn-ui/ui/blob/main/CONTRIBUTING.md
+
 
