@@ -328,7 +328,7 @@ const Wrapper = styled.div`
 `;
 ```
 
-This trick is also how to enable color mode without flash: https://leonerd.blog/posts/building-a-react-component-library-part1/#enable-color-mode-with-css-custom-properties
+This trick also enables color mode without flashing: https://leonerd.blog/posts/building-a-react-component-library-part1/#enable-color-mode-with-css-custom-properties
 
 ## Zero-runtime CSS-in-JS 
 
