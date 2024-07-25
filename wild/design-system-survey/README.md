@@ -289,7 +289,7 @@ This is where CSS-in-JS libraries like `Emotion` enter the game, to offer soluti
 }
 ```
 
-### a trick to improve performance by CSS variables
+### CSS-in-JS + CSS variables
 
 ```jsx
 function Backdrop({ opacity, color, children }) {
@@ -327,6 +327,8 @@ const Wrapper = styled.div`
     background-color: var(--color, var(--color-gray-900));
 `;
 ```
+
+This trick is also how to enable color mode without flash: https://leonerd.blog/posts/building-a-react-component-library-part1/#enable-color-mode-with-css-custom-properties
 
 ## Zero-runtime CSS-in-JS 
 
