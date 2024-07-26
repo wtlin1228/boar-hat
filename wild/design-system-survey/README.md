@@ -2,7 +2,7 @@
 
 - Owner: Maintained by some big company could be expected to be more stable, performant and well designed.
 - License: Can be used commercially?
-- Styling: Pure CSS is more performant than CSS-in-JS.
+- Styling: Affect customization, CSS specificity, readability, maintainability, performance, etc.
 - Styling Performance: Critical for building large applications.
 - Types: Easier to maintain, migrate and develop.
 - Figma Kit: Easier to design and make it possible to leverage modern tools like visual-copilot.
@@ -207,6 +207,10 @@
 
 A design system provides the base styles, but sometimes we still want to override some components.
 
+## Static CSS
+
+It's fast, but has CSS specificity issues.
+
 ```css
 /* base-styles.css */
 .ui.vertical.menu {
@@ -330,12 +334,171 @@ const Wrapper = styled.div`
 
 This trick also enables color mode without flashing: https://leonerd.blog/posts/building-a-react-component-library-part1/#enable-color-mode-with-css-custom-properties
 
-## Zero-runtime CSS-in-JS 
+## Atomic CSS
 
-- [\[RFC\] Zero-runtime CSS-in-JS implementation #38137](https://github.com/mui/material-ui/issues/38137)
-- [siddharthkp/css-out-js](https://github.com/siddharthkp/css-out-js)
+A classic example is tailwind: https://tailwindcss.com/
 
+## Zero-runtime CSS-in-JS + Atomic CSS
 
+Combine the benefits of static CSS and CSS-in-JS, so it's fast and has no CSS specificity issues.
+
+- easy to read and maintain
+- CSS extraction
+- merge classes
+
+```js
+const stylesA = {
+    paddingLeft: 'pl-10',
+    color: 'c-ref'
+}
+const styleB = {
+    color: 'c-blue'
+}
+
+/* 1. Merge objects to remove duplicate keys */
+const mergedStyles = {
+    ...stylesA,
+    ...stylesB
+}
+
+/* Get CSS classes */
+const classes = Object.values(
+    mergedStyles
+) // ➡️ ["pl-10", "c-blue"]
+```
+
+### Why is class merging so important?
+
+```css
+.color-blue { color: blue; }
+.color-red { color: red; }
+```
+
+```html
+<span class="red blue">
+    Hello! What color I have? <!-- 🍎 -->
+</span>
+```
+
+Without class merging, the insert order of atomic CSS will affect the style. And in CSS-in-JS world, the insert order is based on the components' render order. So that could cause random behavior, BIG PROBLEM 🚨.
+
+### Why is LVFHA order also important?
+
+Those classes in CSS have the same specificity:
+
+- Link
+- Visited
+- Focus within
+- Focus
+- Focus visible
+- Hover
+- Active
+
+https://codesandbox.io/s/lvfha-puzzle-ihbict
+
+```jsx
+import Frame from "react-frame-component";
+
+export default function App() {
+  return (
+    <div>
+      <p>
+        Both frame render the same CSS, but order of appearance is different.
+      </p>
+
+      <Frame>
+        <style>{`.button:hover { color: red;  }`}</style>
+        <style>{`.button:focus { color: blue; }`}</style>
+
+        <button className="button">Hello, focus & hover me</button>
+      </Frame>
+      <br />
+      <Frame>
+        <style>{`.button:focus { color: blue; }`}</style>
+        <style>{`.button:hover { color: red;  }`}</style>
+
+        <button className="button">Hello, focus & hover me</button>
+      </Frame>
+    </div>
+  );
+}
+```
+
+The solution is to insert these rules into separate style elements (style buckets):
+
+```html
+<!-- Catch all other -->
+<style data-make-styles-bucket="d" />
+<!-- :link -->
+<style data-make-styles-bucket="l" />
+<!-- :visited -->
+<style data-make-styles-bucket="v" />
+<!-- :focus-within -->
+<style data-make-styles-bucket="w" />
+<!-- :focus -->
+<style data-make-styles-bucket="f" />
+<!-- :focus-visible -->
+<style data-make-styles-bucket="i" />
+<!-- :hover -->
+<style data-make-styles-bucket="h" />
+<!-- :active -->
+<style data-make-styles-bucket="a" />
+<!-- @keyframe -->
+<style data-make-styles-bucket="k" />
+<!-- @media, @supports, etc. -->
+<style data-make-styles-bucket="t" />
+```
+
+### Why is shorthand causing problem?
+
+Order of styles inside JavaScript objects is same, but the resulting CSS is different due to rules insertion order 💣
+
+```js
+import css from 'atomic-css-in-js'
+
+const classNameB = css({
+    padding: 5,
+    paddingTop: 10
+})
+
+// 👇 Result
+// .padding { padding: 5px; }
+// .padding-top { padding-top: 10px; }
+```
+
+```js
+import css from 'atomic-css-in-js'
+
+const classNameA = css({
+    paddingTop: 10
+})
+const classNameB = css({
+    padding: 5,
+    paddingTop: 10
+})
+
+// 👇 Result, order is changed
+// .padding-top { padding-top: 10px; }
+// .padding { padding: 5px; }
+```
+
+### What are people working on
+
+- MUI team: 
+    - [Pigment CSS](https://github.com/mui/pigment-css)
+    - [\[RFC\] Zero-runtime CSS-in-JS implementation #38137](https://github.com/mui/material-ui/issues/38137)
+- Github team: 
+    - [Moving on from runtime CSS-in-JS at scale - Siddharth Kshetrapal | JSHeroes 2023](https://www.youtube.com/watch?v=OrIuKl_x0vE)
+    - [siddharthkp/css-out-js](https://github.com/siddharthkp/css-out-js)
+- Chakra team:
+    - [Panda](https://github.com/chakra-ui/panda)
+    - [If you're not okay with runtime CSS-in-JS, use Ark and Panda](https://www.adebayosegun.com/blog/the-future-of-chakra-ui#what-should-i-use-in-my-project:~:text=If%20you%27re%20not%20okay%20with%20runtime%20CSS%2Din%2DJS%2C%20use%20Ark%20and%20Panda)
+- Meta:
+    - [StyleX](https://github.com/facebook/stylex)
+    - [Building the New Facebook with React and Relay | Frank Yan](https://www.youtube.com/watch?v=9JZHodNR184)
+- Microsoft:
+    - [Griffel](https://github.com/microsoft/griffel)
+    - [Fluent UI React Insights: Griffel](https://learn.microsoft.com/en-us/shows/fluent-ui-insights/fluent-ui-insights-griffel)
 
 
 
