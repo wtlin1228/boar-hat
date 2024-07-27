@@ -1,11 +1,11 @@
-use depth_first_search::dfs_all_vertexes;
+use depth_first_search::dfs;
 use std::{collections::HashMap, hash::Hash};
 
-fn topological_sort<'a, Node>(adj: &HashMap<&'a Node, Vec<&'a Node>>) -> Vec<&'a Node>
+fn topological_sort<'a, Node>(adj: &HashMap<&'a Node, Vec<&'a Node>>, s: &'a Node) -> Vec<&'a Node>
 where
     Node: PartialEq + Eq + Hash,
 {
-    let (_, mut order) = dfs_all_vertexes(adj);
+    let (_, mut order) = dfs(adj, s, None, None);
     order.reverse();
     order
 }
@@ -18,7 +18,7 @@ pub fn dag_relaxation<'a, Node>(
 where
     Node: PartialEq + Eq + Hash,
 {
-    let topological_order: Vec<&Node> = topological_sort(adj);
+    let topological_order: Vec<&Node> = topological_sort(adj, s);
     let mut parent = HashMap::from([(s, s)]);
     let mut distance_estimate: HashMap<(&Node, &Node), i32> = HashMap::from([((s, s), 0)]);
     for &u in topological_order.iter() {
@@ -52,7 +52,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dfs_all_vertexes() {
+    fn test_dag() {
         let a = Node::new('a');
         let b = Node::new('b');
         let c = Node::new('c');
