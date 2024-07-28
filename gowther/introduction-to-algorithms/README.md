@@ -280,6 +280,52 @@ ${T_{build} + n * T_{insert} <= n * T_{insert} + n * T_{delete-max}}$
   </tbody>
 </table>
 
+# Single Source Shortest Path
+
+<table>
+  <caption>
+    Single Source Shortest Path
+  </caption>
+  <thead>
+    <tr>
+      <th scope="col" colspan="2">Restrictions</th>
+      <th scope="col" colspan="2">SSSP Algorithm</th>
+    </tr>
+    <tr>
+      <th scope="col">Graph</th>
+      <th scope="col">Weights</th>
+      <th scope="col">Name</th>
+      <th scope="col">Running Time O(·)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>General</td>
+      <td>Unweighted</td>
+      <td>BFS</td>
+      <td>|V| + |E|</td>
+    </tr>
+    <tr>
+      <td>DAG</td>
+      <td>Any</td>
+      <td>DAG Relaxation</td>
+      <td>|V| + |E|</td>
+    </tr>
+    <tr>
+      <td>General</td>
+      <td>Any</td>
+      <td>Bellman-Ford</td>
+      <td>|V| * |E|</td>
+    </tr>
+    <tr>
+      <td>General</td>
+      <td>Non-negative</td>
+      <td>Dijkstra</td>
+      <td>|V|*log|V| + |E|</td>
+    </tr>
+  </tbody>
+</table>
+
 # Mathematics
 
 ## Stirling's approximation
