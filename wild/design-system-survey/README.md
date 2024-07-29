@@ -49,7 +49,7 @@
 - shadcn-ui: ✅
 
 # [fluent-ui][fluent-ui]
-
+ 
 - Trigger Pattern with React.cloneElement()
 - useContextSelector()
 - controlled / uncontrolled components, `onChange: (e, data) => { setData(data) }`
@@ -482,7 +482,7 @@ const classNameB = css({
 // .padding { padding: 5px; }
 ```
 
-### What are people working on
+### What people are working on
 
 - MUI team: 
     - [Pigment CSS](https://github.com/mui/pigment-css)
@@ -500,6 +500,52 @@ const classNameB = css({
     - [Griffel](https://github.com/microsoft/griffel)
     - [Fluent UI React Insights: Griffel](https://learn.microsoft.com/en-us/shows/fluent-ui-insights/fluent-ui-insights-griffel)
 
+
+# Patterns
+
+## Trigger Pattern
+
+```tsx
+<Host>
+    <Trigger>
+        <Button>A button</Button>
+    </Trigger>
+
+    <Popover>
+        Hello world!
+    </Popover>
+</Popover>
+```
+
+```tsx
+// `getChildren` restricts the ordering of trigger and popover
+const getChildren = (props) => {
+    const children = React.Children.toArray(props.children) as React.ReactElement[];
+
+    let trigger: React.ReactElement | undefined = undefined;
+    let popover: React.ReactElement | undefined = undefined;
+    if (children.length === 2) {
+        trigger = children[0];
+        popover = children[1];
+    } else if (children.length === 1) {
+        popover = children[0];
+    }
+
+    return [trigger, popover]
+}
+
+const Host = (props) => {
+    const [trigger, popover] = getChildren(props)
+    const contextValue = useContextValue(props)
+
+    return (
+        <ContextProvider value={contextValue}>
+            {trigger}
+            {popover}
+        </ContextProvider>
+    )
+}
+```
 
 
 <!-- gestalt -->
