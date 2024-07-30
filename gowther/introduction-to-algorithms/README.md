@@ -333,7 +333,7 @@ Need:
 - A changeable priority queue for `(vertex_id, weight)`
 - A hash table for mapping `vertex_id -> (vertex_id, weight)`
 
-There is a `Fibonacci Heap` which can do `decrease_key(id, k)` in $O(1)$ time. It can give us best running time $O(|E|+|V|log|V|)$ when our graph is dense. But if the graph is sparse, using a `Binary Heap` yields $O(|V|log|V|)$ time.
+There is a `Fibonacci Heap` which can do `decrease_key(id, k)` in $O(1)$ time. It can give us best running time $O(|E|+|V|log|V|)$ when our graph is dense. But if the graph is sparse, using a `Binary Heap` yields $O((|E|+|V|)log|V|)$ time.
 
 # Mathematics
 
