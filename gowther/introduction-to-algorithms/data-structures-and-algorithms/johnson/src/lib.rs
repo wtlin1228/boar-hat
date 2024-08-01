@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    fmt::Debug,
     hash::Hash,
 };
 
@@ -63,7 +62,7 @@ pub fn johnson<'a, V>(
     /* parent */ HashMap<&'a V, HashMap<&'a V, Option<&'a V>>>,
 )
 where
-    V: PartialEq + Eq + Hash + Debug,
+    V: PartialEq + Eq + Hash,
 {
     let mut adj_copied: HashMap<&V, Vec<&V>> = adj.to_owned();
     let mut w_copied: HashMap<(&V, &V), i32> = w.to_owned();
@@ -96,13 +95,13 @@ where
 
     for &u in adj.keys() {
         let d_x_u = w_copied.get(&(&x, u)).unwrap().to_owned();
-        // let d_x_u = 2;
+        // The reason why a connected graph is needed is due to the my Dijkstra's Algorithm
+        // implementation expects connected graph as input.
         let connected_graph = get_connected_graph(&adj, u);
         let (mut delta, parent) = dijkstra(&connected_graph, &w_copied, u);
         for (&v, d) in delta.iter_mut() {
             if let Some(d_u_v) = d {
                 let d_x_v = w_copied.get(&(&x, v)).unwrap().to_owned();
-                // let d_x_v = 1;
                 *d_u_v = d_u_v.to_owned() - d_x_u + d_x_v;
             }
         }
