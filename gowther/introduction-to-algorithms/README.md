@@ -341,7 +341,7 @@ There is a `Fibonacci Heap` which can do `decrease_key(id, k)` in $O(1)$ time. I
 
 The idea behind Johnson’s Algorithm is to reduce the ASPS problem on a graph with **arbitrary edge weights** to the ASPS problem on a graph with **non-negative edge weights**. The algorithm does this by re-weighting the edges in the original graph to non-negative values in such a way so that shortest paths in the re-weighted graph are also shortest paths in the original graph.
 
-Johnson’s takes $O(|V|*|E|)$ time to run Bellman-Ford, and $O(|V|(|V| log|V|+|E|))$ time to run Dijkstra |V| times, so this algorithm runs in $O(|V|(|V|log|V|+|E|)$ time.
+Johnson’s takes $O(|V|*|E|)$ time to run Bellman-Ford, and $O(|V|(|V| log|V|+|E|))$ time to run Dijkstra |V| times, so this algorithm runs in $O(|V|*(|V|log|V|+|E|))$ time.
 
 # Mathematics
 
