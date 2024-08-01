@@ -71,9 +71,6 @@ where
         w_copied.insert((&x, v), 0);
     }
 
-    // println!("{:#?}", adj_copied);
-    // println!("{:#?}", w_copied);
-
     let (d_x, _) = bellman_ford(&adj_copied, &w_copied, &x);
     if d_x.values().any(|w| w == &Weight::MinusInfinity) {
         panic!("Johnson's algorithm doesn't support graph with negative-weight cycle");
