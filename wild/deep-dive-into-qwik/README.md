@@ -1,0 +1,23 @@
+- Lazy-loading requires some extra steps.
+- Lazy-loading won't help if the lazy-loaded component is in the render tree.
+- Lazy-loading introduces a new challenge: prefetching.
+- Lazy-loading makes the bundler no choose but to make a separated bundle.
+- Lazy-loading doesn't solve the closure problem.
+
+- Qwik is a signal based system.
+- Qwik serializes the reactivity graph.
+- Qwik knows how to serialize the closure.
+- Qwik makes the data tree-shakable, so Qwik never sends the data which can never be used.
+- Qwik is designed with streaming in mind from day one, not afterthought. And out-of-order streaming is under development.
+- Qwik streams the styles of a component just before it's HTML, then move the styles to the head when the application is running.
+- Qwik downloads only the corresponding scripts when a component becomes visible (expect for the root component).
+- Qwik bridges the world of MPA and SPA by just a `Link` component like NextJS.
+- Qwik prevents waterfall downloading scripts by leveraging the service worker in production mode.
+- Qwik makes the HTML alone fully defines the application.
+- Qwik makes it easy to adapt micro-frontend architecture, even with different Qwik version.
+- Qwik handles the communication between different micro-frontend container through serializable events.
+- Qwik enables Amazon-level personalization without having Amazon-level investment into it.
+- Qwik knows how to run React components through `qwikify$()`.
+- Qwik provides islands like Astro for free.
+- Qwik knows the build information unlike other frameworks. And more granular control manually or automatically with the behavioral data of our website is available.
+
