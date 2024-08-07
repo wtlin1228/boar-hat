@@ -343,6 +343,17 @@ The idea behind Johnson’s Algorithm is to reduce the ASPS problem on a graph w
 
 Johnson’s takes $O(|V|*|E|)$ time to run Bellman-Ford, and $O(|V|(|V| log|V|+|E|))$ time to run Dijkstra |V| times, so this algorithm runs in $O(|V|*(|V|log|V|+|E|))$ time.
 
+# Dynamic Programming
+
+(SRT BOT) + memorization
+
+- Subproblem definition
+- Relate subproblem solutions recursivly
+- Topological order on subproblems
+- Base case of relation
+- Original problem solution via subproblems
+- Time analysis
+
 # Mathematics
 
 ## Stirling's approximation
