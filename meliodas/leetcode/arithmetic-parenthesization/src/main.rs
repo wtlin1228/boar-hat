@@ -53,13 +53,13 @@ impl Solution {
                     //     max(i, k) op_k min(k+1, j),
                     //     min(i, k) op_k max(k+1, j),
                     //     min(i, k) op_k min(k+1, j),
-                    //   }, where i <= k <= j
+                    //   }, where i <= k < j
                     // - min(i, j) = min{
                     //     max(i, k) op_k max(k+1, j),
                     //     max(i, k) op_k min(k+1, j),
                     //     min(i, k) op_k max(k+1, j),
                     //     min(i, k) op_k min(k+1, j),
-                    //   }, where i <= k <= j
+                    //   }, where i <= k < j
                     max[i][j] = operators[i].eval(max[i][i], max[i + 1][j]);
                     min[i][j] = operators[i].eval(max[i][i], max[i + 1][j]);
                     for k in i..j {
