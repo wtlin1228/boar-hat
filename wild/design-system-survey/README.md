@@ -57,7 +57,7 @@ Other considerations not listed in the table:
 - [semi-ui](https://semi.design/en-US/): ❌ Use class components (not easy for tracing code)
 - [elastic](https://eui.elastic.co/#/): ❌ License
 - [liferay](https://liferay.design/lexicon/get-started): ❌ Not actively maintained
-- [intergalactic](https://developer.semrush.com/intergalactic/): ❌ It's style engine `reshadow` is not updated for 2 years
+- [intergalactic](https://developer.semrush.com/intergalactic/): ❌ Its style engine `reshadow` is not updated for 2 years
 - [garden](https://garden.zendesk.com/): ❌ Styling Performance
 
 # [fluent-ui][fluent-ui]
