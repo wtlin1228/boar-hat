@@ -47,10 +47,18 @@
 - grommet: ❌ Styling Performance
 - flowbite: ✅
 - shadcn-ui: ✅
-- mui: ✅
+- material-ui: ✅
 - mantine: ✅
-- semi-ui
 - next-ui
+
+Other considerations not listed in the table:
+
+- [arco](https://arco.design/en-US): ❌ A11y & CSS Specificy
+- [semi-ui](https://semi.design/en-US/): ❌ Use class components (not easy for tracing code)
+- [elastic](https://eui.elastic.co/#/): ❌ License
+- [liferay](https://liferay.design/lexicon/get-started): ❌ Not actively maintained
+- [intergalactic](https://developer.semrush.com/intergalactic/): ❌ It's style engine `reshadow` is not updated for 2 years
+- [garden](https://garden.zendesk.com/): ❌ Styling Performance
 
 # [fluent-ui][fluent-ui]
 
@@ -423,10 +431,10 @@ const classes = Object.values(mergedStyles); // ➡️ ["pl-10", "c-blue"]
 ### Why is class merging so important?
 
 ```css
-.color-blue {
+.blue {
   color: blue;
 }
-.color-red {
+.red {
   color: red;
 }
 ```
