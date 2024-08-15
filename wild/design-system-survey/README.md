@@ -65,7 +65,7 @@ Other considerations not listed in the table:
 - 📜 Have comprehensive documentation, including usage, style, code and accessibility
 - 👍 Multiple frameworks support, including `Web Components`, `React`, `Angular` and `Vue`
 - 💅 Use Sass + BEM + design tokens for styling
-- 🫨 Have no built-in tool for scoping CSS like `Griffel` and `Pigment CSS`
+- 🫨 Have no built-in tool for scoping CSS, so maybe using `Tailwind` + `carbon` is a good choice, like `chadcn-ui`
 - 😋 Customize globally by altering the theme or locally with the design tokens are possible
 
 ```scss
