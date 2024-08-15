@@ -1,0 +1,24 @@
+/* Compiled to: ._button_4z3c5_2 */
+/* Selector Specificity: (0, 1, 0) */
+.button {
+    padding-inline: 1.125rem;
+    border-radius: .25rem;
+    border: .0625rem solid transparent;
+    height: 2.25rem;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+/* Compiled to: ._button--primary_4z3c5_12 */
+/* Selector Specificity: (0, 1, 0) */
+.button--primary {
+    background: #1971c2;
+    color: #FFFFFF;
+}
+
+/* Compiled to: ._button--error_4z3c5_18 */
+/* Selector Specificity: (0, 1, 0) */
+.button--error {
+    background: #E03131;
+    color: #000000;
+}
