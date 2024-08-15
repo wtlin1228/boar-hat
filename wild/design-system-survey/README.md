@@ -53,12 +53,57 @@
 
 Other considerations not listed in the table:
 
-- [arco](https://arco.design/en-US): ❌ A11y & CSS Specificy
+- [arco](https://arco.design/en-US): ❌ A11y & CSS Specificity
 - [semi-ui](https://semi.design/en-US/): ❌ Use class components (not easy for tracing code)
 - [elastic](https://eui.elastic.co/#/): ❌ License
 - [liferay](https://liferay.design/lexicon/get-started): ❌ Not actively maintained
 - [intergalactic](https://developer.semrush.com/intergalactic/): ❌ Its style engine `reshadow` is not updated for 2 years
 - [garden](https://garden.zendesk.com/): ❌ Styling Performance
+
+# [carbon][carbon]
+
+- 📜 Have comprehensive documentation, including usage, style, code and accessibility
+- 👍 Multiple frameworks support, including `Web Components`, `React`, `Angular` and `Vue`
+- 💅 Use Sass + BEM + design tokens for styling
+- 🫨 Have no built-in tool for scoping CSS like `Griffel` and `Pigment CSS`
+- 😋 Customize globally by altering the theme or locally with the design tokens are possible
+
+```scss
+// 🌎 Global
+@use "@carbon/react/scss/theme" with (
+  $theme: (
+    background: #e2e2e2,
+    text-primary: #ffffff,
+    custom-token-01: #000000,
+  )
+);
+```
+
+```scss
+// 🏝️ Local
+@use "@carbon/react/scss/colors";
+
+.cds--header__global .cds--popover-content {
+  background-color: colors.$gray-20;
+}
+```
+
+```js
+import {
+  // An object of all themes
+  themes,
+
+  // Direct theme values
+  white,
+  g10,
+  g90,
+  g100,
+
+  // Specific token values
+  interactive01,
+  interactive02,
+} from "@carbon/themes";
+```
 
 # [fluent-ui][fluent-ui]
 
@@ -68,44 +113,44 @@ Other considerations not listed in the table:
 - 🌱 Provide consistent developer experience by following some patterns like the Trigger Pattern
 - 😍 Very easy to customize components with `Slot` API, styles will be merged with the `mergeClasses` API
 
-  ```tsx
-  import { Button, makeStyles, tokens } from "@fluentui/react-components";
-  import { CalendarMonthRegular } from "@fluentui/react-icons";
+```tsx
+import { Button, makeStyles, tokens } from "@fluentui/react-components";
+import { CalendarMonthRegular } from "@fluentui/react-icons";
 
-  const useStyles = makeStyles({
-    rowWith2Cols: {
-      display: "flex",
-      justifyContent: "space-around",
-    },
-    button: {
-      border: `2px dashed ${tokens.colorPaletteLavenderBorderActive}`,
-      color: tokens.colorPaletteLavenderBorderActive,
-    },
-    buttonIcon: {
-      color: tokens.colorPaletteLavenderBorderActive,
-    },
-  });
+const useStyles = makeStyles({
+  rowWith2Cols: {
+    display: "flex",
+    justifyContent: "space-around",
+  },
+  button: {
+    border: `2px dashed ${tokens.colorPaletteLavenderBorderActive}`,
+    color: tokens.colorPaletteLavenderBorderActive,
+  },
+  buttonIcon: {
+    color: tokens.colorPaletteLavenderBorderActive,
+  },
+});
 
-  const OverrideButtonStyle = () => {
-    const styles = useStyles();
+const OverrideButtonStyle = () => {
+  const styles = useStyles();
 
-    return (
-      <div className={styles.rowWith2Cols}>
-        <Button icon={<CalendarMonthRegular />}>Default</Button>
+  return (
+    <div className={styles.rowWith2Cols}>
+      <Button icon={<CalendarMonthRegular />}>Default</Button>
 
-        <Button
-          className={styles.button}
-          icon={{
-            className: styles.buttonIcon,
-            children: <CalendarMonthRegular />,
-          }}
-        >
-          Default
-        </Button>
-      </div>
-    );
-  };
-  ```
+      <Button
+        className={styles.button}
+        icon={{
+          className: styles.buttonIcon,
+          children: <CalendarMonthRegular />,
+        }}
+      >
+        Default
+      </Button>
+    </div>
+  );
+};
+```
 
 # [flowbite][flowbite]
 
@@ -115,79 +160,79 @@ Other considerations not listed in the table:
 - 🧰 Have many handy blocks ready to be copied and pasted: https://flowbite.com/blocks/
 - 😋 Flexible to customize component, but not so easy since we need to look into the source code to find out which parts of the theme will be applied to which part of the component
 
-  ```
-  The default structure for button:
+```
+The default structure for button:
 
-  <button> <- base,
-  |           disabled,
-  |           color,
-  |           gradientDuoTone,
-  |           gradient,
-  |           outline.color,
-  |           pill,
-  |           fullSized
-  |
-  |   <span> <- inner.base,
-  |   |         outline,
-  |   |         outline.pill,
-  |   |         size,
-  |   |         inner.outline,
-  |   |         isProcessing,
-  |   |         inner.isProcessingPadding,
-  |   |         inner.position
-  |   |
-  |   |   <span></span> <- spinnerSlot,
-  |   |                    spinnerLeftPosition
-  |   |
-  |   |   <span></span> <- label
-  |   |
-  |   </span>
-  |
-  </button>
-  ```
+<button> <- base,
+|           disabled,
+|           color,
+|           gradientDuoTone,
+|           gradient,
+|           outline.color,
+|           pill,
+|           fullSized
+|
+|   <span> <- inner.base,
+|   |         outline,
+|   |         outline.pill,
+|   |         size,
+|   |         inner.outline,
+|   |         isProcessing,
+|   |         inner.isProcessingPadding,
+|   |         inner.position
+|   |
+|   |   <span></span> <- spinnerSlot,
+|   |                    spinnerLeftPosition
+|   |
+|   |   <span></span> <- label
+|   |
+|   </span>
+|
+</button>
+```
 
-  ```tsx
-  import * as React from "react";
-  import type { CustomFlowbiteTheme } from "flowbite-react";
-  import { Button as FlowbiteButton, Spinner } from "flowbite-react";
+```tsx
+import * as React from "react";
+import type { CustomFlowbiteTheme } from "flowbite-react";
+import { Button as FlowbiteButton, Spinner } from "flowbite-react";
 
-  const customTheme: CustomFlowbiteTheme["button"] = {
+const customTheme: CustomFlowbiteTheme["button"] = {
+  color: {
+    rose: "bg-rose-500 hover:bg-rose-600", // "rose" is a new variant
+  },
+  outline: {
     color: {
-      rose: "bg-rose-500 hover:bg-rose-600", // "rose" is a new variant
+      // need to look into the source code to find out how to customize
+      // the outline color for our new color variant "rose"
+      rose: "border border-8 border-rose-300 hover:border-rose-800",
     },
-    outline: {
-      color: {
-        // need to look into the source code to find out how to customize
-        // the outline color for our new color variant "rose"
-        rose: "border border-8 border-rose-300 hover:border-rose-800",
-      },
-    },
-    // label style here is tightly bound to the "rose" variant
-    label: "text-rose-500 group-hover:text-white",
-  };
+  },
+  // label style here is tightly bound to the "rose" variant
+  label: "text-rose-500 group-hover:text-white",
+};
 
-  export function Button() {
-    const [isProcessing, setIsProcessing] = React.useState(false);
+export function Button() {
+  const [isProcessing, setIsProcessing] = React.useState(false);
 
-    return (
-      <FlowbiteButton
-        theme={customTheme}
-        label="Click me"
-        color="rose"
-        fullSized
-        isProcessing={isProcessing}
-        processingLabel="Processing..."
-        processingSpinner={<Spinner size="lg" />}
-        outline
-        pill
-        size="lg"
-        onClick={() => {
-          setIsProcessing(!isProcessing);
-        }}
-      />
-    );
-  }
-  ```
+  return (
+    <FlowbiteButton
+      theme={customTheme}
+      label="Click me"
+      color="rose"
+      fullSized
+      isProcessing={isProcessing}
+      processingLabel="Processing..."
+      processingSpinner={<Spinner size="lg" />}
+      outline
+      pill
+      size="lg"
+      onClick={() => {
+        setIsProcessing(!isProcessing);
+      }}
+    />
+  );
+}
+```
 
 # [shadcn/ui][shadcn-ui]
 
@@ -197,66 +242,66 @@ Other considerations not listed in the table:
 - 🍺 Designed with `class-variance-authority`: https://cva.style/docs
 - 😍 Super easy to customize component
 
-  `$ npx shadcn-ui@latest add button`
+`$ npx shadcn-ui@latest add button`
 
-  ```tsx
-  import * as React from "react";
-  import { Slot } from "@radix-ui/react-slot";
-  import { cva, type VariantProps } from "class-variance-authority";
+```tsx
+import * as React from "react";
+import { Slot } from "@radix-ui/react-slot";
+import { cva, type VariantProps } from "class-variance-authority";
 
-  import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
-  const buttonVariants = cva(
-    "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-    {
-      variants: {
-        variant: {
-          default: "bg-primary text-primary-foreground hover:bg-primary/90",
-          destructive:
-            "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-          outline:
-            "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-          secondary:
-            "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-          ghost: "hover:bg-accent hover:text-accent-foreground",
-          link: "text-primary underline-offset-4 hover:underline",
-        },
-        size: {
-          default: "h-10 px-4 py-2",
-          sm: "h-9 rounded-md px-3",
-          lg: "h-11 rounded-md px-8",
-          icon: "h-10 w-10",
-        },
+const buttonVariants = cva(
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline:
+          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
       },
-      defaultVariants: {
-        variant: "default",
-        size: "default",
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
       },
-    }
-  );
-
-  export interface ButtonProps
-    extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-      VariantProps<typeof buttonVariants> {
-    asChild?: boolean;
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
   }
+);
 
-  const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-    ({ className, variant, size, asChild = false, ...props }, ref) => {
-      const Comp = asChild ? Slot : "button";
-      return (
-        <Comp
-          className={cn(buttonVariants({ variant, size, className }))}
-          ref={ref}
-          {...props}
-        />
-      );
-    }
-  );
-  Button.displayName = "Button";
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean;
+}
 
-  export { Button, buttonVariants };
-  ```
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button";
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    );
+  }
+);
+Button.displayName = "Button";
+
+export { Button, buttonVariants };
+```
 
 # Styling
 
