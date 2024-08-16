@@ -7,6 +7,7 @@ import { Button as CssInJsButton } from "./css-in-js";
 import { Button as CssInJsWithCssVariablesButton } from "./css-in-js-with-css-variables";
 import { Button as AtomicCssButton } from "./atomic-css";
 import { Button as VanillaExtractButton } from "./zero-runtime-css-in-js/vanilla-extract";
+import { Button as StyleXButton } from "./zero-runtime-css-in-js-with-atomic-css/stylex";
 
 function App() {
   const [count, setCount] = useState(0);
@@ -56,6 +57,12 @@ function App() {
         <VanillaExtractButton isError={isError}>
           Zero run-time CSS in JS - Vanilla Extract
         </VanillaExtractButton>
+      </div>
+
+      <div style={{ margin: 20 }}>
+        <StyleXButton isError={isError}>
+          Zero run-time CSS in JS + Atomic CSS - StyleX
+        </StyleXButton>
       </div>
     </>
   );
