@@ -6,6 +6,7 @@ import { Button as CssModulesWithBemButton } from "./css-modules-with-bem";
 import { Button as CssInJsButton } from "./css-in-js";
 import { Button as CssInJsWithCssVariablesButton } from "./css-in-js-with-css-variables";
 import { Button as AtomicCssButton } from "./atomic-css";
+import { Button as VanillaExtractButton } from "./zero-runtime-css-in-js/vanilla-extract";
 
 function App() {
   const [count, setCount] = useState(0);
@@ -49,6 +50,12 @@ function App() {
 
       <div style={{ margin: 20 }}>
         <AtomicCssButton isError={isError}>Atomic CSS</AtomicCssButton>
+      </div>
+
+      <div style={{ margin: 20 }}>
+        <VanillaExtractButton isError={isError}>
+          Zero run-time CSS in JS - Vanilla Extract
+        </VanillaExtractButton>
       </div>
     </>
   );
