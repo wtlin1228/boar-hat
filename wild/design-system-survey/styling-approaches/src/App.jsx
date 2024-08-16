@@ -9,6 +9,18 @@ import { Button as AtomicCssButton } from "./atomic-css";
 import { Button as VanillaExtractButton } from "./zero-runtime-css-in-js/vanilla-extract";
 import { Button as StyleXButton } from "./zero-runtime-css-in-js-with-atomic-css/stylex";
 
+const approaches = [
+  ["Static CSS", StaticCssButton],
+  ["CSS Modules", CssModulesButton],
+  ["BEM", BemButton],
+  ["CSS Modules + BEM", CssModulesWithBemButton],
+  ["CSS in JS", CssInJsButton],
+  ["CSS in JS + CSS Variables", CssInJsWithCssVariablesButton],
+  ["Atomic CSS", AtomicCssButton],
+  ["Zero run-time CSS in JS - Vanilla Extract", VanillaExtractButton],
+  ["Zero run-time CSS in JS + Atomic CSS - StyleX", StyleXButton],
+];
+
 function App() {
   const [count, setCount] = useState(0);
   const isError = count > 3;
@@ -21,49 +33,11 @@ function App() {
         </button>
       </div>
 
-      <div style={{ margin: 20 }}>
-        <StaticCssButton isError={isError}>Static CSS</StaticCssButton>
-      </div>
-
-      <div style={{ margin: 20 }}>
-        <CssModulesButton isError={isError}>CSS Modules</CssModulesButton>
-      </div>
-
-      <div style={{ margin: 20 }}>
-        <BemButton isError={isError}>BEM</BemButton>
-      </div>
-
-      <div style={{ margin: 20 }}>
-        <CssModulesWithBemButton isError={isError}>
-          CSS Modules + BEM
-        </CssModulesWithBemButton>
-      </div>
-
-      <div style={{ margin: 20 }}>
-        <CssInJsButton isError={isError}>CSS in JS</CssInJsButton>
-      </div>
-
-      <div style={{ margin: 20 }}>
-        <CssInJsWithCssVariablesButton isError={isError}>
-          CSS in JS + CSS Variables
-        </CssInJsWithCssVariablesButton>
-      </div>
-
-      <div style={{ margin: 20 }}>
-        <AtomicCssButton isError={isError}>Atomic CSS</AtomicCssButton>
-      </div>
-
-      <div style={{ margin: 20 }}>
-        <VanillaExtractButton isError={isError}>
-          Zero run-time CSS in JS - Vanilla Extract
-        </VanillaExtractButton>
-      </div>
-
-      <div style={{ margin: 20 }}>
-        <StyleXButton isError={isError}>
-          Zero run-time CSS in JS + Atomic CSS - StyleX
-        </StyleXButton>
-      </div>
+      {approaches.map(([description, Button]) => (
+        <div style={{ margin: 20 }}>
+          <Button isError={isError}>{description}</Button>
+        </div>
+      ))}
     </>
   );
 }
