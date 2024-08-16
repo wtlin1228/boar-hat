@@ -611,6 +611,15 @@ const classNameB = css({
   - [Griffel](https://github.com/microsoft/griffel)
   - [Fluent UI React Insights: Griffel](https://learn.microsoft.com/en-us/shows/fluent-ui-insights/fluent-ui-insights-griffel)
 
+## Avoid styles at a distance
+
+The idea is in order to improve encapsulation and maintainability, each style block can only target a single element. To enforce this, all selectors must target the `&` character which is a reference to the current element.
+
+Ref:
+
+- https://stylexjs.com/docs/learn/thinking-in-stylex/#encapsulation
+- https://vanilla-extract.style/documentation/styling/#complex-selectors
+
 # Patterns
 
 ## Trigger Pattern
