@@ -619,6 +619,7 @@ Ref:
 
 - https://stylexjs.com/docs/learn/thinking-in-stylex/#encapsulation
 - https://vanilla-extract.style/documentation/styling/#complex-selectors
+- https://www.joshwcomeau.com/css/styled-components/#single-source-of-styles-2
 
 # Patterns
 
