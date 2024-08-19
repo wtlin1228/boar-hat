@@ -95,21 +95,6 @@ const artifacts = [
           },
         },
       },
-      [
-        {
-          length: 60,
-          original: {
-            start: {
-              column: 13,
-              line: 7,
-            },
-            end: {
-              column: 16,
-              line: 7,
-            },
-          },
-        },
-      ],
     ],
   ],
 ];
