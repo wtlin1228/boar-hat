@@ -1,13 +1,20 @@
+To build zero-runtime css-in-js tool, those are essential:
+
+- parse the static code -> Babel
+- resolve the dependencies -> Module
+- evaluate code -> Node
+- support nested selector -> Stylis
+
 # Transform
 
 This file exposes sync and async transform functions that:
+
 - parse the passed code to AST
 - builds a dependency graph for the file
 - shakes each dependency and removes unused code
 - runs generated code in a sandbox
 - collects artifacts
 - returns transformed code (without WYW template literals), generated CSS, source maps and babel metadata from transform step.
-
 
 # Services
 
@@ -20,7 +27,7 @@ The well known `Babel`.
 We can get cached entrypoints and exports from `cache`
 
 - cache.entrypoints: `filename -> Entrypoint | EvaluatedEntrypoint`
-- cache.exports:     `filename -> string`
+- cache.exports: `filename -> string`
 
 Default implementation: `TransformCacheCollection`
 
@@ -54,18 +61,18 @@ Default implementation: `loadAndParse`
 
 ```ts
 function loadAndParse(
-  services: Services, name: string, loadedCode: string | undefined, log: Debugger
+  services: Services,
+  name: string,
+  loadedCode: string | undefined,
+  log: Debugger
 ): IEntrypointCode | IIgnoredEntrypoint;
 ```
 
 ## log
-  
+
 Give us nested and colorful loggers. It's a wrapper for the `debug` library.
 
 ## options
-
-
-
 
 - What happens in the building time for this code?
 
@@ -109,9 +116,7 @@ Give us nested and colorful loggers. It's a wrapper for the `debug` library.
   });
   ```
 
--
-
----
+- ***
 
 ```ts
 export type Services = {
