@@ -303,6 +303,15 @@ Button.displayName = "Button";
 export { Button, buttonVariants };
 ```
 
+# [material-ui][material-ui]
+
+- 😍 Super easy to customize components with `sx prop` and the standard atomic class names
+- 🫡 Have good styling performance by developing its own zero-runtime CSS-in-JS library `Pigment CSS`
+- 🛠️ Make designers participate more directly and collaborate more effectively in the development process with [Sync plugin](https://mui.com/material-ui/design-resources/material-ui-sync/)
+- 🧰 Provide base components advanced components for complex use cases like `Data Grid`, `Date and Time Picker`, `Charts` and `Tree View`
+- 📚 Everything is well documented, including RFCs, roadmaps
+- 💰 Have commercial plans (In my opinion, it's an advantage. 😂 Meaning we can expect more!)
+
 # Styling
 
 A design system provides the base styles, but sometimes we still want to override some components.
