@@ -1,0 +1,2 @@
+- Cross-document view transitions for multi-page applications: https://developer.chrome.com/docs/web-platform/view-transitions/cross-document
+- Prerender pages in Chrome for instant page navigations: https://developer.chrome.com/docs/web-platform/prerender-pages
