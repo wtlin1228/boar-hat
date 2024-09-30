@@ -1,0 +1,6 @@
+[package]
+name = "dispatch_and_fat_pointers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
