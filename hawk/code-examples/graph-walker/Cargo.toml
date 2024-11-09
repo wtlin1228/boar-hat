@@ -1,0 +1,9 @@
+[package]
+name = "graph-walker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+futures = "0.3.31"
+petgraph = "0.6.5"
+tokio = { version = "1.41.1", features = ["full", "time"] }
