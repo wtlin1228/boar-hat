@@ -1,3 +1,5 @@
+// Original version: https://github.com/vercel/turborepo/blob/main/crates/turborepo-graph-utils/src/walker.rs
+
 use futures::{future::join_all, stream::FuturesUnordered, StreamExt};
 use petgraph::{
     visit::{IntoNeighborsDirected, IntoNodeIdentifiers},

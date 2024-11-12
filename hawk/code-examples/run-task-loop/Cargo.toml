@@ -1,0 +1,8 @@
+[package]
+name = "run-task-loop"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.41.1", features = ["rt", "rt-multi-thread", "macros", "test-util"] }
+async-trait = "0.1.83"
