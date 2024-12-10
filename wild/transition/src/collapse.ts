@@ -20,7 +20,7 @@ export const createCollapseTransition = (
     /* onEntering= */ (el) => {
       console.log("Collapse, onEntering");
       element.style.opacity = "1";
-      el.style.height = "56px";
+      el.style.height = "56px"; // should measure el's height in real usage
     },
     /* onEntered= */ (el) => {
       console.log("Collapse, onEntered");
@@ -28,7 +28,7 @@ export const createCollapseTransition = (
     },
     /* onExit= */ (el) => {
       console.log("Collapse, onExit");
-      el.style.height = "56px";
+      el.style.height = "56px"; // should measure el's height in real usage
     },
     /* onExiting= */ (el) => {
       console.log("Collapse, onExiting");
