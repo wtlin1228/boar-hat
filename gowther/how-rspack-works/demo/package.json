@@ -1,0 +1,22 @@
+{
+  "name": "demo",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "cross-env NODE_ENV=development NO_COLOR=1 RSPACK_PROFILE=TRACE=layer=logger /Users/linweitang/GitHub/rspack/packages/rspack-cli/bin/rspack.js serve",
+    "build": "cross-env NODE_ENV=production NO_COLOR=1 RSPACK_PROFILE=TRACE=layer=logger /Users/linweitang/GitHub/rspack/packages/rspack-cli/bin/rspack.js build"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@rspack/plugin-react-refresh": "1.0.0",
+    "@rspack/cli": "^1.1.8",
+    "@rspack/core": "^1.1.8",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "cross-env": "^7.0.3",
+    "react-refresh": "^0.14.0"
+  }
+}
