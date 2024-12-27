@@ -21,18 +21,31 @@ Rspack is using the [tracing](https://docs.rs/tracing/latest/tracing/) crate, so
 tracing::debug!("task: {:#?}", task);
 ```
 
+Or we can use [instrument](https://docs.rs/tracing/latest/tracing/attr.instrument.html) to log a function:
+
+```rs
+use tracing::instrument;
+
+#[instrument(name = "repair")]
+pub async fn repair(
+  compilation: &Compilation,
+  mut artifact: MakeArtifact,
+  build_dependencies: HashSet<BuildDependency>,
+) -> Result<MakeArtifact> {}
+```
+
 # Workflow
 
 1. `$ rspack build`
 1. `Rspack::new`
-   1. `rspack_core::Compiler::new`
-      1. `rspack_core::PluginDriver::new`
-      1. `rspack_core::Compilation::new`
+   1. `Compiler::new`
+      1. `PluginDriver::new`
+      1. `Compilation::new`
 1. `Rspack::build`
-   1. `rspack_core::Compiler::build`
-      1. `rspack_core::Compiler::compile`
+   1. `Compiler::build`
+      1. `Compiler::compile`
          1. `self.compilation.make`
-            1. `rspack_core::make_module_graph`
+            1. `compiler::make::make_module_graph`
                1. prepare params
                   1. `MakeParam::BuildEntry`
                   1. `MakeParam::CheckNeedBuild`
@@ -41,10 +54,13 @@ tracing::debug!("task: {:#?}", task);
                   1. `MakeParam::ForceBuildModules`
                   1. `MakeParam::ForceBuildDeps`
                1. reset artifact
-               1. `rspack_core::update_module_graph`
+               1. `compiler::make::update_module_graph`
+                  1. `Cutout::default`
+                  1. get build dependencies from the artifact and params
+                  1. `compiler::make::repair::repair`
          1. `self.compilation.finish`
          1. `self.compilation.seal`
-      1. `rspack_core::Compiler::compile_done`
+      1. `Compiler::compile_done`
          1. `self.emit_assets`
 
 # Types
@@ -144,3 +160,69 @@ pub struct MakeArtifact {
   pub build_dependencies: FileCounter,
 }
 ```
+
+## Identifier
+
+Rspack use [ustr](https://docs.rs/ustr/latest/ustr/index.html) as the inner type to get better performance.
+
+```rs
+#[cacheable(hashable)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
+pub struct Identifier(#[cacheable(with=AsPreset)] Ustr);
+```
+
+On top of that, rspack use `Identifier` as the key for those collections:
+
+```rs
+pub type IdentifierMap<V> = HashMap<Identifier, V, BuildHasherDefault<IdentifierHasher>>;
+
+pub type IdentifierSet = HashSet<Identifier, BuildHasherDefault<IdentifierHasher>>;
+```
+
+## ModuleGraphPartial
+
+````rs
+#[derive(Debug, Default)]
+pub struct ModuleGraphPartial {
+  /// Module indexed by `ModuleIdentifier`.
+  pub(crate) modules: IdentifierMap<Option<BoxModule>>,
+
+  /// Dependencies indexed by `DependencyId`.
+  dependencies: HashMap<DependencyId, Option<BoxDependency>>,
+
+  /// AsyncDependenciesBlocks indexed by `AsyncDependenciesBlockIdentifier`.
+  blocks: HashMap<AsyncDependenciesBlockIdentifier, Option<Box<AsyncDependenciesBlock>>>,
+
+  /// ModuleGraphModule indexed by `ModuleIdentifier`.
+  module_graph_modules: IdentifierMap<Option<ModuleGraphModule>>,
+
+  /// ModuleGraphConnection indexed by `DependencyId`.
+  connections: HashMap<DependencyId, Option<ModuleGraphConnection>>,
+
+  /// Dependency_id to parent module identifier and parent block
+  ///
+  /// # Example
+  ///
+  /// ```ignore
+  /// let parent_module_id = parent_module.identifier();
+  /// parent_module
+  ///   .get_dependencies()
+  ///   .iter()
+  ///   .map(|dependency_id| {
+  ///     let parents_info = module_graph_partial
+  ///       .dependency_id_to_parents
+  ///       .get(dependency_id)
+  ///       .unwrap()
+  ///       .unwrap();
+  ///     assert_eq!(parents_info, parent_module_id);
+  ///   })
+  /// ```
+  dependency_id_to_parents: HashMap<DependencyId, Option<DependencyParents>>,
+
+  // Module's ExportsInfo is also a part of ModuleGraph
+  exports_info_map: UkeyMap<ExportsInfo, ExportsInfoData>,
+  export_info_map: UkeyMap<ExportInfo, ExportInfoData>,
+  connection_to_condition: HashMap<DependencyId, DependencyCondition>,
+  dep_meta_map: HashMap<DependencyId, DependencyExtraMeta>,
+}
+````
