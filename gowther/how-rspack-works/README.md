@@ -58,10 +58,58 @@ pub async fn repair(
                   1. `Cutout::default`
                   1. get build dependencies from the artifact and params
                   1. `compiler::make::repair::repair`
+                     1. get a new `ModuleGraph` from the artifact
+                     1. create initial tasks (factorize::FactorizeTask)
+                        1. the module factory of `EntryDependency` is `NormalModuleFactory`
+                     1. create a `MakeTaskContext` from the compilation, artifact and compilation.cache
+                     1. run the task loop with the `MakeTaskContext` and initial tasks
          1. `self.compilation.finish`
          1. `self.compilation.seal`
       1. `Compiler::compile_done`
          1. `self.emit_assets`
+
+## Run Task Loop
+
+```rs
+pub async fn run_task_loop<Ctx: 'static>(
+  ctx: &mut Ctx,
+  init_tasks: Vec<Box<dyn Task<Ctx>>>,
+) -> Result<()> {
+  run_task_loop_with_event(ctx, init_tasks, |_, task| task).await
+}
+```
+
+`run_task_loop` takes two arguments, and in our demo project:
+
+    1.  `ctx` will be `MakeTaskContext` created by `MakeTaskContext::new(compilation, artifact, compilation.cache.clone())`
+    2. `init_tasks` will be `Vec<FactorizeTask>` for our entries
+
+There are two types of tasks, each task could produce more tasks:
+
+    - Async Task: run in background (using `tokio::task::spawn`), so the task result need to be sent through a channel to be merged
+    - Sync Task: run in the main thread, so the task result can be merged directly
+
+```mermaid
+flowchart TD
+    Start@{ shape: circle, label: "Start" } --> A{task queue}
+
+    A -->|empty| B{runnung_async_tasks}
+        B -->|zero| Stop@{ shape: dbl-circ, label: "Stop" }
+
+        B --> |otherwise| C[wait for one async task completed]
+        C --> D[runnung_async_tasks -= 1]
+        D --> E[merge task result to task queue]
+        E --> A
+
+    A -->|otherwise| F{task type}
+        F -->|async| G[runnung_async_tasks += 1]
+        G --> H[run this task in background]
+        H -- async task completed --- I[send task result to channel]
+
+        F -->|sync| J[run this task in main thread]
+        J --> K[merge task reault to task queue]
+        K --> B
+```
 
 # Types
 
@@ -226,3 +274,37 @@ pub struct ModuleGraphPartial {
   dep_meta_map: HashMap<DependencyId, DependencyExtraMeta>,
 }
 ````
+
+## ModuleGraph
+
+```rs
+#[derive(Debug, Default)]
+pub struct ModuleGraph<'a> {
+  partials: Vec<&'a ModuleGraphPartial>,
+  active: Option<&'a mut ModuleGraphPartial>,
+}
+```
+
+## ModuleProfile
+
+`ModuleProfile` is used for profiling.
+
+```rs
+#[derive(Debug, Default, Clone)]
+pub struct TimeRange {
+  start: OnceCell<Instant>,
+  end: OnceCell<Instant>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ModulePhaseProfile {
+  range: TimeRange,
+  parallelism_factor: OnceCell<u16>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ModuleProfile {
+  pub factory: ModulePhaseProfile,
+  pub building: ModulePhaseProfile,
+}
+```
