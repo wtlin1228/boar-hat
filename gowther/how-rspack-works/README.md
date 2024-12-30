@@ -318,6 +318,86 @@ pub trait ModuleFactory: Debug + Sync + Send {
 }
 ```
 
+## ModuleFactoryCreateData
+
+```rs
+#[cacheable]
+#[derive(Debug, Clone)]
+pub struct ModuleFactoryCreateData {
+  pub compilation_id: CompilationId,
+  pub resolve_options: Option<Arc<Resolve>>,
+  #[cacheable(with=As<FromContext>)]
+  pub options: Arc<CompilerOptions>,
+  pub context: Context,
+  pub dependencies: Vec<BoxDependency>,
+  pub issuer: Option<Box<str>>,
+  pub issuer_identifier: Option<ModuleIdentifier>,
+  pub issuer_layer: Option<ModuleLayer>,
+  pub resolver_factory: Arc<ResolverFactory>,
+
+  pub file_dependencies: HashSet<ArcPath>,
+  pub context_dependencies: HashSet<ArcPath>,
+  pub missing_dependencies: HashSet<ArcPath>,
+  #[cacheable(with=Skip)]
+  pub diagnostics: Vec<Diagnostic>,
+}
+```
+
+### 1. `file_dependencies`
+
+- Definition: A list of specific files that a module or build depends on.
+- Purpose:
+  - Tracks files that must be read or watched for changes during the build process.
+  - Includes direct imports or requires, such as `import './file.js'`.
+- Typical Use Case:
+  - Resolving a dependency like `import './file.js'` adds `./file.js` to `file_dependencies`.
+  - If the file changes, it triggers a rebuild of affected parts of the project.
+- Examples:
+  - Dependencies from JavaScript imports: `import x from './utils.js'`.
+  - Direct file references in CSS: `@import 'styles.css';`.
+- Role in Watch Mode:
+  - Changes to these files cause a recompile.
+
+### 2. `context_dependencies`
+
+- Definition: A list of directories or contexts that a module or build depends on.
+- Purpose:
+  - Tracks dynamic or context-based dependencies where multiple files in a directory might match.
+  - Includes patterns like `require.context()` or dynamic imports with variable paths.
+- Typical Use Case:
+  - When using `require.context('./dir', true, /\.js$/)`, the entire `./dir` directory is added to `context_dependencies`.
+  - Any changes to files in `./dir` trigger a rebuild, even if the files weren’t explicitly listed as `file_dependencies`.
+- Examples:
+  - Dynamic imports: `import('./modules/' + name)` (depends on `./modules/` directory).
+  - Glob patterns in loaders: Loading all `.js` files in a folder.
+- Role in Watch Mode:
+  - Monitors all files in the specified directories and rebuilds if any of them change.
+
+### 3. `missing_dependencies`
+
+- Definition: A list of files or directories that were expected but not found during the build process.
+- Purpose:
+  - Tracks unresolved dependencies that might cause errors or require special handling.
+  - Helps identify missing files or incorrect paths during development.
+- Typical Use Case:
+  - If you try `import './missingFile.js'` but the file doesn't exist, `./missingFile.js` is added to `missing_dependencies`.
+  - Ensures rebuilds are triggered if the missing file is later created.
+- Examples:
+  - Non-existent imports: `import './not-there.js'`.
+  - Missing directories or files in a dynamic import context.
+- Role in Watch Mode:
+  - Watches for the creation of missing files and triggers a rebuild when they appear.
+
+### Comparison Table
+
+| Field              | `file_dependencies`                      | `context_dependencies`                          | `missing_dependencies`                              |
+| ------------------ | ---------------------------------------- | ----------------------------------------------- | --------------------------------------------------- |
+| Definition         | List of specific files required          | List of directories or contexts                 | List of files/directories that are missing          |
+| Scope              | Single files                             | Entire directories or patterns                  | Non-existent files or directories                   |
+| Typical Use Case   | Direct imports like `import './file.js'` | Dynamic imports like `require.context('./dir')` | Unresolved imports like `import './missingFile.js'` |
+| Role in Watch Mode | Rebuild on file changes                  | Rebuild on any file change in the context       | Rebuild when the missing file appears               |
+| Examples           | `./file.js`, `./style.css`               | `./dir/`, `./components/`                       | `./missingFile.js` or missing directory             |
+
 ## Dependency
 
 ```rs
@@ -333,81 +413,72 @@ pub trait Dependency:
 {}
 ```
 
-In Rspack, **`DependencyTemplate`**, **`ModuleDependency`**, and **`ContextDependency`** are components used to represent and manage dependencies within the module system. While they are related, they serve distinct purposes in the dependency resolution and bundling process.
+In Rspack, `DependencyTemplate`, `ModuleDependency`, and `ContextDependency` are components used to represent and manage dependencies within the module system. While they are related, they serve distinct purposes in the dependency resolution and bundling process.
 
----
+### 1. DependencyTemplate
 
-### **1. DependencyTemplate**
-
-- **Purpose**: Manages the code generation for a dependency.
-- **Responsibilities**:
+- Purpose: Manages the code generation for a dependency.
+- Responsibilities:
   - Defines how the resolved dependency should be transformed into code during the build process.
   - Responsible for creating the runtime code that connects modules, such as `require`, `import`, or `__webpack_require__` calls.
-- **Role**:
-  - Works at the **code generation** stage of the build process.
+- Role:
+  - Works at the code generation stage of the build process.
   - Converts dependency data into executable output (JavaScript code).
-- **Example**:
+- Example:
   - If you have `import x from './file.js'`, the `DependencyTemplate` generates the code that requires the module (`__webpack_require__('./file.js')`).
 
----
+### 2. ModuleDependency
 
-### **2. ModuleDependency**
-
-- **Purpose**: Represents a **specific module-level dependency** in the dependency graph.
-- **Responsibilities**:
+- Purpose: Represents a specific module-level dependency in the dependency graph.
+- Responsibilities:
   - Contains information about a single dependency, such as:
     - The module it depends on.
     - The type of dependency (e.g., `ESM`, `CJS`, `AMD`).
   - Acts as a concrete link between a module and its resolved dependencies.
-- **Role**:
+- Role:
   - Provides metadata and resolves a module path (e.g., `import './file.js'` resolves to an actual file).
-  - Part of the **module resolution** stage.
-- **Example**:
+  - Part of the module resolution stage.
+- Example:
   - `ModuleDependency` represents the dependency created by `import x from './file.js'` in the source file.
   - It tracks the resolved path (`./file.js`) and stores related information.
 
----
+### 3. ContextDependency
 
-### **3. ContextDependency**
-
-- **Purpose**: Represents **dynamic dependencies** or dependencies within a context.
-- **Responsibilities**:
+- Purpose: Represents dynamic dependencies or dependencies within a context.
+- Responsibilities:
   - Handles cases where dependencies are determined dynamically at runtime, such as:
     - `require.context()` in Webpack/Rspack.
     - Glob imports or dynamic imports that resolve multiple files (e.g., `import('./modules/' + name)`).
-  - Resolves a **set of modules** that match a specific pattern or criteria.
-- **Role**:
-  - Part of the **context resolution** stage, dealing with broader or dynamic module requirements.
-- **Example**:
+  - Resolves a set of modules that match a specific pattern or criteria.
+- Role:
+  - Part of the context resolution stage, dealing with broader or dynamic module requirements.
+- Example:
   - If you use `require.context('./modules', true, /\.js$/)`, `ContextDependency` resolves all `.js` files in the `./modules` directory and registers them as dependencies.
 
----
+### Key Differences
 
-### **Key Differences**
+| Feature          | DependencyTemplate                     | ModuleDependency                      | ContextDependency                            |
+| ---------------- | -------------------------------------- | ------------------------------------- | -------------------------------------------- |
+| Purpose          | Code generation for dependencies       | Represents a single module dependency | Handles dynamic dependencies or contexts     |
+| Stage in Process | Code generation (build output)         | Module resolution                     | Context resolution                           |
+| Scope            | Defines runtime code for a dependency  | Tracks a specific module relationship | Tracks a set of dynamically resolved modules |
+| Example Use Case | Generating `__webpack_require__` calls | Resolving `import './file.js'`        | Resolving `require.context('./dir')`         |
+| Dynamic Handling | No                                     | No                                    | Yes                                          |
 
-| Feature              | DependencyTemplate                     | ModuleDependency                      | ContextDependency                            |
-| -------------------- | -------------------------------------- | ------------------------------------- | -------------------------------------------- |
-| **Purpose**          | Code generation for dependencies       | Represents a single module dependency | Handles dynamic dependencies or contexts     |
-| **Stage in Process** | Code generation (build output)         | Module resolution                     | Context resolution                           |
-| **Scope**            | Defines runtime code for a dependency  | Tracks a specific module relationship | Tracks a set of dynamically resolved modules |
-| **Example Use Case** | Generating `__webpack_require__` calls | Resolving `import './file.js'`        | Resolving `require.context('./dir')`         |
-| **Dynamic Handling** | No                                     | No                                    | Yes                                          |
+### Example
 
----
+In the demo project, our first dependency is a `EntryDependency`
 
-### **How They Work Together**
-
-1. **`ModuleDependency`**: Represents a direct dependency between modules.
-
-   - Example: `import x from './file.js'` creates a `ModuleDependency` for `'./file.js'`.
-
-2. **`ContextDependency`**: Represents dynamic dependencies or patterns.
-
-   - Example: `require.context('./dir', true, /\.js$/)` creates a `ContextDependency` for all `.js` files in `./dir`.
-
-3. **`DependencyTemplate`**: Converts the dependency (module or context) into runtime code.
-   - Example: Generates `__webpack_require__('./file.js')` or dynamic `__webpack_require__` logic.
-
----
-
-These components are critical to how Rspack handles module resolution, dependency tracking, and code generation efficiently.
+```rs
+EntryDependency {
+    id: DependencyId(
+        0,
+    ),
+    request: "./src/main.jsx",
+    context: Context {
+        inner: "/Users/linweitang/boar-hat/gowther/how-rspack-works/demo",
+    },
+    layer: None,
+    is_global: false,
+},
+```
