@@ -81,13 +81,13 @@ pub async fn run_task_loop<Ctx: 'static>(
 
 `run_task_loop` takes two arguments, and in our demo project:
 
-    1.  `ctx` will be `MakeTaskContext` created by `MakeTaskContext::new(compilation, artifact, compilation.cache.clone())`
-    2. `init_tasks` will be `Vec<FactorizeTask>` for our entries
+1. `ctx` will be `MakeTaskContext` created by `MakeTaskContext::new(compilation, artifact, compilation.cache.clone())`
+2. `init_tasks` will be `Vec<FactorizeTask>` for our entries
 
 There are two types of tasks, each task could produce more tasks:
 
-    - Async Task: run in background (using `tokio::task::spawn`), so the task result need to be sent through a channel to be merged
-    - Sync Task: run in the main thread, so the task result can be merged directly
+- Async Task: run in background (using `tokio::task::spawn`), so the task result need to be sent through a channel to be merged
+- Sync Task: run in the main thread, so the task result can be merged directly
 
 ```mermaid
 flowchart TD
@@ -308,3 +308,106 @@ pub struct ModuleProfile {
   pub building: ModulePhaseProfile,
 }
 ```
+
+## ModuleFactory
+
+```rs
+#[async_trait::async_trait]
+pub trait ModuleFactory: Debug + Sync + Send {
+  async fn create(&self, data: &mut ModuleFactoryCreateData) -> Result<ModuleFactoryResult>;
+}
+```
+
+## Dependency
+
+```rs
+pub trait Dependency:
+  AsDependencyTemplate
+  + AsContextDependency
+  + AsModuleDependency
+  + AsAny
+  + DynClone
+  + Send
+  + Sync
+  + Debug
+{}
+```
+
+In Rspack, **`DependencyTemplate`**, **`ModuleDependency`**, and **`ContextDependency`** are components used to represent and manage dependencies within the module system. While they are related, they serve distinct purposes in the dependency resolution and bundling process.
+
+---
+
+### **1. DependencyTemplate**
+
+- **Purpose**: Manages the code generation for a dependency.
+- **Responsibilities**:
+  - Defines how the resolved dependency should be transformed into code during the build process.
+  - Responsible for creating the runtime code that connects modules, such as `require`, `import`, or `__webpack_require__` calls.
+- **Role**:
+  - Works at the **code generation** stage of the build process.
+  - Converts dependency data into executable output (JavaScript code).
+- **Example**:
+  - If you have `import x from './file.js'`, the `DependencyTemplate` generates the code that requires the module (`__webpack_require__('./file.js')`).
+
+---
+
+### **2. ModuleDependency**
+
+- **Purpose**: Represents a **specific module-level dependency** in the dependency graph.
+- **Responsibilities**:
+  - Contains information about a single dependency, such as:
+    - The module it depends on.
+    - The type of dependency (e.g., `ESM`, `CJS`, `AMD`).
+  - Acts as a concrete link between a module and its resolved dependencies.
+- **Role**:
+  - Provides metadata and resolves a module path (e.g., `import './file.js'` resolves to an actual file).
+  - Part of the **module resolution** stage.
+- **Example**:
+  - `ModuleDependency` represents the dependency created by `import x from './file.js'` in the source file.
+  - It tracks the resolved path (`./file.js`) and stores related information.
+
+---
+
+### **3. ContextDependency**
+
+- **Purpose**: Represents **dynamic dependencies** or dependencies within a context.
+- **Responsibilities**:
+  - Handles cases where dependencies are determined dynamically at runtime, such as:
+    - `require.context()` in Webpack/Rspack.
+    - Glob imports or dynamic imports that resolve multiple files (e.g., `import('./modules/' + name)`).
+  - Resolves a **set of modules** that match a specific pattern or criteria.
+- **Role**:
+  - Part of the **context resolution** stage, dealing with broader or dynamic module requirements.
+- **Example**:
+  - If you use `require.context('./modules', true, /\.js$/)`, `ContextDependency` resolves all `.js` files in the `./modules` directory and registers them as dependencies.
+
+---
+
+### **Key Differences**
+
+| Feature              | DependencyTemplate                     | ModuleDependency                      | ContextDependency                            |
+| -------------------- | -------------------------------------- | ------------------------------------- | -------------------------------------------- |
+| **Purpose**          | Code generation for dependencies       | Represents a single module dependency | Handles dynamic dependencies or contexts     |
+| **Stage in Process** | Code generation (build output)         | Module resolution                     | Context resolution                           |
+| **Scope**            | Defines runtime code for a dependency  | Tracks a specific module relationship | Tracks a set of dynamically resolved modules |
+| **Example Use Case** | Generating `__webpack_require__` calls | Resolving `import './file.js'`        | Resolving `require.context('./dir')`         |
+| **Dynamic Handling** | No                                     | No                                    | Yes                                          |
+
+---
+
+### **How They Work Together**
+
+1. **`ModuleDependency`**: Represents a direct dependency between modules.
+
+   - Example: `import x from './file.js'` creates a `ModuleDependency` for `'./file.js'`.
+
+2. **`ContextDependency`**: Represents dynamic dependencies or patterns.
+
+   - Example: `require.context('./dir', true, /\.js$/)` creates a `ContextDependency` for all `.js` files in `./dir`.
+
+3. **`DependencyTemplate`**: Converts the dependency (module or context) into runtime code.
+   - Example: Generates `__webpack_require__('./file.js')` or dynamic `__webpack_require__` logic.
+
+---
+
+These components are critical to how Rspack handles module resolution, dependency tracking, and code generation efficiently.
