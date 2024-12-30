@@ -318,6 +318,18 @@ pub trait ModuleFactory: Debug + Sync + Send {
 }
 ```
 
+Each `Dependency` has its corresponding `ModuleFactory` which can be retrieved using `Compilation::get_dependency_factory`.
+
+```rs
+impl Compilation {
+  pub fn get_dependency_factory(&self, dependency: &BoxDependency) -> Arc<dyn ModuleFactory> {}
+
+  // ...
+}
+```
+
+Note: some mappings between dependency type and module factory are registered by plugins 😉
+
 ## ModuleFactoryCreateData
 
 ```rs
@@ -457,7 +469,7 @@ In Rspack, `DependencyTemplate`, `ModuleDependency`, and `ContextDependency` are
 
 ### Key Differences
 
-| Feature          | DependencyTemplate                     | ModuleDependency                      | ContextDependency                            |
+| Trait            | DependencyTemplate                     | ModuleDependency                      | ContextDependency                            |
 | ---------------- | -------------------------------------- | ------------------------------------- | -------------------------------------------- |
 | Purpose          | Code generation for dependencies       | Represents a single module dependency | Handles dynamic dependencies or contexts     |
 | Stage in Process | Code generation (build output)         | Module resolution                     | Context resolution                           |
