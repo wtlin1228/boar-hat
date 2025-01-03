@@ -123,6 +123,17 @@ flowchart TD
 
 ```
 
+## Tasks (rspack_core::compiler::make::repair)
+
+| Task                      | Type  | Purpose                                                      | Task Result                 |
+| ------------------------- | ----- | ------------------------------------------------------------ | --------------------------- |
+| `FactorizeTask`           | async | create a module for this dependency and collect dependencies | [`FactorizeResultTask`]     |
+| `FactorizeResultTask`     | sync  | TBD                                                          | [`AddTask`]                 |
+| `AddTask`                 | sync  | TBD                                                          | [] or [`BuildTask`]         |
+| `BuildTask`               | async | TBD                                                          | [`BuildResultTask`]         |
+| `BuildResultTask`         | sync  | TBD                                                          | [`ProcessDependenciesTask`] |
+| `ProcessDependenciesTask` | sync  | TBD                                                          | [`FactorizeTask`*]          |
+
 # Types
 
 ## ModuleType
