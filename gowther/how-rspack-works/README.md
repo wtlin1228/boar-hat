@@ -91,24 +91,36 @@ There are two types of tasks, each task could produce more tasks:
 
 ```mermaid
 flowchart TD
-    Start@{ shape: circle, label: "Start" } --> A{task queue}
+    Pop_Task{Pop task}
+    Cond_Task_Type{Is Async Task?}
+    Handle_Async_Task_In_Async_Thread[Handle async task in async thread]
+    Handle_Sync_Task_In_Current_Thread[Handle sync task in current thread]
+    Send_Task_Result_To_Task_Result_Channel[Send task result to task result channel]
+    Get_Async_Task_Result_From_Task_Result_Channel[Get async task result from task result channel]
+    Merge_Sync_Task_Result_To_Task_Queue[Merge sync task result to task queue]
+    Merge_Async_Task_Result_To_Task_Queue[Merge async task result to task queue]
 
-    A -->|empty| B{runnung_async_tasks}
-        B -->|zero| Stop@{ shape: dbl-circ, label: "Stop" }
+    Start@{ shape: circle, label: "Start" }
+    Finish@{ shape: dbl-circ, label: "Stop" }
+    Loop{"Has task to run or has any async task running"}
+    Task_Result_Channel@{ shape: das, label: "Task Result Channel" }
 
-        B --> |otherwise| C[wait for one async task completed]
-        C --> D[runnung_async_tasks -= 1]
-        D --> E[merge task result to task queue]
-        E --> A
+    Start --> Loop
+    Loop -->|no| Finish
+    Loop -->|yes| Pop_Task
+    Pop_Task -->|none| Get_Async_Task_Result_From_Task_Result_Channel
+    Pop_Task -->|some| Cond_Task_Type
+    Cond_Task_Type -->|no| Handle_Sync_Task_In_Current_Thread
+    Handle_Sync_Task_In_Current_Thread --> Merge_Sync_Task_Result_To_Task_Queue
+    Merge_Sync_Task_Result_To_Task_Queue-->Get_Async_Task_Result_From_Task_Result_Channel
+    Cond_Task_Type -->|yes| Handle_Async_Task_In_Async_Thread
+    Handle_Async_Task_In_Async_Thread --done--> Send_Task_Result_To_Task_Result_Channel
+    Send_Task_Result_To_Task_Result_Channel-->Task_Result_Channel
+    Handle_Async_Task_In_Async_Thread-->Get_Async_Task_Result_From_Task_Result_Channel
+    Get_Async_Task_Result_From_Task_Result_Channel-->Merge_Async_Task_Result_To_Task_Queue
+    Task_Result_Channel-->Get_Async_Task_Result_From_Task_Result_Channel
+    Merge_Async_Task_Result_To_Task_Queue-->Loop
 
-    A -->|otherwise| F{task type}
-        F -->|async| G[runnung_async_tasks += 1]
-        G --> H[run this task in background]
-        H -- async task completed --- I[send task result to channel]
-
-        F -->|sync| J[run this task in main thread]
-        J --> K[merge task reault to task queue]
-        K --> B
 ```
 
 # Types
