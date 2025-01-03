@@ -87,7 +87,7 @@ pub async fn run_task_loop<Ctx: 'static>(
 There are two types of tasks, each task could produce more tasks:
 
 - Async Task: run in background (using `tokio::task::spawn`), so the task result need to be sent through a channel to be merged
-- Sync Task: run in the main thread, so the task result can be merged directly
+- Sync Task: run in the main thread, so the task result can be merged directly.
 
 ```mermaid
 flowchart TD
@@ -124,6 +124,35 @@ flowchart TD
 ```
 
 # Types
+
+## ModuleType
+
+```rs
+#[cacheable]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ModuleType {
+  Json,
+  Css,
+  CssModule,
+  CssAuto,
+  JsAuto,
+  JsDynamic,
+  JsEsm,
+  WasmSync,
+  WasmAsync,
+  AssetInline,
+  AssetResource,
+  AssetSource,
+  Asset,
+  Runtime,
+  Remote,
+  Fallback,
+  ProvideShared,
+  ConsumeShared,
+  SelfReference,
+  Custom(#[cacheable(with=AsPreset)] Ustr),
+}
+```
 
 ## PluginDriver
 
@@ -190,6 +219,75 @@ if let Some(e) = self // Compiler
 {
   // collect errors if there is any
   self.compilation.push_diagnostic(e.into());
+}
+```
+
+### Register ParserAndGenerator for each ModuleType
+
+- `ModuleType::JsAuto` -> `JavaScriptParserAndGenerator`
+- `ModuleType::JsEsm` -> `JavaScriptParserAndGenerator`
+- `ModuleType::JsDynamic` -> `JavaScriptParserAndGenerator`
+- `ModuleType::Css` -> `CssParserAndGenerator`
+- `ModuleType::CssModule` -> `CssParserAndGenerator`
+- `ModuleType::CssAuto` -> `CssParserAndGenerator`
+- `ModuleType::Asset` -> `AssetParserAndGenerator`
+- `ModuleType::AssetInline` -> `AssetParserAndGenerator`
+- `ModuleType::AssetResource` -> `AssetParserAndGenerator`
+- `ModuleType::AssetSource` -> `AssetParserAndGenerator`
+- `ModuleType::Json` -> `JsonParserAndGenerator`
+- `ModuleType::WasmAsync` -> `AsyncWasmParserAndGenerator`
+
+Plugins register `ParserAndGenerator` for different `ModuleType`s in their apply method:
+
+```rs
+struct MyParserAndGenerator {}
+
+impl Plugin for MyPlugin {
+  fn name(&self) -> &'static str {
+    "asset"
+  }
+
+  fn apply(
+    &self,
+    ctx: rspack_core::PluginContext<&mut rspack_core::ApplyContext>,
+    _options: &CompilerOptions,
+  ) -> Result<()> {
+    ctx.context.register_parser_and_generator_builder(
+      rspack_core::ModuleType::AssetInline,
+      Box::new(move |parser_options: Option<&ParserOptions>, generator_options: Option<&GeneratorOptions>| {
+        Box::new(MyParserAndGenerator {})
+      }),
+    );
+  }
+}
+
+#[async_trait::async_trait]
+pub trait Plugin: fmt::Debug + Send + Sync {
+  fn name(&self) -> &'static str {
+    "unknown"
+  }
+
+  fn apply(
+    &self,
+    _ctx: PluginContext<&mut ApplyContext>,
+    _options: &CompilerOptions,
+  ) -> Result<()> {
+    Ok(())
+  }
+
+  fn clear_cache(&self) {}
+}
+
+impl ApplyContext<'_> {
+  pub fn register_parser_and_generator_builder(
+    &mut self,
+    module_type: ModuleType,
+    parser_and_generator_builder: BoxedParserAndGeneratorBuilder,
+  ) {
+    self
+      .registered_parser_and_generator_builder
+      .insert(module_type, parser_and_generator_builder);
+  }
 }
 ```
 
