@@ -125,14 +125,41 @@ flowchart TD
 
 ## Tasks (rspack_core::compiler::make::repair)
 
-| Task                      | Type  | Purpose                                                      | Task Result                 |
-| ------------------------- | ----- | ------------------------------------------------------------ | --------------------------- |
-| `FactorizeTask`           | async | create a module for this dependency and collect dependencies | [`FactorizeResultTask`]     |
-| `FactorizeResultTask`     | sync  | TBD                                                          | [`AddTask`]                 |
-| `AddTask`                 | sync  | TBD                                                          | [] or [`BuildTask`]         |
-| `BuildTask`               | async | TBD                                                          | [`BuildResultTask`]         |
-| `BuildResultTask`         | sync  | TBD                                                          | [`ProcessDependenciesTask`] |
-| `ProcessDependenciesTask` | sync  | TBD                                                          | [`FactorizeTask`*]          |
+| Task                      | Type  | Primary Purpose                                | Task Result                 |
+| ------------------------- | ----- | ---------------------------------------------- | --------------------------- |
+| `FactorizeTask`           | async | create a `Module` for this dependency          | [`FactorizeResultTask`]     |
+| `FactorizeResultTask`     | sync  | create a `ModuleGraphModule` for this `Module` | [`AddTask`]                 |
+| `AddTask`                 | sync  | TBD                                            | [] or [`BuildTask`]         |
+| `BuildTask`               | async | TBD                                            | [`BuildResultTask`]         |
+| `BuildResultTask`         | sync  | TBD                                            | [`ProcessDependenciesTask`] |
+| `ProcessDependenciesTask` | sync  | TBD                                            | [`FactorizeTask`*]          |
+
+### FactorizeTask
+
+1. prepare `exports_info_related`
+   1. create empty `other_exports_info`
+   1. create empty `side_effects_only_info`
+   1. create `exports_info` with `other_exports_info` and `side_effects_only_info`
+1. create a module by the corresponding module factory
+   - ex: create a `NormalModule` by `NormalModuleFactory::create` for `EntryDependency`
+1. create a `FactorizeResultTask`
+
+### FactorizeResultTask
+
+Because it's a sync task, we can update the artifact through the context.
+
+1. update dependencies (part of the artifact)
+   - add file, context, and missing dependencies
+1. update module graph (part of the artifact)
+   1. create a new module `ModuleGraphModule` for the module graph with:
+      - `module.identifier()`
+      - `exports_info_related.exports_info.id()`
+   1. set issuer with the original module identifier
+   1. add `exports_info_related` to module graph
+      - add `exports_info` to `exports_info`
+      - add `side_effects_info` to `export_info`
+      - add `other_exports_info` to `export_info`
+1. create a `AddTask`
 
 # Types
 
@@ -449,7 +476,12 @@ impl Compilation {
 }
 ```
 
-Note: some mappings between dependency type and module factory are registered by plugins 😉
+Note: some mappings between dependency by the corresponding module factory - ex: create a `NormalModule` by `NormalModuleFactory::create` for `EntryDependency1. create a `FactorizeResultTask`
+
+### FactorizeResultTask
+
+1. update artifact
+   - because it's a sync task, we can update the artifact through the context
 
 ## ModuleFactoryCreateData
 
