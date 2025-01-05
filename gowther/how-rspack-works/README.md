@@ -13,6 +13,10 @@
 },
 ```
 
+## Build fail
+
+Sometimes `pnpm run build:cli:debug` fails due to some types in `binding.d.ts` are deleted for unknown reason, revert the `binding.d.ts`, delete the `dist` and `target`, then rebuild again.
+
 # How to debug
 
 Rspack is using the [tracing](https://docs.rs/tracing/latest/tracing/) crate, so we can do this:
