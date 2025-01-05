@@ -144,6 +144,20 @@ flowchart TD
    - ex: create a `NormalModule` by `NormalModuleFactory::create` for `EntryDependency`
 1. create a `FactorizeResultTask`
 
+```mermaid
+flowchart TD
+    Exports_Info_Related[Exports Info Related]
+    Exports_Info[Exports Info]
+    Other_Exports_Info[Other Exports Info]
+    Side_Effect_Info[Side Effect Info]
+
+    Exports_Info_Related --> Exports_Info
+    Exports_Info_Related ----> Other_Exports_Info
+    Exports_Info --id--> Other_Exports_Info
+    Exports_Info --id--> Side_Effect_Info
+    Exports_Info_Related ----> Side_Effect_Info
+```
+
 ### FactorizeResultTask
 
 Because it's a sync task, we can update the artifact through the context.
@@ -160,6 +174,30 @@ Because it's a sync task, we can update the artifact through the context.
       - add `side_effects_info` to `export_info`
       - add `other_exports_info` to `export_info`
 1. create a `AddTask`
+
+```mermaid
+flowchart TD
+    Original_Module[Original Module]
+    Module[Module]
+    Module_Graph_Module[Module Graph Module]
+    Module_Graph[Module Graph]
+    Exports_Info[Exports Info]
+    Other_Exports_Info[Other Exports Info]
+    Side_Effect_Info[Side Effect Info]
+
+    Module_Graph_Module --exports--> Exports_Info
+    Module_Graph_Module --"module identifier"-->Module
+    Module_Graph_Module --issuer-->Original_Module
+
+    Exports_Info --"added to"--> Module_Graph
+    Other_Exports_Info --"added to"--> Module_Graph
+    Side_Effect_Info --"added to"--> Module_Graph
+```
+
+### AddTask
+
+1. add `ModuleGraphModule` into module graph
+1.
 
 # Types
 
