@@ -200,8 +200,32 @@ flowchart TD
 
 ### AddTask
 
-1. add `ModuleGraphModule` into module graph
-1.
+1. insert `ModuleGraphModule` into the active partial of module graph
+1. make connections
+   - from the original module to the newly created module for all the dependencies
+   - update the incoming connections for the current `ModuleGraphModule`
+   - update the outgoing connections for the original `ModuleGraphModule`
+1. insert module into built modules of artifact
+1. create a `BuildTask`
+
+```mermaid
+flowchart TD
+    Original_Module[Original Module]
+    Module[Module]
+    Module_Graph_Module[Module Graph Module]
+    Module_Graph[Module Graph]
+    Module_Graph_Connection@{ shape: procs, label: "Module Graph Connection"}
+    Dependency@{ shape: procs, label: "Dependency"}
+
+    Original_Module --input--> Module_Graph_Connection
+    Module --input--> Module_Graph_Connection
+    Dependency --input--> Module_Graph_Connection
+
+    Module_Graph_Module --"added to active partial"--> Module_Graph
+    Module_Graph_Connection --"added to active partial"--> Module_Graph
+    Dependency --"added to active partial"--> Module_Graph
+
+```
 
 # Types
 
