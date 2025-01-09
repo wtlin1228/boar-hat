@@ -129,14 +129,14 @@ flowchart TD
 
 ## Tasks (rspack_core::compiler::make::repair)
 
-| Task                      | Type  | Primary Purpose                                | Task Result                 |
-| ------------------------- | ----- | ---------------------------------------------- | --------------------------- |
-| `FactorizeTask`           | async | create a `Module` for this dependency          | [`FactorizeResultTask`]     |
-| `FactorizeResultTask`     | sync  | create a `ModuleGraphModule` for this `Module` | [`AddTask`]                 |
-| `AddTask`                 | sync  | TBD                                            | [] or [`BuildTask`]         |
-| `BuildTask`               | async | TBD                                            | [`BuildResultTask`]         |
-| `BuildResultTask`         | sync  | TBD                                            | [`ProcessDependenciesTask`] |
-| `ProcessDependenciesTask` | sync  | TBD                                            | [`FactorizeTask`*]          |
+| Task                      | Type  | Primary Purpose                                                        | Task Result                 |
+| ------------------------- | ----- | ---------------------------------------------------------------------- | --------------------------- |
+| `FactorizeTask`           | async | create a `Module` for this dependency                                  | [`FactorizeResultTask`]     |
+| `FactorizeResultTask`     | sync  | create a `ModuleGraphModule` for this `Module`                         | [`AddTask`]                 |
+| `AddTask`                 | sync  | handle the connections between the original `Module` and this `Module` | [] or [`BuildTask`]         |
+| `BuildTask`               | async | build the `Module`, run loaders and do parsing                         | [`BuildResultTask`]         |
+| `BuildResultTask`         | sync  | TBD                                                                    | [`ProcessDependenciesTask`] |
+| `ProcessDependenciesTask` | sync  | TBD                                                                    | [`FactorizeTask`*]          |
 
 ### FactorizeTask
 
@@ -226,6 +226,30 @@ flowchart TD
     Dependency --"added to active partial"--> Module_Graph
 
 ```
+
+### BuildTask
+
+1. build the module, for `NormalModule::build`, it will:
+   1. run loaders, get the content, sourcemap, and dependencies(file, context, missing)
+   1. parse the module with its `ParserAndGenerator`, for `JavaScriptParserAndGenerator::parse`, it will
+      1. visit with `Resolver`
+      1. visit with `InsertedSemicolons`
+      1. scan dependencies with `JavascriptParser`
+1. create a `BuildResultTask`
+
+# Loaders
+
+- Documentation:
+  - Webpack: https://webpack.js.org/api/loaders
+  - Rspack: https://rspack.dev/contribute/architecture/rspack-loader
+- `Loader`'s definition is in `rspack_loader_runner`
+- the identifier of a builtin `Loader` must start with `builtin:`, like `builtin:swc-loader`
+- a `Loader` should be transform into a `LoaderItem` before being ran
+- `Loader`s are pitched in order then ran in reverse order
+
+## SwcLoader
+
+A builtin loader with identifier `builtin:swc-loader`. When we run this loader, it takes the content out of `LoaderContext` and uses [swc](https://swc.rs/) to do the parsing, transformation and generate the sourcemap. `SwcLoader` will store the content and sourcemap back to the `LoaderContext` so the remaining loaders can reuse them.
 
 # Types
 
