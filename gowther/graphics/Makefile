@@ -1,5 +1,5 @@
 # Define variables
-CC = clang
+CC = g++
 CFLAGS = -I$(shell brew --prefix)/include -L$(shell brew --prefix)/lib
 LIBS = -lglfw -framework OpenGL
 SRC = ./src/main.cpp
