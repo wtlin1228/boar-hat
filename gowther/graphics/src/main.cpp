@@ -100,7 +100,8 @@ int main(void)
     if (!success)
     {
         glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        fputs(infoLog, stderr);
+        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n"
+                  << infoLog << std::endl;
     }
 
     // Fragment shader
@@ -118,7 +119,8 @@ int main(void)
     if (!success)
     {
         glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        fputs(infoLog, stderr);
+        std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n"
+                  << infoLog << std::endl;
     }
 
     // Shader program
@@ -133,7 +135,8 @@ int main(void)
     if (!success)
     {
         glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-        fputs(infoLog, stderr);
+        std::cout << "ERROR::SHADER::PROGRAM::LINK_FAILED\n"
+                  << infoLog << std::endl;
     }
     glUseProgram(shaderProgram);
 
@@ -146,11 +149,6 @@ int main(void)
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window))
     {
-        // Resize the viewport
-        int width, height;
-        glfwGetFramebufferSize(window, &width, &height);
-        glViewport(0, 0, width, height);
-
         // OpenGL Rendering related code
         glClear(GL_COLOR_BUFFER_BIT);
         glUseProgram(shaderProgram);
