@@ -134,16 +134,16 @@ flowchart TD
 | `FactorizeTask`           | async | create a `Module` for this dependency                                  | [`FactorizeResultTask`]     |
 | `FactorizeResultTask`     | sync  | create a `ModuleGraphModule` for this `Module`                         | [`AddTask`]                 |
 | `AddTask`                 | sync  | handle the connections between the original `Module` and this `Module` | [] or [`BuildTask`]         |
-| `BuildTask`               | async | build the `Module`, run loaders and do parsing                         | [`BuildResultTask`]         |
+| `BuildTask`               | async | build the `Module`, run loaders and parse the module                   | [`BuildResultTask`]         |
 | `BuildResultTask`         | sync  | TBD                                                                    | [`ProcessDependenciesTask`] |
 | `ProcessDependenciesTask` | sync  | TBD                                                                    | [`FactorizeTask`*]          |
 
 ### FactorizeTask
 
 1. prepare `exports_info_related`
-   1. create empty `other_exports_info`
-   1. create empty `side_effects_only_info`
-   1. create `exports_info` with `other_exports_info` and `side_effects_only_info`
+   1. create an empty `other_exports_info`
+   1. create an empty `side_effects_only_info`
+   1. create a `exports_info` and link it to `other_exports_info` and `side_effects_only_info`
 1. create a module by the corresponding module factory
    - ex: create a `NormalModule` by `NormalModuleFactory::create` for `EntryDependency`
 1. create a `FactorizeResultTask`
@@ -234,8 +234,11 @@ flowchart TD
    1. parse the module with its `ParserAndGenerator`, for `JavaScriptParserAndGenerator::parse`, it will
       1. visit with `Resolver`
       1. visit with `InsertedSemicolons`
-      1. scan dependencies with `JavascriptParser`
+      1. prepare a `JavascriptParser` with proper `JavascriptParserPlugin`s
+      1. scan dependencies with `JavascriptParser` by walking the program
 1. create a `BuildResultTask`
+
+### BuildResultTask
 
 # Loaders
 
@@ -736,4 +739,58 @@ EntryDependency {
     layer: None,
     is_global: false,
 },
+```
+
+# Interesting Design
+
+## JavaScriptParserPluginDrive
+
+Path: `rspack_plugin_javascript::parser_plugin::drive::JavaScriptParserPluginDrive`
+
+`JavaScriptParserPluginDrive` holds a set of plugins which implement `JavascriptParserPlugin`, and itself also implements `JavascriptParserPlugin`.
+
+```rs
+pub type BoxJavascriptParserPlugin = Box<dyn JavascriptParserPlugin + Send + Sync>;
+
+pub struct JavaScriptParserPluginDrive {
+  plugins: Vec<BoxJavascriptParserPlugin>,
+}
+
+impl JavascriptParserPlugin for JavaScriptParserPluginDrive {
+  fn top_level_await_expr(
+    &self,
+    parser: &mut JavascriptParser,
+    expr: &swc_core::ecma::ast::AwaitExpr,
+  ) {
+    for plugin in &self.plugins {
+      // `SyncBailHook` but without return value
+      plugin.top_level_await_expr(parser, expr);
+    }
+  }
+
+  // ...
+}
+```
+
+## JavascriptParser::enter_statement
+
+Path: `rspack_plugin_javascript::visitors::dependency::parser::JavascriptParser::enter_statement`
+
+`enter_statement` will push the current statement into the `statement_path` and pop it before leaving it.
+
+```rs
+fn enter_statement<S, H, F>(&mut self, statement: &S, call_hook: H, on_statement: F)
+  where
+    S: Spanned,
+    H: FnOnce(&mut Self, &S) -> bool,
+    F: FnOnce(&mut Self, &S),
+  {
+    self.statement_path.push(statement.span().into());
+    if call_hook(self, statement) {
+      self.prev_statement = self.statement_path.pop();
+      return;
+    }
+    on_statement(self, statement);
+    self.prev_statement = self.statement_path.pop();
+  }
 ```
