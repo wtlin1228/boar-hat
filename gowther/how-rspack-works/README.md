@@ -135,7 +135,7 @@ flowchart TD
 | `FactorizeResultTask`     | sync  | create a `ModuleGraphModule` for this `Module`                         | [`AddTask`]                 |
 | `AddTask`                 | sync  | handle the connections between the original `Module` and this `Module` | [] or [`BuildTask`]         |
 | `BuildTask`               | async | build the `Module`, run loaders and parse the module                   | [`BuildResultTask`]         |
-| `BuildResultTask`         | sync  | TBD                                                                    | [`ProcessDependenciesTask`] |
+| `BuildResultTask`         | sync  | update the artifact based on the build result of the `Module`          | [`ProcessDependenciesTask`] |
 | `ProcessDependenciesTask` | sync  | TBD                                                                    | [`FactorizeTask`*]          |
 
 ### FactorizeTask
@@ -239,6 +239,17 @@ flowchart TD
 1. create a `BuildResultTask`
 
 ### BuildResultTask
+
+1. update module's `build_info` and `build_meta`
+1. update dependencies (part of the artifact)
+   - add file, context, missing, and build dependencies
+1. update module graph (part of the artifact)
+   - add each dependency to module graph
+   - set the parents for each added dependency
+1. update module graph module (part of the artifact)
+   - add dependencies for this `ModuleGraphModule`
+1. add module to module graph (part of the artifact)
+1. create a `ProcessDependenciesTask`
 
 # Loaders
 
