@@ -136,7 +136,7 @@ flowchart TD
 | `AddTask`                 | sync  | handle the connections between the original `Module` and this `Module` | [] or [`BuildTask`]         |
 | `BuildTask`               | async | build the `Module`, run loaders and parse the module                   | [`BuildResultTask`]         |
 | `BuildResultTask`         | sync  | update the artifact based on the build result of the `Module`          | [`ProcessDependenciesTask`] |
-| `ProcessDependenciesTask` | sync  | TBD                                                                    | [`FactorizeTask`*]          |
+| `ProcessDependenciesTask` | sync  | turn the dependencies into `FactorizeTask`s                            | [`FactorizeTask`*]          |
 
 ### FactorizeTask
 
