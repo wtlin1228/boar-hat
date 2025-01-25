@@ -10,10 +10,13 @@ TARGETS := $(patsubst $(SRC_DIR)/%, $(DIST_DIR)/%/main, $(PROJECTS))
 
 all: $(TARGETS)
 
-$(DIST_DIR)/%/main: $(SRC_DIR)/%/*.cpp $(LIB_DIR)/*
+$(DIST_DIR)/%/main: $(SRC_DIR)/%/* $(LIB_DIR)/*
 	@echo "Building $@..."
 	@mkdir -p $(DIST_DIR)/$*
+	@cp $(wildcard $(SRC_DIR)/$*/*.vs) $(DIST_DIR)/$* 2>/dev/null || true
+	@cp $(wildcard $(SRC_DIR)/$*/*.fs) $(DIST_DIR)/$* 2>/dev/null || true
 	$(CXX) -o $@ $(CXXFLAGS) $(LIBS) -I./$(LIB_DIR) $(wildcard $(SRC_DIR)/$*/*.cpp) $(wildcard $(LIB_DIR)/*.cpp)
+	@echo "\n"
 
 echo:
 	@echo $(PROJECTS)
