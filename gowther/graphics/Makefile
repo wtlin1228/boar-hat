@@ -1,23 +1,24 @@
-# Define variables
-CC = g++
-CFLAGS = -I$(shell brew --prefix)/include -L$(shell brew --prefix)/lib
+CXX := clang++
+CXXFLAGS := -std=c++20 -I$(shell brew --prefix)/include -L$(shell brew --prefix)/lib
 LIBS = -lglfw -framework OpenGL
-SRC_DIR = ./src
-DIST_DIR = ./dist
-SOURCES = $(shell find $(SRC_DIR) -name '*.cpp')
-TARGETS = $(patsubst $(SRC_DIR)/%.cpp, $(DIST_DIR)/%, $(SOURCES))
+LIB_DIR := lib
+SRC_DIR := src
+DIST_DIR := dist
 
-# Default target: Build all binaries
+PROJECTS := $(shell find $(SRC_DIR) -type f -name "main.cpp" -exec dirname {} \;)
+TARGETS := $(patsubst $(SRC_DIR)/%, $(DIST_DIR)/%/main, $(PROJECTS))
+
 all: $(TARGETS)
 
-# Build each binary
-$(DIST_DIR)/%: $(SRC_DIR)/%.cpp
-	@mkdir -p $(dir $@)
-	$(CC) -o $@ $< $(CFLAGS) $(LIBS)
+$(DIST_DIR)/%/main: $(SRC_DIR)/%/*.cpp $(LIB_DIR)/*
+	@echo "Building $@..."
+	@mkdir -p $(DIST_DIR)/$*
+	$(CXX) -o $@ $(CXXFLAGS) $(LIBS) -I./$(LIB_DIR) $(wildcard $(SRC_DIR)/$*/*.cpp) $(wildcard $(LIB_DIR)/*.cpp)
 
-# Clean target
+echo:
+	@echo $(PROJECTS)
+	@echo $(TARGETS)
+
 clean:
+	@echo "Cleaning up..."
 	rm -rf $(DIST_DIR)
-
-# Phony targets
-.PHONY: all clean
