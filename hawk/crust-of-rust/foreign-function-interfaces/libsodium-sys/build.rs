@@ -11,6 +11,8 @@ fn main() {
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
         .allowlist_function("sodium_init")
+        .allowlist_function("crypto_generichash")
+        .allowlist_var("crypto_generichash_.*")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");
