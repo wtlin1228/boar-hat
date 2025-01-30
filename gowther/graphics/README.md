@@ -9,4 +9,6 @@
 
 # Resource:
 
-- https://github.com/zamirmf/OpenGLOnMac
+- [Learn OpenGL](https://learnopengl.com/)
+- [GLFW](https://www.glfw.org/)
+- [OpenGL Mathematics](https://glm.g-truc.net/0.9.9/index.html)
