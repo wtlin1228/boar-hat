@@ -67,6 +67,7 @@ pub async fn repair(
                         1. the module factory of `EntryDependency` is `NormalModuleFactory`
                      1. create a `MakeTaskContext` from the compilation, artifact and compilation.cache
                      1. run the task loop with the `MakeTaskContext` and initial tasks
+                     1. extract the make artifact
          1. `self.compilation.finish`
          1. `self.compilation.seal`
       1. `Compiler::compile_done`
@@ -250,6 +251,12 @@ flowchart TD
    - add dependencies for this `ModuleGraphModule`
 1. add module to module graph (part of the artifact)
 1. create a `ProcessDependenciesTask`
+
+### ProcessDependenciesTask
+
+1. group dependencies with their resource identifiers
+1. determine the module factory for each group with their dependency type (ex: EsmImport)
+1. create a `FactorizeTask` for each group
 
 # Loaders
 
