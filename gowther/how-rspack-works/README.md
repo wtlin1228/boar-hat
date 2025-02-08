@@ -68,6 +68,11 @@ pub async fn repair(
                      1. create a `MakeTaskContext` from the compilation, artifact and compilation.cache
                      1. run the task loop with the `MakeTaskContext` and initial tasks
                      1. extract the make artifact
+                  1. `compiler::make::cutout::fix_artifact`
+                     1. fix_issuers
+                     1. fix_build_meta
+                     1. clean_isolated_module
+                     1. has_module_graph_change
          1. `self.compilation.finish`
          1. `self.compilation.seal`
       1. `Compiler::compile_done`
