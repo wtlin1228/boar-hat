@@ -213,13 +213,28 @@ __webpack_require__.rv = () => "1.3.12";
 
 ```js
 // object to store loaded and loading chunks
-// undefined = chunk not loaded, null = chunk preloaded/prefetched
-// [resolve, reject, Promise] = chunk loading, 0 = chunk loaded
+// - undefined = chunk not loaded
+// - null = chunk preloaded/prefetched
+// - [resolve, reject, Promise] = chunk loading
+// - 0 = chunk loaded
 var installedChunks = { 980: 0 };
+
+/**
+ * This function checks if a chunk is already loaded. It's used to
+ * determine if it's safe to run modules that depend on this chunk.
+ *
+ * There could be other functions for checking whether a chunk has
+ * been loaded with more complex setting.
+ */
 __webpack_require__.O.j = (chunkId) => installedChunks[chunkId] === 0;
-// install a JSONP callback for chunk loading
+
+/**
+ * This function is called when a new chunk is loaded. The data array contains:
+ * - chunkIds: An array of chunk IDs included in this file
+ * - moreModules: An object mapping module IDs to factory functions
+ * - runtime: (Optional) a function to run after modules are registered
+ */
 var webpackJsonpCallback = (parentChunkLoadingFunction, data) => {
-  debugger;
   var [chunkIds, moreModules, runtime] = data;
   // add "moreModules" to the modules object,
   // then flag all "chunkIds" as loaded and fire callback
@@ -229,6 +244,7 @@ var webpackJsonpCallback = (parentChunkLoadingFunction, data) => {
   if (chunkIds.some((id) => installedChunks[id] !== 0)) {
     for (moduleId in moreModules) {
       if (__webpack_require__.o(moreModules, moduleId)) {
+        // register module
         __webpack_require__.m[moduleId] = moreModules[moduleId];
       }
     }
@@ -241,16 +257,26 @@ var webpackJsonpCallback = (parentChunkLoadingFunction, data) => {
       __webpack_require__.o(installedChunks, chunkId) &&
       installedChunks[chunkId]
     ) {
+      // resolve the promise
       installedChunks[chunkId][0]();
     }
+    // mark as loaded
     installedChunks[chunkId] = 0;
   }
+
+  // This resumes any pending module executions waiting for this chunk.
   return __webpack_require__.O(result);
 };
 
+// This is the global array used to buffer pushed chunks, usually named
+// like webpackChunk<name>.
 var chunkLoadingGlobal = (self["webpackChunksingle_module"] =
   self["webpackChunksingle_module"] || []);
+
+// process any chunks already in the array
 chunkLoadingGlobal.forEach(webpackJsonpCallback.bind(null, 0));
+
+// override .push() to use our callback
 chunkLoadingGlobal.push = webpackJsonpCallback.bind(
   null,
   chunkLoadingGlobal.push.bind(chunkLoadingGlobal)
