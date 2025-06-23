@@ -107,9 +107,9 @@ Critical and chunked JavaScript resources are loaded using `defer`, ensuring the
 - `define_property_getters`: set the getter for each property of the definition
 - `has_own_property`: just a wrapper over `Object.hasOwnProperty`
 - `on_chunk_loaded`: manages when to execute code that depends on one or more asynchronously loaded chunks
-- `rspack_version`: get rspack's version, ex: '1.3.12'
+- `rspack_version`: get rspack's version, ex: `'1.3.12'`
 - `jsonp_chunk_loading`: handles loading additional JavaScript chunks asynchronously, essential for features like code splitting and Module Federation
-- `rspack_unique_id`: get rspack's unique id, ex: 'bundler=rspack@1.3.12'
+- `rspack_unique_id`: get rspack's unique id, ex: `'bundler=rspack@1.3.12'`
 
 #### `define_property_getters`
 
@@ -160,8 +160,8 @@ __webpack_require__.O = (result, chunkIds, fn, priority) => {
   if (chunkIds) {
     // ex: __webpack_require__.O(undefined, ["354"], () => __webpack_require__(681), 0);
     // Insert the new callback into the `deferred` queue in order of `priority`.
-    // higher priority → placed earlier in the list.
-    // lower priority → pushed toward the end.
+    // higher priority -> placed earlier in the list.
+    // lower priority -> pushed toward the end.
     priority = priority || 0;
     for (var i = deferred.length; i > 0 && deferred[i - 1][2] > priority; i--)
       deferred[i] = deferred[i - 1];
