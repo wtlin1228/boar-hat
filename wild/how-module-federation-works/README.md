@@ -305,3 +305,183 @@ var __webpack_exports__ = __webpack_require__.O(
 );
 __webpack_exports__ = __webpack_require__.O(__webpack_exports__);
 ```
+
+## How Bundler Loads Modules Dynamically
+
+Before diving into how Module Federation works, it's also important to know how a bundler loads modules dynamically.
+
+### Entry Code
+
+Here’s a simple example of an entry module:
+
+```js
+import "./index.css";
+
+document.querySelector("#root").innerHTML = `
+<div class="content">
+  <h1>Vanilla Rsbuild</h1>
+  <p>Start building amazing things with Rsbuild.</p>
+  <div>
+    <button id="inc-button">increment</button>
+  </div>
+  <h3 id="num">0</h3>
+</div>
+`;
+
+const button = document.querySelector("#inc-button");
+button.addEventListener("click", () => {
+  import("./m1.js").then(({ increment }) => {
+    increment();
+  });
+});
+```
+
+After bundling, this entry module gets transformed into something like:
+
+```js
+document.querySelector("#root").innerHTML = `
+<div class="content">
+  <h1>Vanilla Rsbuild</h1>
+  <p>Start building amazing things with Rsbuild.</p>
+  <div>
+    <button id="inc-button">increment</button>
+  </div>
+  <h3 id="num">0</h3>
+</div>
+`;
+const src_button = document.querySelector("#inc-button");
+src_button.addEventListener("click", () => {
+  __webpack_require__
+    .e(/* import() */ "16")
+    .then(__webpack_require__.bind(__webpack_require__, 890))
+    .then((param) => {
+      let { increment } = param;
+      increment();
+    });
+});
+```
+
+### m1.js Source and Bundled Output
+
+Source:
+
+```js
+export const increment = () => {
+  const num = document.querySelector("#num");
+  num.innerHTML = Number(num.innerHTML) + 1;
+};
+```
+
+Bundled:
+
+```js
+"use strict";
+(self["webpackChunklazy_module"] = self["webpackChunklazy_module"] || []).push([
+  ["16"],
+  {
+    890: function (
+      __unused_webpack_module,
+      __webpack_exports__,
+      __webpack_require__
+    ) {
+      __webpack_require__.r(__webpack_exports__);
+      __webpack_require__.d(__webpack_exports__, {
+        increment: () => increment,
+      });
+      const increment = () => {
+        const num = document.querySelector("#num");
+        num.innerHTML = Number(num.innerHTML) + 1;
+      };
+    },
+  },
+]);
+```
+
+When this script is loaded in the browser, it pushes a new chunk into the global array `webpackChunklazy_module`. Specifically, it pushes:
+
+```js
+[["16"], { 890: function (...) { ... } }]
+```
+
+As we mentioned in the **How Bundler Load Modules**, once pushed, the runtime will register module `890` and mark chunk "16" as loaded through `webpackJsonpCallback`. Then, any code that depends on "16" can safely execute.
+
+### Runtime
+
+- `define_property_getters`: set the getter for each property of the definition
+- `has_own_property`: just a wrapper over `Object.hasOwnProperty`
+- `on_chunk_loaded`: manages when to execute code that depends on one or more asynchronously loaded chunks
+- `rspack_version`: get rspack's version, ex: `'1.3.12'`
+- `jsonp_chunk_loading`: handles loading additional JavaScript chunks asynchronously, essential for features like code splitting and Module Federation
+- `rspack_unique_id`: get rspack's unique id, ex: `'bundler=rspack@1.3.12'`
+
+New:
+
+- `ensure_chunk`: ensure additional chunks are loaded
+- `get javascript chunk filename`: get url to a JS chunk
+- `get mini-css chunk filename`: get url to a mini-css chunk
+- `load_script`: load a script via script tag
+
+### Workflow for loading a Lazy Chunk
+
+```js
+// Step 1: Ensure chunk "16" is loaded
+// Step 2: Execute module 890 and get its exports
+// Step 3: Call the named export `increment` from module 890
+__webpack_require__
+  .e(/* import() */ "16")
+  .then(__webpack_require__.bind(__webpack_require__, 890))
+  .then((param) => {
+    let { increment } = param;
+    increment();
+  });
+```
+
+#### Detailed Steps
+
+1. Check if chunk "16" is already installed or currently loading..
+1. If not, initiate loading via a `script` tag:
+
+   ```html
+   <script
+     charset="utf-8"
+     data-webpack="lazy-module:chunk-16"
+     src="/static/js/async/16.cfcca934.js"
+   ></script>
+   ```
+
+1. When chunk "16" is downloaded and executed, it pushes data to the runtime array:
+
+   ```js
+   webpackChunklazy_module.push([
+     ["16"],
+     {
+       890: function (...) {
+         // Module definition here
+       },
+     },
+   ]);
+   ```
+
+1. This triggers webpackJsonpCallback, which:
+
+   - Registers module 890 into `__webpack_modules__`:
+
+     ```js
+     __webpack_modules__[890] = moreModules[890];
+     ```
+
+   - Mark chunk "16" as loaded.
+
+     ```js
+     installedChunks["16"] = 0; // 0 means loaded
+     ```
+
+   - Resolves the promise returned by `webpack_require.e("16")`.
+
+1. `__webpack_require__(890)` is then called:
+
+   - If not already executed, the module function runs and caches its exports in `__webpack_module_cache__`.
+
+1. The exports object is returned:
+
+   - In this case, it includes `{ increment }`, which is then invoked.
