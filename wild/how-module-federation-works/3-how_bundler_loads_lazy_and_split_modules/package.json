@@ -1,0 +1,14 @@
+{
+  "name": "more-complex-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "rsbuild build",
+    "dev": "rsbuild dev --open",
+    "preview": "rsbuild preview"
+  },
+  "devDependencies": {
+    "@rsbuild/core": "^1.3.22"
+  }
+}

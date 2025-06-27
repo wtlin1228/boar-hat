@@ -485,3 +485,159 @@ __webpack_require__
 1. The exports object is returned:
 
    - In this case, it includes `{ increment }`, which is then invoked.
+
+## How Bundler Loads Lazy and Split Modules
+
+The runtime changes only slightly. Specifically, the logic for resolving JavaScript chunk filenames is updated:
+
+```js
+// webpack/runtime/get javascript chunk filename
+(() => {
+  // This function allow to reference chunks
+  __webpack_require__.u = (chunkId) => {
+    // return url for filenames not based on template
+
+    // return url for filenames based on template
+    return (
+      "static/js/async/" +
+      chunkId +
+      "." +
+      { 16: "b365bde5", 773: "65b3ffab" }[chunkId] +
+      ".js"
+    );
+  };
+})();
+```
+
+When the button is clicked, chunks `"773"` and `"16"` are dynamically loaded. Once they are both available, module `890` is executed.
+
+### Entry Code
+
+Source:
+
+```js
+import "./index.css";
+
+document.querySelector("#root").innerHTML = `
+<div class="content">
+  <h1>Vanilla Rsbuild</h1>
+  <p>Start building amazing things with Rsbuild.</p>
+  <div>
+    <button id="inc-button">increment</button>
+  </div>
+  <h3 id="num">0</h3>
+  <div id="loaded-content" style="min-height: 100px"></div>
+</div>
+`;
+
+const button = document.querySelector("#inc-button");
+button.addEventListener("click", () => {
+  import("./m1.js").then(({ increment }) => {
+    increment();
+  });
+});
+```
+
+Bundled:
+
+```js
+document.querySelector("#root").innerHTML = `
+<div class="content">
+  <h1>Vanilla Rsbuild</h1>
+  <p>Start building amazing things with Rsbuild.</p>
+  <div>
+    <button id="inc-button">increment</button>
+  </div>
+  <h3 id="num">0</h3>
+  <div id="loaded-content" style="min-height: 100px"></div>
+</div>
+`;
+const src_button = document.querySelector("#inc-button");
+src_button.addEventListener("click", () => {
+  Promise.all(
+    /* import() */ [__webpack_require__.e("773"), __webpack_require__.e("16")]
+  )
+    .then(__webpack_require__.bind(__webpack_require__, 890))
+    .then((param) => {
+      let { increment } = param;
+      increment();
+    });
+});
+```
+
+### m1.js Source and Bundled Output
+
+Source:
+
+```js
+import "./m2";
+
+const p = document.createElement("p");
+p.innerText = "m1.js";
+document.querySelector("#loaded-content").appendChild(p);
+
+export const increment = () => {
+  const num = document.querySelector("#num");
+  num.innerHTML = Number(num.innerHTML) + 1;
+};
+```
+
+Bundled:
+
+```js
+"use strict";
+(self["webpackChunkmore_complex_example"] =
+  self["webpackChunkmore_complex_example"] || []).push([
+  ["16"],
+  {
+    890: function (
+      __unused_webpack_module,
+      __webpack_exports__,
+      __webpack_require__
+    ) {
+      __webpack_require__.r(__webpack_exports__);
+      __webpack_require__.d(__webpack_exports__, {
+        increment: () => increment,
+      });
+      /* ESM import */ var _m2__WEBPACK_IMPORTED_MODULE_0__ =
+        __webpack_require__(919);
+      /* ESM import */ var _m2__WEBPACK_IMPORTED_MODULE_0___default =
+        /*#__PURE__*/ __webpack_require__.n(_m2__WEBPACK_IMPORTED_MODULE_0__);
+
+      const p = document.createElement("p");
+      p.innerText = "m1.js";
+      document.querySelector("#loaded-content").appendChild(p);
+      const increment = () => {
+        const num = document.querySelector("#num");
+        num.innerHTML = Number(num.innerHTML) + 1;
+      };
+    },
+  },
+]);
+```
+
+### m2.js Source and Bundled Output
+
+Source:
+
+```js
+const p = document.createElement("p");
+p.innerText = "m2.js";
+document.querySelector("#loaded-content").appendChild(p);
+```
+
+Bundled:
+
+```js
+(self["webpackChunkmore_complex_example"] =
+  self["webpackChunkmore_complex_example"] || []).push([
+  ["773"],
+  {
+    919: function () {
+      const p = document.createElement("p");
+      p.innerText = "m2.js";
+      document.querySelector("#loaded-content").appendChild(p);
+    },
+  },
+]);
+```
