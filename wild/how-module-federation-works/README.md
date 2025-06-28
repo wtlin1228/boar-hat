@@ -641,3 +641,52 @@ Bundled:
   },
 ]);
 ```
+
+## How Bundler Supports External Modules
+
+To exclude certain modules like `lodash` from the final bundle, configure `externals` in `rsbuild.config.ts` (or `.js`):
+
+```js
+import { defineConfig } from "@rsbuild/core";
+
+export default defineConfig({
+  html: { template: "./public/index.html" },
+  output: {
+    minify: false,
+    externals: {
+      lodash: "_", // Use global "_" instead of bundling lodash
+    },
+  },
+});
+```
+
+With this setup, Rsbuild assumes `lodash` is available globally at runtime, so it won't include it in the output bundle. You'll need to provide the library manually in your HTML:
+
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Rsbuild App</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script defer src="/lodash_4.17.21.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+```
+
+### Challenges
+
+1. **Missing External Modules**
+
+   What happens if the host fails to provide a required external module? This can lead to runtime errors if the expected global variable is unavailable.
+
+1. **Version Conflicts**
+
+   How does the host manage multiple versions of the same external module, such as React 16, 17, 18, or 19? Conflicting versions can cause compatibility issues across different applications.
+
+1. **Conditional Dependencies**
+
+   What if an external module, such as `babylonjs`, is only needed on specific routes or by certain applications? Loading all externals upfront may result in unnecessary payload, while lazy loading them requires additional coordination.
