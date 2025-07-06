@@ -691,12 +691,4 @@ With this setup, Rsbuild assumes `lodash` is available globally at runtime, so i
 
    What if an external module, such as `babylonjs`, is only needed on specific routes or by certain applications? Loading all externals upfront may result in unnecessary payload, while lazy loading them requires additional coordination.
 
-## How Bundler Supports Module Federation
-
-After some testing, the setup appears to be unstable in its current state.
-
-### Reported Issues
-
-- [Consumer Fails to Load Remote Provider After Removing React Packages](https://github.com/module-federation/core/issues/3863)
-- [Duplicate Webpack Runtime Chunks Being Loaded](https://github.com/module-federation/core/issues/3862)
-- [Provider CSS Fetched from Consumer Host Causing 404](https://github.com/module-federation/core/issues/3861)
+## How Module Federation Solves Those Challenges
