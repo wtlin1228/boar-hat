@@ -692,3 +692,9 @@ With this setup, Rsbuild assumes `lodash` is available globally at runtime, so i
    What if an external module, such as `babylonjs`, is only needed on specific routes or by certain applications? Loading all externals upfront may result in unnecessary payload, while lazy loading them requires additional coordination.
 
 ## How Module Federation Solves Those Challenges
+
+Module Federation provides a runtime mechanism that:
+
+- Dynamically fetches remote modules as needed.
+- Resolves and negotiates shared library versions based on configured constraints (e.g. requiredVersion, singleton).
+- Reuses already-loaded libraries from other remotes to avoid duplication and reduce load time.
