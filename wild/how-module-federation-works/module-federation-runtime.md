@@ -11,15 +11,31 @@ runtime.loadRemote('kirby/math')
              origin: host,
              remoteInfo /* something like remote in host.options */
            })
-          -> create a host snapshot if not exists and update the remote info
-             ex: {
-                  remoteEntry: '',
-                  remotesInfo: {
-                    kirby: { matchedVersion: 'http://localhost:3001/mf-manifest.json' },
-                  }
-                  version: '',
-                }
-          -> currently at getManifestJson
+          -> create a host snapshot and add to global
+             __FEDERATION__.moduleInfo = {
+               host: {
+                 remoteEntry: "",
+                 remoteInfo: {},
+                 version: ""
+               }
+             }
+          -> add remote info
+             __FEDERATION__.moduleInfo = {
+               host: {
+                 remoteEntry: "",
+                 remoteInfo: {
+                   kirby: { matchedVersion: 'http://localhost:3000/remote/kirby/mf-manifest.json' },
+                 },
+                 version: ""
+               }
+             }
+          -> fetch `mf-manifest.json` then parse it to a ModuleInfo
+          -> update global moduleInfo
+             __FEDERATION__.moduleInfo = {
+               host: { /* ... */ },
+               "kirby:http://localhost:3000/remote/kirby/mf-manifest.json": { /* ... */ },
+             }
+          -> generatePreloadAssetsPlugin::generatePreloadAssets({ /* ... */ })
 ```
 
 # Global
