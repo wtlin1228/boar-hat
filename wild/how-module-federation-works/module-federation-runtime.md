@@ -1,4 +1,4 @@
-```js
+```
 runtime.loadRemote('kirby/math')
   -> FederationHost::loadRemote('kirby/math')
     -> RemoteHandler::loadRemote('kirby/math')
@@ -30,23 +30,117 @@ runtime.loadRemote('kirby/math')
                }
              }
           -> fetch `mf-manifest.json` then parse it to a ModuleInfo
+             {
+               "id": "kirby",
+               "name": "kirby",
+               "metaData": {
+                 "name": "kirby",
+                 "type": "app",
+                 "buildInfo": {
+                   "buildVersion": "1.0.0",
+                   "buildName": "kirby"
+                 },
+                 "remoteEntry": {
+                   "name": "static/js/kirby.e5446257.js",
+                   "path": "",
+                   "type": "global"
+                 },
+                 "types": {
+                   "path": "",
+                   "name": "",
+                   "zip": "",
+                   "api": ""
+                 },
+                 "globalName": "kirby",
+                 "pluginVersion": "0.16.0",
+                 "prefetchInterface": false,
+                 "getPublicPath": "function() { return '/remote/kirby/' }"
+               },
+               "shared": [],
+               "remotes": [],
+               "exposes": [{
+                 "id": "kirby:math",
+                 "name": "math",
+                 "assets": {
+                   "js": {
+                     "sync": ["static/js/async/__federation_expose_math.94955dc1.js"],
+                     "async" : []
+                   },
+                   "css": {
+                     "sync": [],
+                     "async" : []
+                   }
+                 },
+                 "path": "./math"
+               }]
+             }
           -> update global moduleInfo
              __FEDERATION__.moduleInfo = {
                host: { /* ... */ },
                "kirby:http://localhost:3000/remote/kirby/mf-manifest.json": { /* ... */ },
              }
           -> generatePreloadAssetsPlugin::generatePreloadAssets({ /* ... */ })
+            -> collect the modules which need to be preloaded along with the modules' assets
+            -> check whether this remote also imports other remotes, host --import--> kirby --import--> star
+            -> collect the shared modules's assets
+            -> filter out those assets which are already loaded
+            -> result assets looks like:
+               {
+                 "cssAssets": [],
+                 "jsAssetsWithoutEntry": [
+                   "/remote/kirby/static/js/async/__federation_expose_math.94955dc1.js"
+                 ],
+                 "entryAssets": [
+                   {
+                     "name": "kirby",
+                     "moduleInfo": {
+                       "name": "kirby",
+                       "entry": "/remote/kirby/static/js/kirby.e5446257.js",
+                       "type": "global",
+                       "entryGlobalName": "kirby",
+                       "shareScope": "",
+                       "version": "http://localhost:3000/remote/kirby/mf-manifest.json"
+                     },
+                     "url": "/remote/kirby/static/js/kirby.e5446257.js"
+                   }
+                 ]
+               }
+          -> utils::preloadAssets({ /* ... */ })
+            -> load entry assets
+              -> after the entry is loaded and executed
+                 - define a global variable `kirby`, also called `remoteEntryExports`
+                 - kirby's webpack and module federation runtime will be ready
+                 - kirby exports `init` and `get`
+            -> load CSS assets
+            -> load JS assets
+              -> after the js assets is loaded and executed
+                 - define a global variable `chunk_kirby`
+                 - each js assets push its [chunk, modules] onto `chunk_kirby`
+          -> set the `remoteEntryExports` to the Module
 ```
+
+Finished: const remoteEntryExports = await this.getEntry();
+Next: what happens after remoteEntryExports?
 
 # Global
 
 - `__FEDERATION__`
+
   - `moduleInfo`
   - `__GLOBAL_PLUGIN__`
   - `__INSTANCES__`
   - `__MANIFEST_LOADING__`
   - `__PRELOADED_MAP__`
+
+    After `generatePreloadAssetsPlugin::generatePreloadAssets` for a remote, ex: 'kirby',
+    it will mark the preloaded modules in this map.
+
+    ```js
+    new Map([["kirby/math", true]]);
+    ```
+
   - `__SHARE__`
+
 - `__GLOBAL_LOADING_REMOTE_ENTRY__`
 
 # FederationHost
@@ -60,6 +154,10 @@ Properties:
 - `snapshotHandler`
 - `sharedHandler`
 - `remoteHandler`
+- `shareScopeMap`:
+
+  Store the shared modules along with scopes, will be used in `getRegisteredShare`.
+
 - `hooks`
 - `loaderHook`
 - `bridgeHook`
