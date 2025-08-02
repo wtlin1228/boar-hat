@@ -1,0 +1,10 @@
+FROM ubuntu:20.04
+
+RUN groupadd -g 1234 customgroup && \
+    useradd -m -u 1234 -g customgroup customuser
+
+USER customuser
+
+WORKDIR /home/customuser
+
+CMD sh -c "echo 'Inside Container:' && echo 'User: $(whoami) UID: $(id -u) GID: $(id -g)'"
