@@ -25,6 +25,32 @@ type ExampleReply struct {
 }
 
 // Add your RPC definitions here.
+type NewTaskArgs struct {
+	WorkerId string
+}
+
+type NewTaskReply struct {
+	No             int
+	TaskType       string // either "map" or "reduce"
+	InputFilenames []string
+	OutputFilename string // for the output of a reduce task
+	ReducerCount   int    // for the intermediate files of a map task
+}
+
+type TaskSucceedArgs struct {
+	WorkerId string
+	No       int
+}
+
+type TaskSucceedReply struct{}
+
+type TaskFailArgs struct {
+	WorkerId string
+	No       int
+	Reason   string
+}
+
+type TaskFailReply struct{}
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.

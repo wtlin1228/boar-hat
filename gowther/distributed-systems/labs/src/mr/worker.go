@@ -1,10 +1,14 @@
 package mr
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"log"
 	"net/rpc"
+	"time"
 )
 
 // Map functions return a slice of KeyValue.
@@ -21,15 +25,70 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
+func newID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 // main/mrworker.go calls this function.
-func Worker(mapf func(string, string) []KeyValue,
-	reducef func(string, []string) string) {
+func Worker(
+	mapf func(string, string) []KeyValue,
+	reducef func(string, []string) string,
+) {
+	// every worker has an unique id
+	workerId := newID()
 
-	// Your worker implementation here.
+	for {
+		newTask, err := CallNewTask(workerId)
+		// TODO: remove this debugging code
+		fmt.Println(newTask, err)
+		if err == nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
 
-	// uncomment to send the Example RPC to the coordinator.
-	// CallExample()
+		switch newTask.TaskType {
+		case "map":
+			err := mapTask(newTask.InputFilenames[0], newTask.ReducerCount, mapf)
+			if err != nil {
+				CallTaskFail(workerId, newTask.No, err.Error())
+			} else {
+				CallTaskSucceed(workerId, newTask.No)
+			}
+		case "reduce":
+			err := reduceTask(newTask.InputFilenames, newTask.OutputFilename, reducef)
+			if err != nil {
+				CallTaskFail(workerId, newTask.No, err.Error())
+			} else {
+				CallTaskSucceed(workerId, newTask.No)
+			}
+		default:
+			// ignore the unexpected task
+			time.Sleep(1 * time.Second)
+		}
+	}
+}
 
+func mapTask(inputFilename string, reducerCount int, mapf func(string, string) []KeyValue) error {
+
+	// 1. read input
+
+	// 2. call map function
+
+	// 3. write to intermediate files
+
+	return nil
+}
+
+func reduceTask(inputFilenames []string, outputFilename string, reducef func(string, []string) string) error {
+	// 1. read inputs
+
+	// 2. call reduce function
+
+	// write to output file
+
+	return nil
 }
 
 // example function to show how to make an RPC call to the coordinator.
@@ -57,6 +116,28 @@ func CallExample() {
 	} else {
 		fmt.Printf("call failed!\n")
 	}
+}
+
+func CallNewTask(workerId string) (NewTaskReply, error) {
+	args := NewTaskArgs{workerId}
+	reply := NewTaskReply{}
+	ok := call("Coordinator.NewTask", &args, &reply)
+	if !ok {
+		return reply, errors.New("no new task")
+	}
+	return reply, nil
+}
+
+func CallTaskSucceed(workerId string, no int) {
+	args := TaskSucceedArgs{workerId, no}
+	reply := TaskSucceedReply{}
+	call("Coordinator.TaskSucceed", &args, &reply)
+}
+
+func CallTaskFail(workerId string, no int, reason string) {
+	args := TaskFailArgs{workerId, no, reason}
+	reply := TaskFailReply{}
+	call("Coordinator.TaskFail", &args, &reply)
 }
 
 // send an RPC request to the coordinator, wait for the response.
