@@ -29,9 +29,16 @@ type NewTaskArgs struct {
 	WorkerId string
 }
 
+type TaskType string
+
+const (
+	TaskTypeMap    TaskType = "map"
+	TaskTypeReduce TaskType = "reduce"
+)
+
 type NewTaskReply struct {
 	No             int
-	TaskType       string // either "map" or "reduce"
+	TaskType       TaskType
 	InputFilenames []string
 	OutputFilename string // for the output of a reduce task
 	ReducerCount   int    // for the intermediate files of a map task

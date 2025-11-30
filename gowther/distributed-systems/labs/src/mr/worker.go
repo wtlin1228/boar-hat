@@ -49,14 +49,14 @@ func Worker(
 		}
 
 		switch newTask.TaskType {
-		case "map":
+		case TaskTypeMap:
 			err := mapTask(newTask.InputFilenames[0], newTask.ReducerCount, mapf)
 			if err != nil {
 				CallTaskFail(workerId, newTask.No, err.Error())
 			} else {
 				CallTaskSucceed(workerId, newTask.No)
 			}
-		case "reduce":
+		case TaskTypeReduce:
 			err := reduceTask(newTask.InputFilenames, newTask.OutputFilename, reducef)
 			if err != nil {
 				CallTaskFail(workerId, newTask.No, err.Error())

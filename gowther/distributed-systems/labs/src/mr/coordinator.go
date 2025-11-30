@@ -8,14 +8,23 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"sync"
 	"time"
+)
+
+type TaskStatus string
+
+const (
+	StatusUnscheduled TaskStatus = "unscheduled"
+	StatusScheduled   TaskStatus = "scheduled"
+	StatusCompleted   TaskStatus = "completed"
 )
 
 type Task struct {
 	no          int
-	status      string // "unscheduled" | "scheduled" | "completed"
+	status      TaskStatus
 	createdAt   time.Time
-	scheduleAt  time.Time
+	scheduledAt time.Time
 	completedAt time.Time
 }
 
@@ -31,6 +40,8 @@ type ReduceTask struct {
 }
 
 type Coordinator struct {
+	mu sync.Mutex
+
 	mapTasks            []MapTask
 	unscheduledMapTasks []int          // task no
 	scheduledMapTasks   map[string]int // worker id -> task no
@@ -51,6 +62,25 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 }
 
 func (c *Coordinator) NewTask(args *NewTaskArgs, reply *NewTaskReply) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// worker is asking for new task without updating its previous map task
+	if no, ok := c.scheduledMapTasks[args.WorkerId]; ok {
+		delete(c.scheduledMapTasks, args.WorkerId)
+		c.unscheduledMapTasks = append(c.unscheduledMapTasks, no)
+		task := &c.mapTasks[no]
+		task.status = StatusUnscheduled
+	}
+
+	// worker is asking for new task without updating its previous reduce task
+	if no, ok := c.scheduledReduceTasks[args.WorkerId]; ok {
+		delete(c.scheduledReduceTasks, args.WorkerId)
+		c.unscheduledReduceTasks = append(c.unscheduledReduceTasks, no)
+		task := &c.reduceTasks[no]
+		task.status = StatusUnscheduled
+	}
+
 	if len(c.unscheduledMapTasks) > 0 {
 		// pop one task
 		first := c.unscheduledMapTasks[0]
@@ -60,13 +90,13 @@ func (c *Coordinator) NewTask(args *NewTaskArgs, reply *NewTaskReply) error {
 		// assign to worker
 		c.scheduledMapTasks[args.WorkerId] = task.no
 		reply.No = task.no
-		reply.TaskType = "map"
+		reply.TaskType = TaskTypeMap
 		reply.InputFilenames = []string{task.inputFilename}
 		reply.ReducerCount = len(c.reduceTasks)
 
 		// update task's metadata
-		task.status = "scheduled"
-		task.scheduleAt = time.Now()
+		task.status = StatusScheduled
+		task.scheduledAt = time.Now()
 	} else if len(c.scheduledMapTasks) > 0 {
 		return errors.New("all map tasks are scheduled but haven't finished yet")
 	} else if len(c.unscheduledReduceTasks) > 0 {
@@ -78,13 +108,13 @@ func (c *Coordinator) NewTask(args *NewTaskArgs, reply *NewTaskReply) error {
 		// assign to worker
 		c.scheduledReduceTasks[args.WorkerId] = task.no
 		reply.No = task.no
-		reply.TaskType = "reduce"
+		reply.TaskType = TaskTypeReduce
 		reply.InputFilenames = task.inputFilenames
 		reply.OutputFilename = task.outputFilename
 
 		// update task's metadata
-		task.status = "scheduled"
-		task.scheduleAt = time.Now()
+		task.status = StatusScheduled
+		task.scheduledAt = time.Now()
 	} else if len(c.scheduledReduceTasks) > 0 {
 		return errors.New("all reduce tasks are scheduled but haven't finished yet")
 	}
@@ -93,11 +123,53 @@ func (c *Coordinator) NewTask(args *NewTaskArgs, reply *NewTaskReply) error {
 }
 
 func (c *Coordinator) TaskSucceed(args *TaskSucceedArgs, reply *TaskSucceedReply) error {
-	return nil
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	workerId := args.WorkerId
+
+	if no, ok := c.scheduledMapTasks[workerId]; ok && no == args.No {
+		delete(c.scheduledMapTasks, workerId)
+		task := &c.mapTasks[no]
+		task.status = StatusCompleted
+		task.completedAt = time.Now()
+		return nil
+	}
+
+	if no, ok := c.scheduledReduceTasks[workerId]; ok && no == args.No {
+		delete(c.scheduledReduceTasks, workerId)
+		task := &c.reduceTasks[no]
+		task.status = StatusCompleted
+		task.completedAt = time.Now()
+		return nil
+	}
+
+	return errors.New("this task has been rescheduled")
 }
 
 func (c *Coordinator) TaskFail(args *TaskFailArgs, reply *TaskFailReply) error {
-	return nil
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	workerId := args.WorkerId
+
+	if no, ok := c.scheduledMapTasks[workerId]; ok && no == args.No {
+		delete(c.scheduledMapTasks, workerId)
+		c.unscheduledMapTasks = append(c.unscheduledMapTasks, no)
+		task := &c.mapTasks[no]
+		task.status = StatusUnscheduled
+		return nil
+	}
+
+	if no, ok := c.scheduledReduceTasks[workerId]; ok && no == args.No {
+		delete(c.scheduledReduceTasks, workerId)
+		c.unscheduledReduceTasks = append(c.unscheduledReduceTasks, no)
+		task := &c.reduceTasks[no]
+		task.status = StatusUnscheduled
+		return nil
+	}
+
+	return errors.New("this task has been rescheduled")
 }
 
 // start a thread that listens for RPCs from worker.go
@@ -114,14 +186,50 @@ func (c *Coordinator) server() {
 	go http.Serve(l, nil)
 }
 
+func (c *Coordinator) checkExpiredTasks() {
+	for {
+		c.mu.Lock()
+
+		tenSecondsAgo := time.Now().Add(-10 * time.Second)
+
+		for workerId, no := range c.scheduledMapTasks {
+			task := &c.mapTasks[no]
+			if task.scheduledAt.Before(tenSecondsAgo) {
+				c.unscheduledMapTasks = append(c.unscheduledMapTasks, no)
+				task.status = StatusUnscheduled
+				delete(c.scheduledMapTasks, workerId)
+			}
+		}
+
+		for workerId, no := range c.scheduledReduceTasks {
+			task := &c.reduceTasks[no]
+			if task.scheduledAt.Before(tenSecondsAgo) {
+				c.unscheduledReduceTasks = append(c.unscheduledReduceTasks, no)
+				task.status = StatusUnscheduled
+				delete(c.scheduledReduceTasks, workerId)
+			}
+		}
+
+		c.mu.Unlock()
+
+		time.Sleep(1 * time.Second)
+	}
+}
+
 // main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
-	ret := false
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	// Your code here.
+	if len(c.unscheduledMapTasks) == 0 &&
+		len(c.scheduledMapTasks) == 0 &&
+		len(c.unscheduledReduceTasks) == 0 &&
+		len(c.scheduledReduceTasks) == 0 {
+		return true
+	}
 
-	return ret
+	return false
 }
 
 // create a Coordinator.
@@ -169,14 +277,19 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	}
 
 	c := Coordinator{
+		sync.Mutex{},
+
 		mapTasks,
 		unscheduledMapTasks,
 		scheduledMapTasks,
+
 		reduceTasks,
 		unscheduledReduceTasks,
 		scheduledReduceTasks,
 	}
 
 	c.server()
+	go c.checkExpiredTasks()
+
 	return &c
 }
