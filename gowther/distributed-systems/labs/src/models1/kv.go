@@ -1,9 +1,11 @@
 package models
 
-import "github.com/anishathalye/porcupine"
+import (
+	"fmt"
+	"sort"
 
-import "fmt"
-import "sort"
+	"github.com/anishathalye/porcupine"
+)
 
 type KvInput struct {
 	Op      uint8 // 0 => get, 1 => put
