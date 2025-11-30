@@ -1,0 +1,13 @@
+{
+  "name": "chapter10-baseline-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "rimraf dist && vite",
+    "build:client": "vite build --outDir dist/client",
+    "build:server": "vite build --outDir dist/server --ssr App.tsx",
+    "build": "rimraf dist && npm run build:client && npm run build:server",
+    "start": "tsx watch server/index.ts"
+  }
+}

@@ -1,0 +1,36 @@
+import path, { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const FRONTEND_ROOT = path.resolve(__dirname, "../../../frontend");
+
+// https://vite.dev/config/
+export default defineConfig({
+  resolve: {
+    alias: {
+      "@fe": FRONTEND_ROOT,
+    },
+  },
+  server: {
+    port: 1234,
+  },
+  define: {
+    process: {
+      env: {
+        NODE_ENV: JSON.stringify("development"),
+        VITE_APP_VERSION: JSON.stringify("1.0.0"),
+      },
+    },
+  },
+  preview: {
+    headers: {
+      "Cache-Control": "max-age=9000000",
+    },
+  },
+  plugins: [react()],
+});

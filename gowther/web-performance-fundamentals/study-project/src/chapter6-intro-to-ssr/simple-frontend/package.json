@@ -1,0 +1,12 @@
+{
+  "name": "chapter6-simple-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "rimraf dist && vite build",
+    "build:ssg": "rimraf dist && vite build && tsx server/generate-static-pages.ts",
+    "start": "tsx watch server/index.ts"
+  }
+}
