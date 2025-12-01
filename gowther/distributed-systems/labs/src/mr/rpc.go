@@ -29,13 +29,6 @@ type NewTaskArgs struct {
 	WorkerId string
 }
 
-type TaskType string
-
-const (
-	TaskTypeMap    TaskType = "map"
-	TaskTypeReduce TaskType = "reduce"
-)
-
 type NewTaskReply struct {
 	No             int
 	TaskType       TaskType
