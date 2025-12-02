@@ -170,11 +170,13 @@ func (c *Coordinator) TaskSucceed(args *TaskSucceedArgs, reply *TaskSucceedReply
 	workerId := args.WorkerId
 
 	if no, ok := c.scheduledMapTasks[workerId]; ok && no == args.No {
+		// fmt.Printf("%s completes map task %d\n", workerId, no)
 		c.completeMapTask(workerId, no)
 		return nil
 	}
 
 	if no, ok := c.scheduledReduceTasks[workerId]; ok && no == args.No {
+		// fmt.Printf("%s completes reduce task %d\n", workerId, no)
 		c.completeReduceTask(workerId, no)
 		return nil
 	}

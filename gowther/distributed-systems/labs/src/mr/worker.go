@@ -3,11 +3,14 @@ package mr
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/fnv"
 	"log"
 	"net/rpc"
+	"os"
+	"sort"
 	"time"
 )
 
@@ -16,6 +19,14 @@ type KeyValue struct {
 	Key   string
 	Value string
 }
+
+// for sorting by key.
+type ByKey []KeyValue
+
+// for sorting by key.
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
 // use ihash(key) % NReduce to choose the reduce
 // task number for each KeyValue emitted by Map.
@@ -41,16 +52,14 @@ func Worker(
 
 	for {
 		newTask, err := CallNewTask(workerId)
-		// TODO: remove this debugging code
-		fmt.Println(newTask, err)
-		if err == nil {
+		if err != nil {
 			time.Sleep(1 * time.Second)
 			continue
 		}
 
 		switch newTask.TaskType {
 		case TaskTypeMap:
-			err := mapTask(newTask.InputFilenames[0], newTask.ReducerCount, mapf)
+			err := mapTask(newTask.InputFilenames[0], newTask.No, newTask.ReducerCount, mapf)
 			if err != nil {
 				CallTaskFail(workerId, newTask.No, err.Error())
 			} else {
@@ -70,23 +79,86 @@ func Worker(
 	}
 }
 
-func mapTask(inputFilename string, reducerCount int, mapf func(string, string) []KeyValue) error {
-
+func mapTask(inputFilename string, no int, reduceCount int, mapf func(string, string) []KeyValue) error {
 	// 1. read input
+	content, err := os.ReadFile(inputFilename)
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
 
 	// 2. call map function
+	kva := mapf(inputFilename, string(content))
+	sort.Sort(ByKey(kva))
 
-	// 3. write to intermediate files
+	// 3. write outputs
+	ofiles := make([]*json.Encoder, reduceCount)
+	for i := range reduceCount {
+		file, err := os.Create(fmt.Sprintf("mr-%d-%d", no, i))
+		if err != nil {
+			log.Fatal(err)
+			return err
+		}
+		defer file.Close()
+		enc := json.NewEncoder(file)
+		ofiles[i] = enc
+	}
+	for _, kv := range kva {
+		err := ofiles[ihash(kv.Key)%reduceCount].Encode(&kv)
+		if err != nil {
+			log.Fatal(err)
+			return err
+		}
+	}
 
 	return nil
 }
 
 func reduceTask(inputFilenames []string, outputFilename string, reducef func(string, []string) string) error {
 	// 1. read inputs
+	kva := []KeyValue{}
+	for _, inputFilename := range inputFilenames {
+		infile, err := os.Open(inputFilename)
+		if err != nil {
+			log.Fatal(err)
+			return err
+		}
+		dec := json.NewDecoder(infile)
+		for {
+			var kv KeyValue
+			if err := dec.Decode(&kv); err != nil {
+				break
+			}
+			kva = append(kva, kv)
+		}
+		infile.Close()
+	}
+	sort.Sort(ByKey(kva))
 
-	// 2. call reduce function
+	// 2. call reduce function and write output
+	ofile, err := os.Create(outputFilename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer ofile.Close()
 
-	// write to output file
+	i := 0
+	for i < len(kva) {
+		j := i + 1
+		for j < len(kva) && kva[j].Key == kva[i].Key {
+			j++
+		}
+		values := []string{}
+		for k := i; k < j; k++ {
+			values = append(values, kva[k].Value)
+		}
+		output := reducef(kva[i].Key, values)
+
+		// this is the correct format for each line of Reduce output.
+		fmt.Fprintf(ofile, "%v %v\n", kva[i].Key, output)
+
+		i = j
+	}
 
 	return nil
 }
