@@ -38,16 +38,36 @@ func (lk *Lock) Acquire() {
 		switch err {
 		case rpc.ErrNoKey:
 			err := lk.ck.Put(lk.l, lk.id, 0)
-			if err == rpc.OK {
+			switch err {
+			case rpc.OK:
 				lk.lockVersion = 1
 				return
+			case rpc.ErrMaybe:
+				// need to check if we aquired the lock
+				lockState, newVersion, _ := lk.ck.Get(lk.l)
+				if lockState == lk.id && newVersion == 1 {
+					lk.lockVersion = newVersion
+					return
+				}
+			default:
+				// ignore other cases
 			}
 		case rpc.OK:
 			if lockState == "unlock" {
 				err := lk.ck.Put(lk.l, lk.id, version)
-				lk.lockVersion = version + 1
-				if err == rpc.OK {
+				switch err {
+				case rpc.OK:
+					lk.lockVersion = version + 1
 					return
+				case rpc.ErrMaybe:
+					// need to check if we aquired the lock
+					lockState, newVersion, _ := lk.ck.Get(lk.l)
+					if lockState == lk.id && newVersion == version+1 {
+						lk.lockVersion = newVersion
+						return
+					}
+				default:
+					// ignore other cases
 				}
 			}
 		default:
