@@ -55,19 +55,34 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
-	serverState ServerState
+	serverState     ServerState // Follower | Candidate | Leader
+	lastHeartbeatAt time.Time   // to be used with election timeout
+	currentTerm     int         // latest term server has see, increase monotonically
+	voteFor         int         // candidate id that received vote in the current term
+}
 
-	// start election when lastHeartbeatAt exceeds electionTimeout
-	lastHeartbeatAt time.Time
+// caller is responsible for holding the lock
+func (rf *Raft) setServerState(state ServerState) {
+	DPrintf("[%d] change state to %s", rf.me, state)
+	rf.serverState = state
+}
 
-	// latest term server has see
-	// (initialized to 0 on first boot, increase monotonically)
-	currentTerm int
+// caller is responsible for holding the lock
+func (rf *Raft) setCurrentTerm(term int) {
+	DPrintf("[%d] increase current term to %d", rf.me, term)
+	rf.currentTerm = term
+}
 
-	// candidate id that received vote in the current term
-	// (or nil if none)
-	voteFor         int
-	hasVotedForTerm int
+// caller is responsible for holding the lock
+func (rf *Raft) setLastHeartbeatAt(at time.Time) {
+	DPrintf("[%d] update last heartbeat at to %s", rf.me, at.Format("15:04:05"))
+	rf.lastHeartbeatAt = at
+}
+
+// caller is responsible for holding the lock
+func (rf *Raft) setVoteFor(id int) {
+	DPrintf("[%d] vote for %d", rf.me, id)
+	rf.voteFor = id
 }
 
 // return currentTerm and whether this server
@@ -155,19 +170,24 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	fmt.Printf("(%d,%d,%s) receive request vote from (%d,%d)\n", rf.me, rf.currentTerm, rf.serverState, args.CandidateId, args.Term)
+	DPrintf("[%d] receive RequestVote RPC from [%d] on term %d", rf.me, args.CandidateId, args.Term)
 
-	if args.Term > rf.currentTerm && args.Term > rf.hasVotedForTerm {
-		rf.hasVotedForTerm = args.Term
-		rf.voteFor = args.CandidateId
-
-		reply.Term = rf.currentTerm
-		reply.VoteGranted = true
-		fmt.Printf("(%d,%d,%s) vote for (%d,%d)\n", rf.me, rf.currentTerm, rf.serverState, args.CandidateId, args.Term)
+	if rf.currentTerm >= args.Term {
+		reply.VoteGranted = false
 		return
 	}
 
-	reply.VoteGranted = false
+	rf.setVoteFor(args.CandidateId)
+	rf.setCurrentTerm(args.Term)
+	if rf.serverState != Follower {
+		rf.setServerState(Follower)
+	}
+
+	reply.Term = args.Term
+	reply.VoteGranted = true
+
+	return
+
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -198,7 +218,22 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 // that the caller passes the address of the reply struct with &, not
 // the struct itself.
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
+	DPrintf("[%d] send RequestVote RPC to [%d] on term %d", args.CandidateId, server, args.Term)
+
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+
+	DPrintf("[%d] receive RequestVote RPC response from [%d], term is %d, vote is %s", args.CandidateId, server, reply.Term, reply.VoteGranted)
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	if rf.currentTerm < reply.Term {
+		rf.setCurrentTerm(reply.Term)
+		if rf.serverState != Follower {
+			rf.setServerState(Follower)
+		}
+	}
+
 	return ok
 }
 
@@ -216,22 +251,43 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	fmt.Printf("(%d,%d,%s) receive heartbeat from (%d,%d)\n", rf.me, rf.currentTerm, rf.serverState, args.LeaderId, args.Term)
+	DPrintf("[%d] receive AppendEntries RPC from [%d] on term %d", rf.me, args.LeaderId, args.Term)
 
-	rf.lastHeartbeatAt = time.Now()
-
-	if args.Term >= rf.currentTerm {
-		rf.serverState = Follower
+	if rf.currentTerm > args.Term {
+		reply.Term = rf.currentTerm
+		return
 	}
 
-	if args.Term > rf.currentTerm {
-		fmt.Printf("(%d,%d,%s) -> (%d,%d) catch up leader's term\n", rf.me, rf.currentTerm, rf.serverState, rf.me, args.Term)
-		rf.currentTerm = args.Term
+	rf.setLastHeartbeatAt(time.Now())
+	if rf.serverState != Follower {
+		rf.setServerState(Follower)
 	}
+	if rf.currentTerm < args.Term {
+		rf.setCurrentTerm(args.Term)
+	}
+
+	reply.Term = args.Term
+
+	return
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	DPrintf("[%d] send AppendEntries RPC to [%d] on term %d", args.LeaderId, server, args.Term)
+
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+
+	DPrintf("[%d] receive AppendEntries RPC response from [%d], term is %d", args.LeaderId, server, reply.Term)
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	if rf.currentTerm < reply.Term {
+		rf.setCurrentTerm(reply.Term)
+		if rf.serverState != Follower {
+			rf.setServerState(Follower)
+		}
+	}
+
 	return ok
 }
 
