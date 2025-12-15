@@ -8,7 +8,7 @@ package raft
 
 import (
 	//	"bytes"
-	"fmt"
+
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -185,9 +185,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	reply.Term = args.Term
 	reply.VoteGranted = true
-
-	return
-
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -222,7 +219,7 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 
-	DPrintf("[%d] receive RequestVote RPC response from [%d], term is %d, vote is %s", args.CandidateId, server, reply.Term, reply.VoteGranted)
+	DPrintf("[%d] receive RequestVote RPC response from [%d], term is %d, vote is %v", args.CandidateId, server, reply.Term, reply.VoteGranted)
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -267,8 +264,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	reply.Term = args.Term
-
-	return
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
@@ -343,33 +338,33 @@ func (rf *Raft) ticker() {
 		// Your code here (3A)
 		// Check if a leader election should be started.
 		rf.mu.Lock()
-		shouldStartLeaderElection := rf.serverState == Candidate ||
-			(rf.serverState == Follower && rf.lastHeartbeatAt.Add(electionTimeout).Before(time.Now()))
+		if rf.serverState == Follower && rf.lastHeartbeatAt.Add(electionTimeout).Before(time.Now()) {
+			rf.setServerState(Candidate)
+		}
+		shouldStartLeaderElection := rf.serverState == Candidate
 		rf.mu.Unlock()
 
 		if shouldStartLeaderElection {
 			rf.mu.Lock()
 
-			if rf.serverState == Follower {
-				rf.currentTerm += 1
-				rf.serverState = Candidate // from follower to candidate
-				rf.voteFor = rf.me         // vote for itself
-				rf.hasVotedForTerm = rf.currentTerm
-			}
+			rf.setCurrentTerm(rf.currentTerm + 1)
+			rf.setVoteFor(rf.me)
 
 			peersCount := len(rf.peers)
-			args := RequestVoteArgs{Term: rf.currentTerm, CandidateId: rf.me}
+			thisTerm := rf.currentTerm
+			me := rf.me
 
 			rf.mu.Unlock()
 
 			c := make(chan bool)
 
 			for i := range peersCount {
-				if i != rf.me {
+				if i != me {
 					go func() {
+						args := RequestVoteArgs{Term: thisTerm, CandidateId: me}
 						reply := RequestVoteReply{}
 						ok := rf.sendRequestVote(i, &args, &reply)
-						if ok && reply.VoteGranted {
+						if ok && reply.Term == thisTerm && reply.VoteGranted {
 							c <- true
 						}
 						c <- false
@@ -386,18 +381,19 @@ func (rf *Raft) ticker() {
 					count += 1
 				}
 				finished += 1
-				if count > peersCount/2 {
-					rf.mu.Lock()
 
+				rf.mu.Lock()
+				defer rf.mu.Unlock()
+
+				if rf.serverState == Follower {
+					break
+				}
+				if count > peersCount/2 {
 					// Only the candidate is allowed to be promoted to leader, not follower.
 					// It could be follower because another server wins the election.
 					if rf.serverState == Candidate {
-						fmt.Printf("(%d,%d,%s) wins, elected as leader\n", rf.me, rf.currentTerm, rf.serverState)
-						rf.serverState = Leader
+						rf.setServerState(Leader)
 					}
-
-					rf.mu.Unlock()
-
 					break
 				}
 				if finished == peersCount {
@@ -418,16 +414,24 @@ func (rf *Raft) ticker() {
 func (rf *Raft) heartbeats() {
 	for !rf.killed() {
 		rf.mu.Lock()
-		if rf.serverState == Leader {
-			args := AppendEntriesArgs{rf.currentTerm, rf.me}
-			for i := range len(rf.peers) {
-				if i != rf.me {
+		isLeader := rf.serverState == Leader
+		rf.mu.Unlock()
+
+		if isLeader {
+			rf.mu.Lock()
+			peersCount := len(rf.peers)
+			thisTerm := rf.currentTerm
+			me := rf.me
+			rf.mu.Unlock()
+
+			for i := range peersCount {
+				if i != me {
+					args := AppendEntriesArgs{thisTerm, me}
 					reply := AppendEntriesReply{}
-					rf.sendAppendEntries(i, &args, &reply)
+					go rf.sendAppendEntries(i, &args, &reply)
 				}
 			}
 		}
-		rf.mu.Unlock()
 
 		// The tester requires that the leader send heartbeat RPCs no more than ten times
 		// per second.
