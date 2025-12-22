@@ -41,6 +41,8 @@ func (s ServerState) String() string {
 	}
 }
 
+const NoVote = -1
+
 const electionTimeout time.Duration = 500 * time.Millisecond
 
 // A Go object implementing a single Raft peer.
@@ -58,7 +60,10 @@ type Raft struct {
 	serverState     ServerState // Follower | Candidate | Leader
 	lastHeartbeatAt time.Time   // to be used with election timeout
 	currentTerm     int         // latest term server has see, increase monotonically
-	voteFor         int         // candidate id that received vote in the current term
+
+	// candidate id that received vote in the current term,
+	// -1 means hasn't voted for current term
+	voteFor int
 }
 
 // caller is responsible for holding the lock
@@ -68,9 +73,11 @@ func (rf *Raft) setServerState(state ServerState) {
 }
 
 // caller is responsible for holding the lock
-func (rf *Raft) setCurrentTerm(term int) {
+// the current term might be changed with or without voting for some server
+func (rf *Raft) setCurrentTerm(term int, voteFor int) {
 	DPrintf("[%d] %-9s - increase current term to %d", rf.me, rf.serverState, term)
 	rf.currentTerm = term
+	rf.setVoteFor(voteFor)
 }
 
 // caller is responsible for holding the lock
@@ -81,7 +88,9 @@ func (rf *Raft) setLastHeartbeatAt(at time.Time) {
 
 // caller is responsible for holding the lock
 func (rf *Raft) setVoteFor(id int) {
-	DPrintf("[%d] %-9s - vote for %d", rf.me, rf.serverState, id)
+	if id != NoVote {
+		DPrintf("[%d] %-9s - vote for %d", rf.me, rf.serverState, id)
+	}
 	rf.voteFor = id
 }
 
@@ -178,8 +187,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		return
 	}
 
-	rf.setVoteFor(args.CandidateId)
-	rf.setCurrentTerm(args.Term)
+	rf.setCurrentTerm(args.Term, args.CandidateId)
 	if rf.serverState != Follower {
 		rf.setServerState(Follower)
 	}
@@ -230,7 +238,7 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	}
 
 	if rf.currentTerm < reply.Term {
-		rf.setCurrentTerm(reply.Term)
+		rf.setCurrentTerm(reply.Term, NoVote)
 		if rf.serverState != Follower {
 			rf.setServerState(Follower)
 		}
@@ -265,7 +273,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.setServerState(Follower)
 	}
 	if rf.currentTerm < args.Term {
-		rf.setCurrentTerm(args.Term)
+		rf.setCurrentTerm(args.Term, NoVote)
 	}
 
 	reply.Term = args.Term
@@ -282,7 +290,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	DPrintf("[%d] %-9s - receive AppendEntries RPC response from [%d], term is %d", args.LeaderId, rf.serverState, server, reply.Term)
 
 	if rf.currentTerm < reply.Term {
-		rf.setCurrentTerm(reply.Term)
+		rf.setCurrentTerm(reply.Term, NoVote)
 		if rf.serverState != Follower {
 			rf.setServerState(Follower)
 		}
@@ -354,8 +362,7 @@ func (rf *Raft) ticker() {
 		if shouldStartLeaderElection {
 			rf.mu.Lock()
 
-			rf.setCurrentTerm(rf.currentTerm + 1)
-			rf.setVoteFor(rf.me)
+			rf.setCurrentTerm(rf.currentTerm+1, rf.me)
 
 			me := rf.me
 			thisTerm := rf.currentTerm
@@ -472,7 +479,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.serverState = Follower
 	rf.lastHeartbeatAt = time.Now()
 	rf.currentTerm = 0
-	rf.voteFor = -1
+	rf.voteFor = NoVote
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
