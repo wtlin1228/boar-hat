@@ -45,6 +45,11 @@ const NoVote = -1
 
 const electionTimeout time.Duration = 500 * time.Millisecond
 
+type LogEntry struct {
+	term    int
+	command any
+}
+
 // A Go object implementing a single Raft peer.
 type Raft struct {
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
@@ -64,6 +69,20 @@ type Raft struct {
 	// candidate id that received vote in the current term,
 	// -1 means hasn't voted for current term
 	voteFor int
+
+	// log entries, each entry contains command for state machine,
+	// and term when entry was received by leader
+	log []LogEntry
+}
+
+// caller is responsible for holding the lock
+func (rf *Raft) getLastLogEntryTerm() int {
+	return rf.log[len(rf.log)-1].term
+}
+
+// caller is responsible for holding the lock
+func (rf *Raft) getLastLogEntryIndex() int {
+	return len(rf.log) - 1
 }
 
 // caller is responsible for holding the lock
@@ -161,8 +180,10 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 // field names must start with capital letters!
 type RequestVoteArgs struct {
 	// Your data here (3A, 3B).
-	Term        int // candidate's term
-	CandidateId int // candidate requesting vote
+	Term         int // candidate's term
+	CandidateId  int // candidate requesting vote
+	LastLogIndex int // index of candidate's last log entry
+	LastLogTerm  int // term of candidate's last log entry
 }
 
 // example RequestVote RPC reply structure.
@@ -182,6 +203,21 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	DPrintf("[%d] %-9s - receive RequestVote RPC from [%d] on term %d", rf.me, rf.serverState, args.CandidateId, args.Term)
 
 	if rf.currentTerm >= args.Term {
+		reply.Term = rf.currentTerm
+		reply.VoteGranted = false
+		return
+	}
+
+	// Only vote for the candidate if its log is more update-to-date
+	// RULE:
+	//   If the logs have last entries with different terms,
+	//   then the log with the later term is more up-to-date.
+	//   If the logs end with the same term, then whichever log is longer
+	//   is more up-to-date.
+	lastLogEntryTerm := rf.getLastLogEntryTerm()
+	lastLogEntryIndex := rf.getLastLogEntryIndex()
+	if args.LastLogTerm < lastLogEntryTerm ||
+		(args.LastLogTerm == lastLogEntryTerm && args.LastLogIndex < lastLogEntryIndex) {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		return
@@ -480,6 +516,12 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.lastHeartbeatAt = time.Now()
 	rf.currentTerm = 0
 	rf.voteFor = NoVote
+
+	// Raft log is 1-indexed, but we suggest that you view it as 0-indexed,
+	// and starting out with an entry (at index=0) that has term 0.
+	// That allows the very first AppendEntries RPC to contain 0 as PrevLogIndex,
+	// and be a valid index into the log.
+	rf.log = append(rf.log, LogEntry{term: 0, command: nil})
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
