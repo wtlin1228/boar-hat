@@ -9,7 +9,10 @@ package raft
 import (
 	//	"bytes"
 
+	"fmt"
+	"log"
 	"math/rand"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -130,10 +133,18 @@ func (rf *Raft) setVoteFor(id int) {
 }
 
 // caller is responsible for holding the lock
-func (rf *Raft) appendLogEntry(command any) {
-	DPrintf("[%d] %-9s - append log entry, logIndex=%d ,currentTerm=%d",
-		rf.me, rf.serverState, rf.getLastLogEntryIndex()+1, rf.currentTerm)
+func (rf *Raft) createAndAppendLogEntry(command any) {
+	DPrintf("[%d] %-9s - create and append log entry, logIndex=%d, currentTerm=%d", rf.me, rf.serverState, rf.getLastLogEntryIndex()+1, rf.currentTerm)
 	rf.log = append(rf.log, LogEntry{Term: rf.currentTerm, Command: command})
+}
+
+// caller is responsible for holding the lock
+func (rf *Raft) replaceLogEntries(startFrom int, entries []LogEntry) {
+	if len(entries) > 0 {
+		DPrintf("[%d] %-9s - replace log entries, startFrom=%d, entryCount=%v", rf.me, rf.serverState, startFrom, len(entries))
+		rf.log = slices.Delete(rf.log, startFrom, len(rf.log))
+		rf.log = slices.Concat(rf.log, entries)
+	}
 }
 
 // caller is responsible for holding the lock
@@ -152,6 +163,53 @@ func (rf *Raft) initMatchIndex() {
 	DPrintf("[%d] %-9s - init []matchIndex to 0", rf.me, rf.serverState)
 	for i := range rf.matchIndex {
 		rf.matchIndex[i] = 0
+	}
+}
+
+// caller is responsible for holding the lock
+func (rf *Raft) setNextIndex(server int, i int) {
+	if rf.nextIndex[server] != i {
+		DPrintf("[%d] %-9s - update nextIndex[%d] from %d to %d", rf.me, rf.serverState, server, rf.nextIndex[server], i)
+		rf.nextIndex[server] = i
+	}
+}
+
+// caller is responsible for holding the lock
+func (rf *Raft) setMatchIndex(server int, i int) {
+	if i < rf.commitIndex {
+		log.Fatalf("matchIndex must only increase monotonically, matchIndex[%d] from %d to %d", server, rf.matchIndex[server], i)
+		return
+	}
+
+	if i > rf.matchIndex[server] {
+		DPrintf("[%d] %-9s - increase matchIndex[%d] from %d to %d", rf.me, rf.serverState, server, rf.matchIndex[server], i)
+		rf.matchIndex[server] = i
+	}
+}
+
+// caller is responsible for holding the lock
+func (rf *Raft) setCommitIndex(i int) {
+	if i < rf.commitIndex {
+		log.Fatalf("commitIndex must only increase monotonically, commitIndex from %d to %d", rf.commitIndex, i)
+		return
+	}
+
+	if i > rf.commitIndex {
+		DPrintf("[%d] %-9s - increase commitIndex from %d to %d", rf.me, rf.serverState, rf.commitIndex, i)
+		rf.commitIndex = i
+	}
+}
+
+// caller is responsible for holding the lock
+func (rf *Raft) setLastApplied(i int) {
+	if i < rf.lastApplied {
+		log.Fatalf("lastApplied must only increase monotonically, lastApplied from %d to %d", rf.lastApplied, i)
+		return
+	}
+
+	if i > rf.lastApplied {
+		DPrintf("[%d] %-9s - increase lastApplied from %d to %d", rf.me, rf.serverState, rf.lastApplied, i)
+		rf.lastApplied = i
 	}
 }
 
@@ -338,6 +396,14 @@ type AppendEntriesArgs struct {
 	LeaderCommit int // leader's commit index
 }
 
+func (args AppendEntriesArgs) String() string {
+	var entryTerms []int
+	for _, entry := range args.Entries {
+		entryTerms = append(entryTerms, entry.Term)
+	}
+	return fmt.Sprintf("{\n  Term: %d,\n  LeaderId: %d,\n  LeaderCommit: %d,\n  PrevLogIndex: %d,\n  PrevLogTerm: %d,\n  EntriesTerms: %v,\n}", args.Term, args.LeaderId, args.LeaderCommit, args.PrevLogIndex, args.PrevLogTerm, entryTerms)
+}
+
 type AppendEntriesReply struct {
 	Term    int  // currentTerm, for leader to update itself
 	Success bool // true if follower contained entry matching prevLogIndex and prevLogTerm
@@ -361,25 +427,51 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if rf.currentTerm < args.Term {
 		rf.setCurrentTerm(args.Term, NoVote)
 	}
+	rf.setCommitIndex(args.LeaderCommit)
 
 	reply.Term = args.Term
+
+	if rf.getLastLogEntryIndex() >= args.PrevLogIndex && rf.log[args.PrevLogIndex].Term == args.PrevLogTerm {
+		reply.Success = true
+		rf.replaceLogEntries(args.PrevLogIndex+1, args.Entries)
+		return
+	}
+
+	reply.Success = false
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
-	DPrintf("[%d] %-9s - send AppendEntries RPC to [%d] on term %d", args.LeaderId, Leader, server, args.Term)
+	DPrintf("[%d] %-9s - send AppendEntries RPC to [%d] on term %d\n%s", args.LeaderId, Leader, server, args.Term, args)
 
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	DPrintf("[%d] %-9s - receive AppendEntries RPC response from [%d], term is %d", args.LeaderId, rf.serverState, server, reply.Term)
+	DPrintf("[%d] %-9s - receive AppendEntries RPC response from [%d], term is %d, success=%v", args.LeaderId, rf.serverState, server, reply.Term, reply.Success)
 
 	if rf.currentTerm < reply.Term {
 		rf.setCurrentTerm(reply.Term, NoVote)
 		if rf.serverState != Follower {
 			rf.setServerState(Follower)
 		}
+	} else if reply.Success == false {
+		// prevLogIndex and prevLogTerm comparison failed
+		if rf.nextIndex[server] > 1 {
+			rf.setNextIndex(server, rf.nextIndex[server]-1)
+		}
+	} else if reply.Success == true {
+		nextIndex := rf.nextIndex[server] + len(args.Entries)
+		rf.setNextIndex(server, nextIndex)
+		rf.setMatchIndex(server, nextIndex-1)
+
+		// leader can commit a log entry if it has been replicated in the
+		// majority servers
+		matchIndexes := slices.Clone(rf.matchIndex)
+		slices.Sort(matchIndexes)
+		l := len(matchIndexes)
+		commitIndex := matchIndexes[l-l/2]
+		rf.setCommitIndex(commitIndex)
 	}
 
 	return ok
@@ -407,7 +499,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := rf.serverState == Leader
 
 	if isLeader {
-		rf.appendLogEntry(command)
+		rf.createAndAppendLogEntry(command)
 	}
 
 	return index, term, isLeader
@@ -613,6 +705,23 @@ func Make(peers []*labrpc.ClientEnd, me int,
 			// The tester requires that the leader send heartbeat RPCs no more than ten times
 			// per second.
 			time.Sleep(200 * time.Millisecond)
+		}
+	}()
+
+	go func() {
+		for !rf.killed() {
+			rf.mu.Lock()
+			for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+				var msg raftapi.ApplyMsg
+				msg.CommandValid = true
+				msg.Command = rf.log[i].Command
+				msg.CommandIndex = i
+				applyCh <- msg
+			}
+			rf.setLastApplied(rf.commitIndex)
+			rf.mu.Unlock()
+
+			time.Sleep(10 * time.Millisecond)
 		}
 	}()
 
