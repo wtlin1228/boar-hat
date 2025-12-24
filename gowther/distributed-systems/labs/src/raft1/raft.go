@@ -551,11 +551,13 @@ func (rf *Raft) ticker() {
 			me := rf.me
 			thisTerm := rf.currentTerm
 			peersCount := len(rf.peers)
+			lastLogIndex := rf.getLastLogEntryIndex()
+			lastLogTerm := rf.getLastLogEntryTerm()
 
 			rf.mu.Unlock()
 
 			// old elections shouldn't block the new elections
-			go rf.startNewElection(me, thisTerm, peersCount)
+			go rf.startNewElection(me, thisTerm, peersCount, lastLogIndex, lastLogTerm)
 		}
 
 		// pause for a random amount of time between 50 and 350
@@ -565,13 +567,18 @@ func (rf *Raft) ticker() {
 	}
 }
 
-func (rf *Raft) startNewElection(me int, thisTerm int, peersCount int) {
+func (rf *Raft) startNewElection(me int, thisTerm int, peersCount int, lastLogIndex int, lastLogTerm int) {
 	c := make(chan bool)
 
 	for i := range peersCount {
 		if i != me {
 			go func() {
-				args := RequestVoteArgs{Term: thisTerm, CandidateId: me}
+				args := RequestVoteArgs{
+					Term:         thisTerm,
+					CandidateId:  me,
+					LastLogIndex: lastLogIndex,
+					LastLogTerm:  lastLogTerm,
+				}
 				reply := RequestVoteReply{}
 				ok := rf.sendRequestVote(i, &args, &reply)
 				if ok && reply.Term == thisTerm {
