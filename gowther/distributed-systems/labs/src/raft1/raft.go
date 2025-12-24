@@ -210,7 +210,7 @@ func (rf *Raft) setMatchIndex(server int, i int) {
 // caller is responsible for holding the lock
 func (rf *Raft) setCommitIndex(i int) {
 	if i < rf.commitIndex {
-		log.Fatalf("commitIndex must only increase monotonically, commitIndex from %d to %d", rf.commitIndex, i)
+		log.Fatalf("[%d] commitIndex must only increase monotonically, commitIndex from %d to %d", rf.me, rf.commitIndex, i)
 		return
 	}
 
@@ -501,7 +501,11 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 		slices.Sort(matchIndexes)
 		l := len(matchIndexes)
 		commitIndex := matchIndexes[l-l/2]
-		rf.setCommitIndex(commitIndex)
+		// when the leader is just selected, matchIndexes will be reset to 0
+		// and the commitIndex shouldn't be decreased
+		if commitIndex > rf.commitIndex {
+			rf.setCommitIndex(commitIndex)
+		}
 	}
 
 	return ok
