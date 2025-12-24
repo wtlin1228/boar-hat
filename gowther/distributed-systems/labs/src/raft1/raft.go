@@ -478,7 +478,9 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 
 	DPrintf("[%d] %-9s - receive AppendEntries RPC response from [%d], term is %d, success=%v", args.LeaderId, rf.serverState, server, reply.Term, reply.Success)
 
-	if rf.currentTerm < reply.Term {
+	if reply.Term == 0 {
+		// timeout, do nothing
+	} else if rf.currentTerm < reply.Term {
 		rf.setCurrentTerm(reply.Term, NoVote)
 		if rf.serverState != Follower {
 			rf.setServerState(Follower)
@@ -756,8 +758,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 				msg.Command = rf.log[i].Command
 				msg.CommandIndex = i
 				applyCh <- msg
+
+				rf.setLastApplied(i)
 			}
-			rf.setLastApplied(rf.commitIndex)
 			rf.mu.Unlock()
 
 			time.Sleep(10 * time.Millisecond)
