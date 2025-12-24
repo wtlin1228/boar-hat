@@ -134,8 +134,18 @@ func (rf *Raft) setVoteFor(id int) {
 
 // caller is responsible for holding the lock
 func (rf *Raft) createAndAppendLogEntry(command any) {
-	DPrintf("[%d] %-9s - create and append log entry, logIndex=%d, currentTerm=%d", rf.me, rf.serverState, rf.getLastLogEntryIndex()+1, rf.currentTerm)
+	DPrintf("[%d] %-9s - create and append log entry, logIndex=%d, currentTerm=%d, command=%v", rf.me, rf.serverState, rf.getLastLogEntryIndex()+1, rf.currentTerm, command)
 	rf.log = append(rf.log, LogEntry{Term: rf.currentTerm, Command: command})
+
+	if Debug {
+		var entryTerms []int
+		var entryCommands []any
+		for _, entry := range rf.log {
+			entryTerms = append(entryTerms, entry.Term)
+			entryCommands = append(entryCommands, entry.Command)
+		}
+		DPrintf("[%d] %-9s - logTerms=%v, logCommands=%v", rf.me, rf.serverState, entryTerms, entryCommands)
+	}
 }
 
 // caller is responsible for holding the lock
@@ -144,6 +154,16 @@ func (rf *Raft) replaceLogEntries(startFrom int, entries []LogEntry) {
 		DPrintf("[%d] %-9s - replace log entries, startFrom=%d, entryCount=%v", rf.me, rf.serverState, startFrom, len(entries))
 		rf.log = slices.Delete(rf.log, startFrom, len(rf.log))
 		rf.log = slices.Concat(rf.log, entries)
+	}
+
+	if Debug {
+		var entryTerms []int
+		var entryCommands []any
+		for _, entry := range rf.log {
+			entryTerms = append(entryTerms, entry.Term)
+			entryCommands = append(entryCommands, entry.Command)
+		}
+		DPrintf("[%d] %-9s - logTerms=%v, logCommands=%v", rf.me, rf.serverState, entryTerms, entryCommands)
 	}
 }
 
@@ -397,11 +417,19 @@ type AppendEntriesArgs struct {
 }
 
 func (args AppendEntriesArgs) String() string {
-	var entryTerms []int
-	for _, entry := range args.Entries {
-		entryTerms = append(entryTerms, entry.Term)
+	if Debug {
+		var entryTerms []int
+		var entryCommands []any
+		for _, entry := range args.Entries {
+			entryTerms = append(entryTerms, entry.Term)
+			entryCommands = append(entryCommands, entry.Command)
+		}
+		return fmt.Sprintf(
+			"{\n  Term: %d,\n  LeaderId: %d,\n  LeaderCommit: %d,\n  PrevLogIndex: %d,\n  PrevLogTerm: %d,\n  EntriesTerms: %v,\n  entryCommands: %v\n}",
+			args.Term, args.LeaderId, args.LeaderCommit, args.PrevLogIndex, args.PrevLogTerm, entryTerms, entryCommands,
+		)
 	}
-	return fmt.Sprintf("{\n  Term: %d,\n  LeaderId: %d,\n  LeaderCommit: %d,\n  PrevLogIndex: %d,\n  PrevLogTerm: %d,\n  EntriesTerms: %v,\n}", args.Term, args.LeaderId, args.LeaderCommit, args.PrevLogIndex, args.PrevLogTerm, entryTerms)
+	return ""
 }
 
 type AppendEntriesReply struct {
@@ -718,7 +746,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	go func() {
 		for !rf.killed() {
 			rf.mu.Lock()
-			for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+			for i := rf.lastApplied + 1; i <= rf.commitIndex && i < len(rf.log); i++ {
+				DPrintf(
+					"[%d] %-9s - apply log\n{\n  logIndex=%d,\n  logTerm=%d,\n  logCommand=%v,\n}",
+					rf.me, rf.serverState, i, rf.log[i].Term, rf.log[i].Command,
+				)
 				var msg raftapi.ApplyMsg
 				msg.CommandValid = true
 				msg.Command = rf.log[i].Command
