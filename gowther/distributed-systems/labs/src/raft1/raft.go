@@ -247,13 +247,13 @@ func (rf *Raft) getXTermAndXIndex(term int, index int) (int, int) {
 	xIndex := min(index, rf.getLastLogEntryIndex())
 
 	// 1. find the largest term T that is smaller than given term
-	for xIndex >= 1 && rf.log[xIndex].Term >= term {
+	for xIndex > 1 && rf.log[xIndex].Term >= term {
 		xIndex -= 1
 	}
 	xTerm := rf.log[xIndex].Term
 
 	// 2. find the first log for term T
-	for xIndex >= 1 && rf.log[xIndex-1].Term == xTerm {
+	for xIndex > 1 && rf.log[xIndex-1].Term == xTerm {
 		xIndex -= 1
 	}
 
@@ -530,14 +530,15 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	} else if reply.Success == false {
 		DPrintf("[%d] %-9s - failed to replicate %d log entries to [%d], previous log(term=%d,index=%d) mismatch", rf.me, rf.serverState, len(args.Entries), server, args.PrevLogTerm, args.PrevLogIndex)
 
-		if rf.nextIndex[server] > 1 {
-			rf.setNextIndex(server, rf.nextIndex[server]-1)
-		}
-
-		// faster backup, decrement the next index to XIndex directly instead of 1 by 1
+		// slower backup
 		// if rf.nextIndex[server] > 1 {
-		// 	rf.setNextIndex(server, reply.XIndex)
+		// 	rf.setNextIndex(server, rf.nextIndex[server]-1)
 		// }
+
+		// faster backup
+		if reply.XIndex >= 1 {
+			rf.setNextIndex(server, reply.XIndex)
+		}
 	} else if reply.Success == true {
 		DPrintf("[%d] %-9s - successfully replicate %d log entries to [%d], term is %d", args.LeaderId, rf.serverState, len(args.Entries), server, reply.Term)
 
