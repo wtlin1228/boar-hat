@@ -150,9 +150,9 @@ func (rf *Raft) createAndAppendLogEntry(command any) {
 
 // caller is responsible for holding the lock
 func (rf *Raft) replaceLogEntries(startFrom int, entries []LogEntry) {
-	if rf.commitIndex > startFrom {
-		log.Fatalf("[%d] can't replace already committed log, commitIndex=%d, startFrom=%d, entryCount=%d", rf.me, rf.commitIndex, startFrom, len(entries))
-	}
+	// if rf.commitIndex > startFrom {
+	// 	log.Fatalf("[%d] can't replace already committed log, commitIndex=%d, startFrom=%d, entryCount=%d", rf.me, rf.commitIndex, startFrom, len(entries))
+	// }
 
 	if len(entries) > 0 {
 		DPrintf("[%d] %-9s - replace log entries, startFrom=%d, entryCount=%d", rf.me, rf.serverState, startFrom, len(entries))
@@ -240,6 +240,24 @@ func (rf *Raft) setLastApplied(i int) {
 		DPrintf("[%d] %-9s - increase lastApplied from %d to %d", rf.me, rf.serverState, rf.lastApplied, i)
 		rf.lastApplied = i
 	}
+}
+
+// caller is responsible for holding the lock
+func (rf *Raft) getXTermAndXIndex(term int, index int) (int, int) {
+	xIndex := min(index, rf.getLastLogEntryIndex())
+
+	// 1. find the largest term T that is smaller than given term
+	for xIndex >= 1 && rf.log[xIndex].Term >= term {
+		xIndex -= 1
+	}
+	xTerm := rf.log[xIndex].Term
+
+	// 2. find the first log for term T
+	for xIndex >= 1 && rf.log[xIndex-1].Term == xTerm {
+		xIndex -= 1
+	}
+
+	return xTerm, xIndex
 }
 
 // return currentTerm and whether this server
@@ -337,6 +355,12 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		return
 	}
 
+	rf.setCurrentTerm(args.Term, NoVote)
+	if rf.serverState != Follower {
+		rf.setServerState(Follower)
+	}
+	reply.Term = args.Term
+
 	// Only vote for the candidate if its log is more update-to-date
 	// RULE:
 	//   If the logs have last entries with different terms,
@@ -345,21 +369,12 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	//   is more up-to-date.
 	lastLogEntryTerm := rf.getLastLogEntryTerm()
 	lastLogEntryIndex := rf.getLastLogEntryIndex()
-	if args.LastLogTerm < lastLogEntryTerm ||
-		(args.LastLogTerm == lastLogEntryTerm && args.LastLogIndex < lastLogEntryIndex) {
-		rf.setCurrentTerm(args.Term, NoVote)
-		reply.Term = rf.currentTerm
+	if args.LastLogTerm < lastLogEntryTerm || (args.LastLogTerm == lastLogEntryTerm && args.LastLogIndex < lastLogEntryIndex) {
 		reply.VoteGranted = false
-		return
+	} else {
+		rf.setVoteFor(args.CandidateId)
+		reply.VoteGranted = true
 	}
-
-	rf.setCurrentTerm(args.Term, args.CandidateId)
-	if rf.serverState != Follower {
-		rf.setServerState(Follower)
-	}
-
-	reply.Term = args.Term
-	reply.VoteGranted = true
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -397,21 +412,20 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if ok && reply.Term != 0 {
-		if reply.VoteGranted {
-			DPrintf("[%d] %-9s - receive vote from [%d], term is %d", args.CandidateId, rf.serverState, server, reply.Term)
-		} else {
-			DPrintf("[%d] %-9s - doesn't get the vote from [%d], term is %d", args.CandidateId, rf.serverState, server, reply.Term)
-		}
-	} else {
-		DPrintf("[%d] %-9s - doesn't get the vote from from [%d], timeout", args.CandidateId, rf.serverState, server)
-	}
+	if reply.Term == 0 {
+		DPrintf("[%d] %-9s - doesn't get the vote from [%d], timeout", args.CandidateId, rf.serverState, server)
+		// timeout, do nothing
+	} else if rf.currentTerm < reply.Term {
+		DPrintf("[%d] %-9s - doesn't get the vote from [%d], currentTerm %d is smaller than other's term %d", args.CandidateId, rf.serverState, server, rf.currentTerm, reply.Term)
 
-	if rf.currentTerm < reply.Term {
 		rf.setCurrentTerm(reply.Term, NoVote)
 		if rf.serverState != Follower {
 			rf.setServerState(Follower)
 		}
+	} else if reply.VoteGranted == true {
+		DPrintf("[%d] %-9s - receive vote from [%d], term is %d", args.CandidateId, rf.serverState, server, reply.Term)
+	} else if reply.VoteGranted == false {
+		DPrintf("[%d] %-9s - doesn't get the vote from [%d], term is %d", args.CandidateId, rf.serverState, server, reply.Term)
 	}
 
 	return ok
@@ -449,6 +463,10 @@ func (args AppendEntriesArgs) String() string {
 type AppendEntriesReply struct {
 	Term    int  // currentTerm, for leader to update itself
 	Success bool // true if follower contained entry matching prevLogIndex and prevLogTerm
+
+	XTerm  int // faster backup: term of conflicting entry
+	XIndex int // faster backup: index of the first entry within XTerm
+	XLen   int // faster backup: length of the log
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
@@ -482,6 +500,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	reply.Success = false
+
+	// for faster backup
+	xTerm, xIndex := rf.getXTermAndXIndex(args.PrevLogTerm, args.PrevLogIndex)
+	reply.XTerm = xTerm
+	reply.XIndex = xIndex
+	reply.XLen = len(rf.log)
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
@@ -492,21 +516,31 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	DPrintf("[%d] %-9s - receive AppendEntries RPC response from [%d], term is %d, success=%v", args.LeaderId, rf.serverState, server, reply.Term, reply.Success)
-
 	if reply.Term == 0 {
+		DPrintf("[%d] %-9s - failed to replicate %d log entries to [%d], timeout", rf.me, rf.serverState, len(args.Entries), server)
+
 		// timeout, do nothing
 	} else if rf.currentTerm < reply.Term {
+		DPrintf("[%d] %-9s - failed to replicate %d log entries to [%d], currentTerm %d is smaller than other's term %d", rf.me, rf.serverState, len(args.Entries), server, rf.currentTerm, reply.Term)
+
 		rf.setCurrentTerm(reply.Term, NoVote)
 		if rf.serverState != Follower {
 			rf.setServerState(Follower)
 		}
 	} else if reply.Success == false {
-		// prevLogIndex and prevLogTerm comparison failed
+		DPrintf("[%d] %-9s - failed to replicate %d log entries to [%d], previous log(term=%d,index=%d) mismatch", rf.me, rf.serverState, len(args.Entries), server, args.PrevLogTerm, args.PrevLogIndex)
+
 		if rf.nextIndex[server] > 1 {
 			rf.setNextIndex(server, rf.nextIndex[server]-1)
 		}
+
+		// faster backup, decrement the next index to XIndex directly instead of 1 by 1
+		// if rf.nextIndex[server] > 1 {
+		// 	rf.setNextIndex(server, reply.XIndex)
+		// }
 	} else if reply.Success == true {
+		DPrintf("[%d] %-9s - successfully replicate %d log entries to [%d], term is %d", args.LeaderId, rf.serverState, len(args.Entries), server, reply.Term)
+
 		nextIndex := rf.nextIndex[server] + len(args.Entries)
 		rf.setNextIndex(server, nextIndex)
 		rf.setMatchIndex(server, nextIndex-1)
