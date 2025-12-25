@@ -150,8 +150,12 @@ func (rf *Raft) createAndAppendLogEntry(command any) {
 
 // caller is responsible for holding the lock
 func (rf *Raft) replaceLogEntries(startFrom int, entries []LogEntry) {
+	if rf.commitIndex > startFrom {
+		log.Fatalf("[%d] can't replace already committed log, commitIndex=%d, startFrom=%d, entryCount=%d", rf.me, rf.commitIndex, startFrom, len(entries))
+	}
+
 	if len(entries) > 0 {
-		DPrintf("[%d] %-9s - replace log entries, startFrom=%d, entryCount=%v", rf.me, rf.serverState, startFrom, len(entries))
+		DPrintf("[%d] %-9s - replace log entries, startFrom=%d, entryCount=%d", rf.me, rf.serverState, startFrom, len(entries))
 		rf.log = slices.Delete(rf.log, startFrom, len(rf.log))
 		rf.log = slices.Concat(rf.log, entries)
 	}
@@ -211,6 +215,11 @@ func (rf *Raft) setMatchIndex(server int, i int) {
 func (rf *Raft) setCommitIndex(i int) {
 	if i < rf.commitIndex {
 		log.Fatalf("[%d] commitIndex must only increase monotonically, commitIndex from %d to %d", rf.me, rf.commitIndex, i)
+		return
+	}
+
+	if i > rf.getLastLogEntryIndex() {
+		log.Fatalf("[%d] commitIndex can't exceed the log, commitIndex from %d to %d, lastLogIndex=%d", rf.me, rf.commitIndex, i, rf.getLastLogEntryIndex())
 		return
 	}
 
@@ -338,6 +347,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	lastLogEntryIndex := rf.getLastLogEntryIndex()
 	if args.LastLogTerm < lastLogEntryTerm ||
 		(args.LastLogTerm == lastLogEntryTerm && args.LastLogIndex < lastLogEntryIndex) {
+		rf.setCurrentTerm(args.Term, NoVote)
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		return
@@ -387,10 +397,14 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if ok {
-		DPrintf("[%d] %-9s - receive RequestVote RPC response from [%d], term is %d, vote is %v", args.CandidateId, rf.serverState, server, reply.Term, reply.VoteGranted)
+	if ok && reply.Term != 0 {
+		if reply.VoteGranted {
+			DPrintf("[%d] %-9s - receive vote from [%d], term is %d", args.CandidateId, rf.serverState, server, reply.Term)
+		} else {
+			DPrintf("[%d] %-9s - doesn't get the vote from [%d], term is %d", args.CandidateId, rf.serverState, server, reply.Term)
+		}
 	} else {
-		DPrintf("[%d] %-9s - receive RequestVote RPC response from [%d], timeout", args.CandidateId, rf.serverState, server)
+		DPrintf("[%d] %-9s - doesn't get the vote from from [%d], timeout", args.CandidateId, rf.serverState, server)
 	}
 
 	if rf.currentTerm < reply.Term {
@@ -455,13 +469,15 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if rf.currentTerm < args.Term {
 		rf.setCurrentTerm(args.Term, NoVote)
 	}
-	rf.setCommitIndex(args.LeaderCommit)
 
 	reply.Term = args.Term
 
 	if rf.getLastLogEntryIndex() >= args.PrevLogIndex && rf.log[args.PrevLogIndex].Term == args.PrevLogTerm {
-		reply.Success = true
+		// commit index and log entries need to be updated together, or the server
+		// will apply the wrong command
 		rf.replaceLogEntries(args.PrevLogIndex+1, args.Entries)
+		rf.setCommitIndex(args.LeaderCommit)
+		reply.Success = true
 		return
 	}
 
@@ -752,7 +768,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	go func() {
 		for !rf.killed() {
 			rf.mu.Lock()
-			for i := rf.lastApplied + 1; i <= rf.commitIndex && i < len(rf.log); i++ {
+			for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
 				DPrintf(
 					"[%d] %-9s - apply log\n{\n  logIndex=%d,\n  logTerm=%d,\n  logCommand=%v,\n}",
 					rf.me, rf.serverState, i, rf.log[i].Term, rf.log[i].Command,
