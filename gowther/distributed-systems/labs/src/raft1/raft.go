@@ -549,15 +549,18 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 		rf.setMatchIndex(server, nextIndex-1)
 
 		// leader can commit a log entry if it has been replicated in the
-		// majority servers
-		matchIndexes := slices.Clone(rf.matchIndex)
-		slices.Sort(matchIndexes)
-		l := len(matchIndexes)
-		commitIndex := matchIndexes[l-l/2]
-		// when the leader is just selected, matchIndexes will be reset to 0
-		// and the commitIndex shouldn't be decreased
-		if commitIndex > rf.commitIndex {
-			rf.setCommitIndex(commitIndex)
+		// majority servers only if the log entry is in the current term
+		// as explained in paper's figure 8
+		if len(args.Entries) > 0 && args.Entries[len(args.Entries)-1].Term == rf.currentTerm {
+			matchIndexes := slices.Clone(rf.matchIndex)
+			slices.Sort(matchIndexes)
+			l := len(matchIndexes)
+			commitIndex := matchIndexes[l-l/2]
+			// when the leader is just selected, matchIndexes will be reset to 0
+			// and the commitIndex shouldn't be decreased
+			if commitIndex > rf.commitIndex {
+				rf.setCommitIndex(commitIndex)
+			}
 		}
 	}
 
