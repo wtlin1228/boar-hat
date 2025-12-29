@@ -7,8 +7,7 @@ package raft
 // Make() creates a new raft peer that implements the raft interface.
 
 import (
-	//	"bytes"
-
+	"bytes"
 	"fmt"
 	"log"
 	"math/rand"
@@ -17,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	//	"6.5840/labgob"
+	"6.5840/labgob"
 	"6.5840/labrpc"
 	"6.5840/raftapi"
 	tester "6.5840/tester1"
@@ -116,6 +115,7 @@ func (rf *Raft) setCurrentTerm(term int, voteFor int) {
 	DPrintf("[%d] %-9s - increase current term to %d", rf.me, rf.serverState, term)
 	rf.currentTerm = term
 	rf.setVoteFor(voteFor)
+	rf.persist()
 }
 
 // caller is responsible for holding the lock
@@ -130,22 +130,15 @@ func (rf *Raft) setVoteFor(id int) {
 		DPrintf("[%d] %-9s - vote for %d", rf.me, rf.serverState, id)
 	}
 	rf.voteFor = id
+	rf.persist()
 }
 
 // caller is responsible for holding the lock
 func (rf *Raft) createAndAppendLogEntry(command any) {
 	DPrintf("[%d] %-9s - create and append log entry, logIndex=%d, currentTerm=%d, command=%v", rf.me, rf.serverState, rf.getLastLogEntryIndex()+1, rf.currentTerm, command)
 	rf.log = append(rf.log, LogEntry{Term: rf.currentTerm, Command: command})
-
-	if Debug {
-		var entryTerms []int
-		var entryCommands []any
-		for _, entry := range rf.log {
-			entryTerms = append(entryTerms, entry.Term)
-			entryCommands = append(entryCommands, entry.Command)
-		}
-		DPrintf("[%d] %-9s - logTerms=%v, logCommands=%v", rf.me, rf.serverState, entryTerms, entryCommands)
-	}
+	DPrintf("[%d] %-9s - log=%v", rf.me, rf.serverState, rf.log)
+	rf.persist()
 }
 
 // caller is responsible for holding the lock
@@ -158,16 +151,8 @@ func (rf *Raft) replaceLogEntries(startFrom int, entries []LogEntry) {
 		DPrintf("[%d] %-9s - replace log entries, startFrom=%d, entryCount=%d", rf.me, rf.serverState, startFrom, len(entries))
 		rf.log = slices.Delete(rf.log, startFrom, len(rf.log))
 		rf.log = slices.Concat(rf.log, entries)
-	}
-
-	if Debug {
-		var entryTerms []int
-		var entryCommands []any
-		for _, entry := range rf.log {
-			entryTerms = append(entryTerms, entry.Term)
-			entryCommands = append(entryCommands, entry.Command)
-		}
-		DPrintf("[%d] %-9s - logTerms=%v, logCommands=%v", rf.me, rf.serverState, entryTerms, entryCommands)
+		DPrintf("[%d] %-9s - log=%v", rf.me, rf.serverState, rf.log)
+		rf.persist()
 	}
 }
 
@@ -214,7 +199,11 @@ func (rf *Raft) setMatchIndex(server int, i int) {
 // caller is responsible for holding the lock
 func (rf *Raft) setCommitIndex(i int) {
 	if i < rf.commitIndex {
-		log.Fatalf("[%d] commitIndex must only increase monotonically, commitIndex from %d to %d", rf.me, rf.commitIndex, i)
+		// log.Fatalf("[%d] commitIndex must only increase monotonically, commitIndex from %d to %d", rf.me, rf.commitIndex, i)
+
+		// when a server restarts and wins the election again, the commit index will be reset to 0
+		// but the commit index of living servers will be larger than 0
+		// in this case, we don't decrease the living servers' commit index
 		return
 	}
 
@@ -277,6 +266,7 @@ func (rf *Raft) GetState() (int, bool) {
 // after you've implemented snapshots, pass the current snapshot
 // (or nil if there's not yet a snapshot).
 func (rf *Raft) persist() {
+	DPrintf("[%d] %-9s - persist data, currentTerm=%d, voteFor=%d, log=%v", rf.me, rf.serverState, rf.currentTerm, rf.voteFor, rf.log)
 	// Your code here (3C).
 	// Example:
 	// w := new(bytes.Buffer)
@@ -285,11 +275,18 @@ func (rf *Raft) persist() {
 	// e.Encode(rf.yyy)
 	// raftstate := w.Bytes()
 	// rf.persister.Save(raftstate, nil)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.voteFor)
+	e.Encode(rf.log)
+	raftstate := w.Bytes()
+	rf.persister.Save(raftstate, nil)
 }
 
 // restore previously persisted state.
 func (rf *Raft) readPersist(data []byte) {
-	if data == nil || len(data) < 1 { // bootstrap without any state?
+	if len(data) < 1 { // bootstrap without any state?
 		return
 	}
 	// Your code here (3C).
@@ -305,6 +302,20 @@ func (rf *Raft) readPersist(data []byte) {
 	//   rf.xxx = xxx
 	//   rf.yyy = yyy
 	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var currentTerm int
+	var voteFor int
+	var logEntries []LogEntry
+	if d.Decode(&currentTerm) != nil ||
+		d.Decode(&voteFor) != nil ||
+		d.Decode(&logEntries) != nil {
+		log.Fatalln("fail to decode the persist data")
+	} else {
+		rf.currentTerm = currentTerm
+		rf.voteFor = voteFor
+		rf.log = logEntries
+	}
 }
 
 // how many bytes in Raft's persisted log?
@@ -445,19 +456,10 @@ type AppendEntriesArgs struct {
 }
 
 func (args AppendEntriesArgs) String() string {
-	if Debug {
-		var entryTerms []int
-		var entryCommands []any
-		for _, entry := range args.Entries {
-			entryTerms = append(entryTerms, entry.Term)
-			entryCommands = append(entryCommands, entry.Command)
-		}
-		return fmt.Sprintf(
-			"{\n  Term: %d,\n  LeaderId: %d,\n  LeaderCommit: %d,\n  PrevLogIndex: %d,\n  PrevLogTerm: %d,\n  EntriesTerms: %v,\n  entryCommands: %v\n}",
-			args.Term, args.LeaderId, args.LeaderCommit, args.PrevLogIndex, args.PrevLogTerm, entryTerms, entryCommands,
-		)
-	}
-	return ""
+	return fmt.Sprintf(
+		"{\n  Term: %d,\n  LeaderId: %d,\n  LeaderCommit: %d,\n  PrevLogIndex: %d,\n  PrevLogTerm: %d,\n  Entries=%v\n}",
+		args.Term, args.LeaderId, args.LeaderCommit, args.PrevLogIndex, args.PrevLogTerm, args.Entries,
+	)
 }
 
 type AppendEntriesReply struct {
@@ -605,6 +607,7 @@ func (rf *Raft) Kill() {
 
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
+	DPrintf("[%d] %-9s - killed on term %d\n", rf.me, rf.serverState, rf.currentTerm)
 }
 
 func (rf *Raft) killed() bool {
@@ -787,6 +790,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
+
+	DPrintf("Make a raft server, me=%d, currentTerm=%d, voteFor=%d, log=%v", rf.me, rf.currentTerm, rf.voteFor, rf.log)
 
 	// start ticker goroutine to start elections
 	go rf.ticker()
