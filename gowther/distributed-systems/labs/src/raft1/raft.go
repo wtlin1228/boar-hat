@@ -274,7 +274,7 @@ func (rf *Raft) GetState() (int, bool) {
 // after you've implemented snapshots, pass the current snapshot
 // (or nil if there's not yet a snapshot).
 func (rf *Raft) persist() {
-	DPrintf("[%d] %-9s - persist data, currentTerm=%d, voteFor=%d, log=%v", rf.me, rf.serverState, rf.currentTerm, rf.voteFor, rf.log)
+	// DPrintf("[%d] %-9s - persist data, currentTerm=%d, voteFor=%d, log=%v", rf.me, rf.serverState, rf.currentTerm, rf.voteFor, rf.log)
 	// Your code here (3C).
 	// Example:
 	// w := new(bytes.Buffer)
@@ -483,9 +483,17 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	DPrintf("[%d] %-9s - receive AppendEntries RPC from [%d] on term %d", rf.me, rf.serverState, args.LeaderId, args.Term)
+	DPrintf("[%d] %-9s - receive AppendEntries RPC from [%d] on term %d, args=%+v",
+		rf.me, rf.serverState,
+		args.LeaderId, args.Term, args,
+	)
 
 	if rf.currentTerm > args.Term {
+		DPrintf("[%d] %-9s - ignore since currentTerm %d is greater than args.Term %d",
+			rf.me, rf.serverState,
+			rf.currentTerm, args.Term,
+		)
+
 		reply.Term = rf.currentTerm
 		return
 	}
@@ -500,12 +508,30 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	reply.Term = args.Term
 
+	if rf.getLastLogEntryIndex() < args.PrevLogIndex {
+		DPrintf("[%d] %-9s - the args.PrevLogIndex %d is larger than the last log index %d",
+			rf.me, rf.serverState,
+			args.PrevLogIndex, rf.getLastLogEntryIndex(),
+		)
+	} else if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+		DPrintf("[%d] %-9s - rf.log[args.PrevLogIndex].Term %d != args.PrevLogTerm %d",
+			rf.me, rf.serverState,
+			rf.log[args.PrevLogIndex].Term, args.PrevLogTerm,
+		)
+	}
+
 	if rf.getLastLogEntryIndex() >= args.PrevLogIndex && rf.log[args.PrevLogIndex].Term == args.PrevLogTerm {
 		// commit index and log entries need to be updated together, or the server
 		// will apply the wrong command
 		rf.replaceLogEntries(args.PrevLogIndex+1, args.Entries)
 		rf.setCommitIndex(args.LeaderCommit)
 		reply.Success = true
+
+		DPrintf("[%d] %-9s - append entries success, reply=%+v",
+			rf.me, rf.serverState,
+			reply,
+		)
+
 		return
 	}
 
@@ -516,6 +542,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	reply.XTerm = xTerm
 	reply.XIndex = xIndex
 	reply.XLen = len(rf.log)
+
+	DPrintf("[%d] %-9s - append entries fail, reply=%+v",
+		rf.me, rf.serverState,
+		reply,
+	)
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
@@ -525,6 +556,11 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
+	DPrintf("[%d] %-9s - get AppendEntries RPC response from [%d] on term %d\nreply=%+v",
+		args.LeaderId, Leader,
+		server, args.Term, reply,
+	)
 
 	if reply.Term == 0 {
 		DPrintf("[%d] %-9s - failed to replicate %d log entries to [%d], timeout", rf.me, rf.serverState, len(args.Entries), server)
@@ -548,6 +584,8 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 		// faster backup
 		if reply.XIndex >= 1 {
 			rf.setNextIndex(server, reply.XIndex)
+		} else {
+			rf.setNextIndex(server, 1)
 		}
 	} else if reply.Success == true {
 		DPrintf("[%d] %-9s - successfully replicate %d log entries to [%d], term is %d", args.LeaderId, rf.serverState, len(args.Entries), server, reply.Term)
@@ -788,10 +826,10 @@ func (rf *Raft) applyCommittedEntries(applyCh chan raftapi.ApplyMsg) {
 	start := time.Now()
 
 	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
-		DPrintf(
-			"[%d] %-9s - apply log\n{\n  logIndex=%d,\n  logTerm=%d,\n  logCommand=%v,\n}",
-			rf.me, rf.serverState, i, rf.log[i].Term, rf.log[i].Command,
-		)
+		// DPrintf(
+		// 	"[%d] %-9s - apply log\n{\n  logIndex=%d,\n  logTerm=%d,\n  logCommand=%v,\n}",
+		// 	rf.me, rf.serverState, i, rf.log[i].Term, rf.log[i].Command,
+		// )
 		var msg raftapi.ApplyMsg
 		msg.CommandValid = true
 		msg.Command = rf.log[i].Command
