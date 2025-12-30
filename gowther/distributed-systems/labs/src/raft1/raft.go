@@ -185,8 +185,10 @@ func (rf *Raft) setNextIndex(server int, i int) {
 
 // caller is responsible for holding the lock
 func (rf *Raft) setMatchIndex(server int, i int) {
-	if i < rf.commitIndex {
-		log.Fatalf("matchIndex must only increase monotonically, matchIndex[%d] from %d to %d", server, rf.matchIndex[server], i)
+	if i < rf.matchIndex[server] {
+		// log.Fatalf("matchIndex must only increase monotonically, matchIndex[%d] from %d to %d", server, rf.matchIndex[server], i)
+
+		// when the responses arrive out of the sending order, the i might be smaller than the current match index
 		return
 	}
 
@@ -544,7 +546,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	} else if reply.Success == true {
 		DPrintf("[%d] %-9s - successfully replicate %d log entries to [%d], term is %d", args.LeaderId, rf.serverState, len(args.Entries), server, reply.Term)
 
-		nextIndex := rf.nextIndex[server] + len(args.Entries)
+		nextIndex := args.PrevLogIndex + len(args.Entries) + 1
 		rf.setNextIndex(server, nextIndex)
 		rf.setMatchIndex(server, nextIndex-1)
 
