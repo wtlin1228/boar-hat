@@ -47,6 +47,12 @@ const NoVote = -1
 
 const electionTimeout time.Duration = 500 * time.Millisecond
 
+// The tester requires that the leader send heartbeat RPCs no more than ten times
+// per second.
+const sendAppendEntriesInterval time.Duration = 200 * time.Millisecond
+
+const applyCommittedEntriesInterval time.Duration = 10 * time.Millisecond
+
 type LogEntry struct {
 	Term    int
 	Command any
@@ -759,6 +765,43 @@ func (rf *Raft) sendHeartbeats() {
 		reply := AppendEntriesReply{}
 		go rf.sendAppendEntries(i, &args, &reply)
 	}
+}
+
+func (rf *Raft) applyCommittedEntries(applyCh chan raftapi.ApplyMsg) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	toApply := rf.commitIndex - rf.lastApplied
+
+	// already applied all committed ones
+	if toApply == 0 {
+		return
+	}
+
+	DPrintf(
+		"[%d] %-9s - about to apply %d log from {index=%d, term=%d, command=%d} to {index=%d, term=%d, command=%d}\n",
+		rf.me, rf.serverState, toApply,
+		rf.lastApplied+1, rf.log[rf.lastApplied+1].Term, rf.log[rf.lastApplied+1].Command,
+		rf.commitIndex, rf.log[rf.commitIndex].Term, rf.log[rf.commitIndex].Command,
+	)
+
+	start := time.Now()
+
+	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+		DPrintf(
+			"[%d] %-9s - apply log\n{\n  logIndex=%d,\n  logTerm=%d,\n  logCommand=%v,\n}",
+			rf.me, rf.serverState, i, rf.log[i].Term, rf.log[i].Command,
+		)
+		var msg raftapi.ApplyMsg
+		msg.CommandValid = true
+		msg.Command = rf.log[i].Command
+		msg.CommandIndex = i
+		applyCh <- msg
+
+		rf.setLastApplied(i)
+	}
+
+	DPrintf("[%d] %-9s - applied %d entries in %v", rf.me, rf.serverState, toApply, time.Since(start))
 
 }
 
@@ -804,31 +847,14 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	go func() {
 		for !rf.killed() {
 			rf.sendHeartbeats()
-			// The tester requires that the leader send heartbeat RPCs no more than ten times
-			// per second.
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(sendAppendEntriesInterval)
 		}
 	}()
 
 	go func() {
 		for !rf.killed() {
-			rf.mu.Lock()
-			for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
-				DPrintf(
-					"[%d] %-9s - apply log\n{\n  logIndex=%d,\n  logTerm=%d,\n  logCommand=%v,\n}",
-					rf.me, rf.serverState, i, rf.log[i].Term, rf.log[i].Command,
-				)
-				var msg raftapi.ApplyMsg
-				msg.CommandValid = true
-				msg.Command = rf.log[i].Command
-				msg.CommandIndex = i
-				applyCh <- msg
-
-				rf.setLastApplied(i)
-			}
-			rf.mu.Unlock()
-
-			time.Sleep(10 * time.Millisecond)
+			rf.applyCommittedEntries(applyCh)
+			time.Sleep(applyCommittedEntriesInterval)
 		}
 	}()
 
