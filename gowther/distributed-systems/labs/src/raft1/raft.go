@@ -113,7 +113,7 @@ func (rf *Raft) logDelete(i int, j int) {
 		log.Fatalln("the first log entry {0 nil} must be untouched")
 	}
 
-	rf.log = slices.Delete(rf.log, i-rf.logStartAt, j-rf.logStartAt)
+	rf.log = slices.Delete(rf.log, i-rf.logStartAt+1, j-rf.logStartAt+1)
 }
 
 // caller is responsible for holding the lock
