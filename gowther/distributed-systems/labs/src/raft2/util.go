@@ -1,4 +1,4 @@
-package raft
+package raft2
 
 import "log"
 
