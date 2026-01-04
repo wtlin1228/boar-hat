@@ -301,7 +301,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if isPrevLogEntryIdentical {
 		reply.Success = true
 		if len(args.Entries) > 0 {
-			rf.log.replaceLogEntries(args.PrevLogIndex+1, args.Entries)
+			rf.log.replace(args.PrevLogIndex+1, args.Entries)
 		}
 		rf.commitIndex = args.LeaderCommit
 	} else {
