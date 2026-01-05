@@ -185,7 +185,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.state = Follower
 
 	lastLogIndex := rf.log.getLastLogIndex()
-	lastLogEntryTerm := rf.log.getLogEntry(lastLogIndex).Term
+	lastLogEntryTerm := rf.log.getLastLogTerm()
 
 	isMyLogMoreUpToDate :=
 		// If the logs have last entries with different terms,
@@ -294,9 +294,18 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.lastHeartbeatAt = time.Now()
 	rf.state = Follower
 
+	var prevLogEntry *LogEntry
+	var ok bool
+	if rf.log.getLastLogIndex() >= args.PrevLogIndex {
+		prevLogEntry, ok = rf.log.getLogEntry(args.PrevLogIndex)
+		if !ok {
+			log.Fatalln("unimplemented!")
+		}
+	}
+
 	isPrevLogEntryIdentical :=
 		rf.log.getLastLogIndex() >= args.PrevLogIndex &&
-			rf.log.getLogEntry(args.PrevLogIndex).Term == args.PrevLogTerm
+			prevLogEntry.Term == args.PrevLogTerm
 
 	if isPrevLogEntryIdentical {
 		reply.Success = true
@@ -474,7 +483,7 @@ func (rf *Raft) startElectionIfNeeded() {
 	term := rf.currentTerm
 	candidateId := rf.me
 	lastLogIndex := rf.log.getLastLogIndex()
-	lastLogTerm := rf.log.getLogEntry(lastLogIndex).Term
+	lastLogTerm := rf.log.getLastLogTerm()
 
 	rf.mu.Unlock()
 
@@ -497,13 +506,19 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 		if i == me {
 			continue
 		}
+
 		nextIndex := rf.nextIndex[i]
+		prevLogEntry, ok := rf.log.getLogEntry(nextIndex - 1)
+		if !ok {
+			log.Fatalln("unimplemented!")
+		}
+
 		allArgs[i] = AppendEntriesArgs{
 			Term:         term,
 			LeaderId:     me,
 			LeaderCommit: rf.commitIndex,
 			PrevLogIndex: nextIndex - 1,
-			PrevLogTerm:  rf.log.getLogEntry(nextIndex - 1).Term,
+			PrevLogTerm:  prevLogEntry.Term,
 			Entries:      rf.log.getLogEntriesStartedFrom(nextIndex),
 		}
 	}
@@ -556,9 +571,14 @@ func (rf *Raft) applyLogEntriesIfNeeded(applyCh chan raftapi.ApplyMsg) {
 	defer rf.mu.Unlock()
 
 	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+		logEntry, ok := rf.log.getLogEntry(i)
+		if !ok {
+			log.Fatalln("unimplemented!")
+		}
+
 		var msg raftapi.ApplyMsg
 		msg.CommandValid = true
-		msg.Command = rf.log.getLogEntry(i).Command
+		msg.Command = logEntry.Command
 		msg.CommandIndex = i
 		applyCh <- msg
 	}
