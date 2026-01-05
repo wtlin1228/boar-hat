@@ -143,6 +143,26 @@ func TestTrimLog(t *testing.T) {
 	assertLastLogTerm(t, trimmedRfLog, rfLog.getLastLogTerm())
 }
 
+func TestTrimTheSameRangeLog(t *testing.T) {
+	trimmedRfLog := newRaftLog()
+
+	for i := 1; i <= 10; i++ {
+		trimmedRfLog.appendOne(LogEntry{Term: 1, Command: i})
+	}
+
+	trimmedRfLog.trim(3)
+	startAt1 := trimmedRfLog.startAt
+	dataLen1 := len(trimmedRfLog.data)
+
+	trimmedRfLog.trim(3)
+	startAt2 := trimmedRfLog.startAt
+	dataLen2 := len(trimmedRfLog.data)
+
+	if startAt1 != startAt2 || dataLen1 != dataLen2 {
+		t.Fatal("trim the same range twice shouldn't change anything")
+	}
+}
+
 func TestAppendOnTrimmedLog(t *testing.T) {
 	rfLog := newRaftLog()
 	trimmedRfLog := newRaftLog()

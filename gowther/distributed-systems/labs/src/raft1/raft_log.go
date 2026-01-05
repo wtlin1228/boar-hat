@@ -13,7 +13,9 @@ type LogEntry struct {
 // Raft log is 1-indexed, and will be trimmed after snapshot to prevent log from
 // growing too big.
 type RaftLog struct {
-	// for log compaction (snapshot)
+	// startAt also means this index is already committed and applied
+	// because snapshot happens at the client application, and the client
+	// application only can only see the applied log entries
 	startAt int
 
 	data []LogEntry
@@ -21,7 +23,7 @@ type RaftLog struct {
 
 func newRaftLog() *RaftLog {
 	return &RaftLog{
-		startAt: 1,
+		startAt: 0,
 		data: []LogEntry{
 			// Raft log is 1-indexed, but we suggest that you view it as 0-indexed,
 			// and starting out with an entry (at index=0) that has term 0.
@@ -34,39 +36,36 @@ func newRaftLog() *RaftLog {
 
 // convert data index to log index
 func (rfLog *RaftLog) d2l(dataIndex int) int {
-	return dataIndex + rfLog.startAt - 1
+	return dataIndex + rfLog.startAt
 }
 
 // convert log index to data index
 func (rfLog *RaftLog) l2d(logIndex int) int {
-	return logIndex - rfLog.startAt + 1
+	return logIndex - rfLog.startAt
 }
 
 // remove log entries until index (not including index)
 func (rfLog *RaftLog) trim(index int) {
-	if index <= rfLog.startAt {
+	dataIndex := rfLog.l2d(index)
+	if dataIndex < 1 {
 		// has been trimmed already
 		return
 	}
 
-	var newData []LogEntry
-	newData = append(newData, rfLog.data[0])
-	newData = slices.Concat(newData, rfLog.data[rfLog.l2d(index):])
-
-	rfLog.data = newData
+	rfLog.data = rfLog.data[dataIndex:]
 	rfLog.startAt = index
 }
 
+// ⚠️ WARNING: The following methods must not depend on or reference `startAt`.
+
 func (rfLog *RaftLog) getLogEntry(index int) (*LogEntry, bool) {
 	dataIndex := rfLog.l2d(index)
-	if dataIndex < 1 && rfLog.startAt > 1 {
+	if dataIndex < 0 {
 		// this log entry has been trimmed
 		return nil, false
 	}
 	return &rfLog.data[dataIndex], true
 }
-
-// ⚠️ WARNING: The following methods must not depend on or reference `startAt`.
 
 func (rfLog *RaftLog) getCount() int {
 	return rfLog.d2l(len(rfLog.data) - 1)
