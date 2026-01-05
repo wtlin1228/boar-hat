@@ -1,7 +1,6 @@
 package raft
 
 import (
-	"log"
 	"slices"
 )
 
@@ -95,31 +94,28 @@ func (rfLog *RaftLog) appendOne(logEntry LogEntry) {
 
 func (rfLog *RaftLog) getXTermAndXIndex(term int, index int) (int, int) {
 	xIndex := min(index, rfLog.getLastLogIndex())
+	var xTerm int
 
 	// 1. find the largest term T that is smaller than given term
-	for xIndex > 1 {
+	for {
 		logEntry, ok := rfLog.getLogEntry(xIndex)
 		if !ok {
-			log.Fatalln("unimplemented!")
+			return 0, 0
 		}
 
 		if logEntry.Term < term {
+			xTerm = logEntry.Term
 			break
 		}
 
 		xIndex -= 1
 	}
-	logEntry, ok := rfLog.getLogEntry(xIndex)
-	if !ok {
-		log.Fatalln("unimplemented!")
-	}
-	xTerm := logEntry.Term
 
 	// 2. find the first log for term T
-	for xIndex > 1 {
+	for {
 		logEntry, ok := rfLog.getLogEntry(xIndex - 1)
 		if !ok {
-			log.Fatalln("unimplemented!")
+			return 0, 0
 		}
 
 		if logEntry.Term != xTerm {
