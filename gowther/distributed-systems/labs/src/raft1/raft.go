@@ -164,6 +164,8 @@ func (rf *Raft) PersistBytes() int {
 // service no longer needs the log through (and including)
 // that index. Raft should now trim its log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
+	DPrintf("[%d] %-9s - Snapshot %d", rf.me, rf.state, index)
+
 	// Your code here (3D).
 	if index <= rf.log.startAt {
 		// it has been snapshotted already
@@ -386,7 +388,10 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	DPrintf("[%d] %-9s - InstallSnapshot snapshotTerm=%d, snapshotIndex=%d, log.startAt=%d", rf.me, rf.state, args.SnapshotTerm, args.SnapshotIndex, rf.log.startAt)
+
 	if rf.log.startAt >= args.SnapshotIndex {
+		reply.Success = false
 		return
 	}
 
@@ -405,6 +410,8 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	msg.SnapshotTerm = args.SnapshotTerm
 	msg.SnapshotIndex = args.SnapshotIndex
 	rf.applyCh <- msg
+
+	reply.Success = true
 }
 
 func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply *InstallSnapshotReply) bool {
