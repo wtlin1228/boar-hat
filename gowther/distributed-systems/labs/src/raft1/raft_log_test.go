@@ -39,6 +39,13 @@ func assertLastLogTerm(t *testing.T, rfLog *RaftLog, expectTerm int) {
 	}
 }
 
+func assertXTermAndXIndex(t *testing.T, rfLog *RaftLog, term int, index int, expectXTerm int, expectXIndex int) {
+	xTerm, xIndex := rfLog.getXTermAndXIndex(term, index)
+	if xTerm != expectXTerm || xIndex != expectXIndex {
+		t.Fatalf("(xTerm, xIndex) is (%d, %d), but should be (%d, %d)", xTerm, xIndex, expectXTerm, expectXIndex)
+	}
+}
+
 func TestInitialLog(t *testing.T) {
 	rfLog := newRaftLog()
 
@@ -238,4 +245,70 @@ func TestGetLogEntryOnTrimmedLog(t *testing.T) {
 	for i := 3; i <= 10; i++ {
 		assertLogEntry(t, trimmedRfLog, i, 1, i)
 	}
+}
+
+func TestGetXTermAndXIndexLog(t *testing.T) {
+	rfLog := newRaftLog()
+
+	// index: 0 1 2 3 4 5 6 7 8 9 10
+	// term:  0 2 2 2 4 4 4 5 5 5 8
+	rfLog.appendOne(LogEntry{Term: 2, Command: 21})
+	rfLog.appendOne(LogEntry{Term: 2, Command: 22})
+	rfLog.appendOne(LogEntry{Term: 2, Command: 23})
+	rfLog.appendOne(LogEntry{Term: 4, Command: 44})
+	rfLog.appendOne(LogEntry{Term: 4, Command: 45})
+	rfLog.appendOne(LogEntry{Term: 4, Command: 46})
+	rfLog.appendOne(LogEntry{Term: 5, Command: 57})
+	rfLog.appendOne(LogEntry{Term: 5, Command: 58})
+	rfLog.appendOne(LogEntry{Term: 5, Command: 59})
+	rfLog.appendOne(LogEntry{Term: 8, Command: 80})
+
+	assertXTermAndXIndex(t, rfLog, 99, 11, 8, 10)
+	assertXTermAndXIndex(t, rfLog, 99, 10, 8, 10)
+	assertXTermAndXIndex(t, rfLog, 99, 9, 5, 7)
+	assertXTermAndXIndex(t, rfLog, 99, 8, 5, 7)
+	assertXTermAndXIndex(t, rfLog, 99, 7, 5, 7)
+	assertXTermAndXIndex(t, rfLog, 99, 6, 4, 4)
+	assertXTermAndXIndex(t, rfLog, 99, 5, 4, 4)
+	assertXTermAndXIndex(t, rfLog, 99, 4, 4, 4)
+	assertXTermAndXIndex(t, rfLog, 99, 3, 2, 1)
+	assertXTermAndXIndex(t, rfLog, 99, 2, 2, 1)
+	assertXTermAndXIndex(t, rfLog, 99, 1, 2, 1)
+	assertXTermAndXIndex(t, rfLog, 99, 0, 0, 0)
+
+	assertXTermAndXIndex(t, rfLog, 9, 99, 8, 10)
+	assertXTermAndXIndex(t, rfLog, 8, 99, 5, 7)
+	assertXTermAndXIndex(t, rfLog, 7, 99, 5, 7)
+	assertXTermAndXIndex(t, rfLog, 6, 99, 5, 7)
+	assertXTermAndXIndex(t, rfLog, 5, 99, 4, 4)
+	assertXTermAndXIndex(t, rfLog, 4, 99, 2, 1)
+	assertXTermAndXIndex(t, rfLog, 3, 99, 2, 1)
+	assertXTermAndXIndex(t, rfLog, 2, 99, 0, 0)
+	assertXTermAndXIndex(t, rfLog, 1, 99, 0, 0)
+	assertXTermAndXIndex(t, rfLog, 0, 99, 0, 0)
+
+	assertXTermAndXIndex(t, rfLog, 8, 10, 5, 7)
+	assertXTermAndXIndex(t, rfLog, 5, 9, 4, 4)
+	assertXTermAndXIndex(t, rfLog, 5, 8, 4, 4)
+	assertXTermAndXIndex(t, rfLog, 5, 7, 4, 4)
+	assertXTermAndXIndex(t, rfLog, 4, 6, 2, 1)
+	assertXTermAndXIndex(t, rfLog, 4, 5, 2, 1)
+	assertXTermAndXIndex(t, rfLog, 4, 4, 2, 1)
+	assertXTermAndXIndex(t, rfLog, 2, 3, 0, 0)
+	assertXTermAndXIndex(t, rfLog, 2, 2, 0, 0)
+	assertXTermAndXIndex(t, rfLog, 2, 1, 0, 0)
+	assertXTermAndXIndex(t, rfLog, 0, 0, 0, 0)
+
+	assertXTermAndXIndex(t, rfLog, 7, 11, 5, 7)
+	assertXTermAndXIndex(t, rfLog, 7, 10, 5, 7)
+	assertXTermAndXIndex(t, rfLog, 7, 9, 5, 7)
+	assertXTermAndXIndex(t, rfLog, 7, 8, 5, 7)
+	assertXTermAndXIndex(t, rfLog, 7, 7, 5, 7)
+	assertXTermAndXIndex(t, rfLog, 7, 6, 4, 4)
+	assertXTermAndXIndex(t, rfLog, 7, 5, 4, 4)
+	assertXTermAndXIndex(t, rfLog, 7, 4, 4, 4)
+	assertXTermAndXIndex(t, rfLog, 7, 3, 2, 1)
+	assertXTermAndXIndex(t, rfLog, 7, 2, 2, 1)
+	assertXTermAndXIndex(t, rfLog, 7, 1, 2, 1)
+	assertXTermAndXIndex(t, rfLog, 7, 0, 0, 0)
 }

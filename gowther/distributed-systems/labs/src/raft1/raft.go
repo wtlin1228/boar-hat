@@ -77,6 +77,11 @@ type Raft struct {
 	// for each server, index of highest log entry known to be replicated on server
 	// (initialized to 0, increases monotonically)
 	matchIndex []int
+
+	// the snapshot from the service layer
+	snapshot []byte
+
+	applyCh chan raftapi.ApplyMsg
 }
 
 // return currentTerm and whether this server
@@ -104,7 +109,11 @@ func (rf *Raft) persist() {
 	e.Encode(rf.log.data)
 	e.Encode(rf.log.startAt)
 	raftstate := w.Bytes()
-	rf.persister.Save(raftstate, nil)
+	if len(rf.snapshot) > 0 {
+		rf.persister.Save(raftstate, rf.snapshot)
+	} else {
+		rf.persister.Save(raftstate, nil)
+	}
 }
 
 // restore previously persisted state.
@@ -128,7 +137,18 @@ func (rf *Raft) readPersist(data []byte) {
 		rf.currentTerm = currentTerm
 		rf.voteFor = voteFor
 		rf.log.data = logEntries
-		rf.log.startAt = logStartAt
+
+		if logStartAt != 0 {
+			rf.log.startAt = logStartAt
+			rf.commitIndex = logStartAt
+			rf.lastApplied = logStartAt
+
+			snapshot := rf.persister.ReadSnapshot()
+			if len(snapshot) == 0 {
+				log.Fatalln("fail to read snapshot")
+			}
+			rf.snapshot = snapshot
+		}
 	}
 }
 
@@ -145,7 +165,14 @@ func (rf *Raft) PersistBytes() int {
 // that index. Raft should now trim its log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (3D).
+	if index <= rf.log.startAt {
+		// it has been snapshotted already
+		return
+	}
 
+	rf.snapshot = snapshot
+	rf.log.trim(index)
+	rf.persist()
 }
 
 // example RequestVote RPC arguments structure.
@@ -345,6 +372,55 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	return ok
 }
 
+type InstallSnapshotArgs struct {
+	Snapshot      []byte
+	SnapshotTerm  int
+	SnapshotIndex int
+}
+
+type InstallSnapshotReply struct {
+	Success bool
+}
+
+func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapshotReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	if rf.log.startAt >= args.SnapshotIndex {
+		return
+	}
+
+	rf.lastHeartbeatAt = time.Now()
+
+	rf.log.data = []LogEntry{{Term: args.SnapshotTerm, Command: nil}}
+	rf.log.startAt = args.SnapshotIndex
+	rf.commitIndex = args.SnapshotIndex
+	rf.lastApplied = args.SnapshotIndex
+	rf.snapshot = args.Snapshot
+
+	var msg raftapi.ApplyMsg
+	msg.CommandValid = false
+	msg.SnapshotValid = true
+	msg.Snapshot = args.Snapshot
+	msg.SnapshotTerm = args.SnapshotTerm
+	msg.SnapshotIndex = args.SnapshotIndex
+	rf.applyCh <- msg
+}
+
+func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply *InstallSnapshotReply) bool {
+	DPrintf("[%d] %-9s  -- install snapshot --> [%d] args=%+v", rf.me, rf.state, server, args)
+
+	ok := rf.peers[server].Call("Raft.InstallSnapshot", args, reply)
+
+	if reply.Success {
+		DPrintf("[%d] %-9s <-- install snapshot --  [%d] reply=%+v", rf.me, rf.state, server, reply)
+	} else {
+		DPrintf("[%d] %-9s x-- install snapshot --  [%d] reply=%+v", rf.me, rf.state, server, reply)
+	}
+
+	return ok
+}
+
 // the service using Raft (e.g. a k/v server) wants to start
 // agreement on the next command to be appended to Raft's log. if this
 // server isn't the leader, returns false. otherwise start the
@@ -488,6 +564,19 @@ func (rf *Raft) startElectionIfNeeded() {
 	go rf.election(peersCount, term, candidateId, lastLogIndex, lastLogTerm)
 }
 
+func (rf *Raft) commitIfPossible() {
+	matchIndexes := slices.Clone(rf.matchIndex)
+	slices.Sort(matchIndexes)
+	l := len(matchIndexes)
+	commitIndex := matchIndexes[l-l/2]
+	// when the leader is just selected, matchIndexes
+	// will be reset to 0, but the commitIndex shouldn't
+	// decrease
+	if commitIndex > rf.commitIndex {
+		rf.commitIndex = commitIndex
+	}
+}
+
 func (rf *Raft) sendAppendEntriesIfNeeded() {
 	rf.mu.Lock()
 
@@ -498,66 +587,80 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 
 	term := rf.currentTerm
 	me := rf.me
+	peersCount := len(rf.peers)
 
-	allArgs := make([]AppendEntriesArgs, len(rf.peers))
-	for i := range len(rf.peers) {
+	allInstallSnapshotArgs := make([]*InstallSnapshotArgs, peersCount)
+	allAppendEntriesArgs := make([]*AppendEntriesArgs, peersCount)
+
+	for i := range peersCount {
 		if i == me {
 			continue
 		}
 
 		nextIndex := rf.nextIndex[i]
-		prevLogEntry, ok := rf.log.getLogEntry(nextIndex - 1)
-		if !ok {
-			log.Fatalln("unimplemented!")
-		}
 
-		allArgs[i] = AppendEntriesArgs{
-			Term:         term,
-			LeaderId:     me,
-			LeaderCommit: rf.commitIndex,
-			PrevLogIndex: nextIndex - 1,
-			PrevLogTerm:  prevLogEntry.Term,
-			Entries:      rf.log.getLogEntriesStartedFrom(nextIndex),
+		if nextIndex-1 < rf.log.startAt {
+			logEntry, _ := rf.log.getLogEntry(rf.log.startAt)
+			allInstallSnapshotArgs[i] = &InstallSnapshotArgs{
+				Snapshot:      rf.snapshot,
+				SnapshotTerm:  logEntry.Term,
+				SnapshotIndex: rf.log.startAt,
+			}
+		} else {
+			prevLogEntry, _ := rf.log.getLogEntry(nextIndex - 1)
+			allAppendEntriesArgs[i] = &AppendEntriesArgs{
+				Term:         term,
+				LeaderId:     me,
+				LeaderCommit: rf.commitIndex,
+				PrevLogIndex: nextIndex - 1,
+				PrevLogTerm:  prevLogEntry.Term,
+				Entries:      rf.log.getLogEntriesStartedFrom(nextIndex),
+			}
 		}
 	}
 
 	rf.mu.Unlock()
 
-	for i, args := range allArgs {
+	for i := range peersCount {
 		if i == me {
 			continue
 		}
 		go func() {
-			reply := AppendEntriesReply{}
-			ok := rf.sendAppendEntries(i, &args, &reply)
+			if allAppendEntriesArgs[i] != nil {
+				args := allAppendEntriesArgs[i]
+				reply := AppendEntriesReply{}
+				ok := rf.sendAppendEntries(i, args, &reply)
 
-			rf.mu.Lock()
-			defer rf.mu.Unlock()
+				if ok && reply.Term == term {
+					rf.mu.Lock()
+					if reply.Success {
+						matchIndex := args.PrevLogIndex + len(args.Entries)
+						rf.nextIndex[i] = matchIndex + 1
+						rf.matchIndex[i] = matchIndex
 
-			if ok && reply.Term == term {
-				if reply.Success {
-					matchIndex := args.PrevLogIndex + len(args.Entries)
-					rf.nextIndex[i] = matchIndex + 1
-					rf.matchIndex[i] = matchIndex
-
-					// leader can commit a log entry if it has been
-					// replicated in the majority servers only if the
-					// log entry is in the current term as explained
-					// in paper's figure 8
-					if len(args.Entries) > 0 && args.Entries[len(args.Entries)-1].Term == rf.currentTerm {
-						matchIndexes := slices.Clone(rf.matchIndex)
-						slices.Sort(matchIndexes)
-						l := len(matchIndexes)
-						commitIndex := matchIndexes[l-l/2]
-						// when the leader is just selected, matchIndexes
-						// will be reset to 0, but the commitIndex shouldn't
-						// decrease
-						if commitIndex > rf.commitIndex {
-							rf.commitIndex = commitIndex
+						// leader can commit a log entry if it has been
+						// replicated in the majority servers only if the
+						// log entry is in the current term as explained
+						// in paper's figure 8
+						if len(args.Entries) > 0 && args.Entries[len(args.Entries)-1].Term == rf.currentTerm {
+							rf.commitIfPossible()
 						}
+					} else {
+						rf.nextIndex[i] = max(reply.XIndex, 1)
 					}
-				} else {
-					rf.nextIndex[i] = max(reply.XIndex, 1)
+					rf.mu.Unlock()
+				}
+			} else {
+				args := allInstallSnapshotArgs[i]
+				reply := InstallSnapshotReply{}
+				ok := rf.sendInstallSnapshot(i, args, &reply)
+
+				if ok && reply.Success {
+					rf.mu.Lock()
+					rf.nextIndex[i] = args.SnapshotIndex + 1
+					rf.matchIndex[i] = args.SnapshotIndex
+					rf.commitIfPossible()
+					rf.mu.Unlock()
 				}
 			}
 		}()
