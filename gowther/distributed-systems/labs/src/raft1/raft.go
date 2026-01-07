@@ -299,10 +299,7 @@ type AppendEntriesArgs struct {
 type AppendEntriesReply struct {
 	Term    int  // currentTerm, for leader to update itself
 	Success bool // true if follower contained entry matching prevLogIndex and prevLogTerm
-
-	XTerm  int // faster backup: term of conflicting entry
-	XIndex int // faster backup: index of the first entry within XTerm
-	XLen   int // faster backup: length of the log
+	XIndex  int  // faster backup: index of the first entry within XTerm
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
@@ -342,10 +339,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.commitIndex = args.LeaderCommit
 	} else {
 		reply.Success = false
-		xTerm, xIndex := rf.log.getXTermAndXIndex(args.PrevLogTerm, args.PrevLogIndex)
-		reply.XTerm = xTerm
-		reply.XIndex = xIndex
-		reply.XLen = rf.log.getCount()
+		reply.XIndex = rf.log.getXIndex(args.PrevLogTerm, args.PrevLogIndex)
 	}
 
 	rf.persist()

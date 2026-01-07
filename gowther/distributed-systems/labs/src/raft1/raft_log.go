@@ -74,8 +74,17 @@ func (rfLog *RaftLog) getLastLogIndex() int {
 	return rfLog.getCount()
 }
 
+func (rfLog *RaftLog) getFirstLogIndex() int {
+	return rfLog.d2l(0)
+}
+
 func (rfLog *RaftLog) getLastLogTerm() int {
 	logEntry, _ := rfLog.getLogEntry(rfLog.getLastLogIndex())
+	return logEntry.Term
+}
+
+func (rfLog *RaftLog) getFirstLogTerm() int {
+	logEntry, _ := rfLog.getLogEntry(rfLog.getFirstLogIndex())
 	return logEntry.Term
 }
 
@@ -92,7 +101,7 @@ func (rfLog *RaftLog) appendOne(logEntry LogEntry) {
 	rfLog.data = append(rfLog.data, logEntry)
 }
 
-func (rfLog *RaftLog) getXTermAndXIndex(term int, index int) (int, int) {
+func (rfLog *RaftLog) getXIndex(term int, index int) int {
 	xIndex := min(index, rfLog.getLastLogIndex())
 	var xTerm int
 
@@ -100,7 +109,7 @@ func (rfLog *RaftLog) getXTermAndXIndex(term int, index int) (int, int) {
 	for {
 		logEntry, ok := rfLog.getLogEntry(xIndex)
 		if !ok {
-			return 0, 0
+			return rfLog.getFirstLogIndex() + 1
 		}
 
 		if logEntry.Term < term {
@@ -115,7 +124,7 @@ func (rfLog *RaftLog) getXTermAndXIndex(term int, index int) (int, int) {
 	for {
 		logEntry, ok := rfLog.getLogEntry(xIndex - 1)
 		if !ok {
-			return 0, 0
+			return rfLog.getFirstLogIndex() + 1
 		}
 
 		if logEntry.Term != xTerm {
@@ -125,5 +134,5 @@ func (rfLog *RaftLog) getXTermAndXIndex(term int, index int) (int, int) {
 		xIndex -= 1
 	}
 
-	return xTerm, xIndex
+	return xIndex
 }
