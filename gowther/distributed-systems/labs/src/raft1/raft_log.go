@@ -55,6 +55,11 @@ func (rfLog *RaftLog) trim(index int) {
 	rfLog.startAt = index
 }
 
+func (rfLog *RaftLog) installSnapshot(snapshotIndex int, entries []LogEntry) {
+	rfLog.data = entries
+	rfLog.startAt = snapshotIndex
+}
+
 // ⚠️ WARNING: The following methods must not depend on or reference `startAt`.
 
 func (rfLog *RaftLog) getLogEntry(index int) (*LogEntry, bool) {

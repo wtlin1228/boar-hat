@@ -443,7 +443,8 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	rf.state = Follower
 
 	if rf.log.startAt >= args.SnapshotIndex {
-		reply.Success = false
+		// already install, return true because the network is unreliable
+		reply.Success = true
 		return
 	}
 
