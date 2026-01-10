@@ -294,9 +294,14 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 // that the caller passes the address of the reply struct with &, not
 // the struct itself.
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
+	rf.mu.Lock()
 	DPrintf("[%d] term:%d %-9s  -- vote --> [%d] args=%+v", rf.me, rf.currentTerm, rf.state, server, args)
+	rf.mu.Unlock()
 
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
 	if reply.VoteGranted {
 		DPrintf("[%d] term:%d %-9s <-- vote --  [%d] reply=%+v", rf.me, rf.currentTerm, rf.state, server, reply)
@@ -304,7 +309,6 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 		DPrintf("[%d] term:%d %-9s x-- vote --  [%d] reply=%+v", rf.me, rf.currentTerm, rf.state, server, reply)
 	}
 
-	rf.mu.Lock()
 	if rf.currentTerm < reply.Term {
 		rf.currentTerm = reply.Term
 		rf.voteFor = NoVote
@@ -312,7 +316,6 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 		rf.persist()
 		rf.Debug(fmt.Sprintf("sendRequestVote(%d), update current term", server))
 	}
-	rf.mu.Unlock()
 
 	return ok
 }
@@ -386,9 +389,14 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	rf.mu.Lock()
 	DPrintf("[%d] term:%d %-9s  -- append entries --> [%d] args=%+v", rf.me, rf.currentTerm, rf.state, server, args)
+	rf.mu.Unlock()
 
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
 	if reply.Success {
 		DPrintf("[%d] term:%d %-9s <-- append entries --  [%d] reply=%+v", rf.me, rf.currentTerm, rf.state, server, reply)
@@ -396,7 +404,6 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 		DPrintf("[%d] term:%d %-9s x-- append entries --  [%d] reply=%+v", rf.me, rf.currentTerm, rf.state, server, reply)
 	}
 
-	rf.mu.Lock()
 	if rf.currentTerm < reply.Term {
 		rf.currentTerm = reply.Term
 		rf.voteFor = NoVote
@@ -404,7 +411,6 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 		rf.persist()
 		rf.Debug(fmt.Sprintf("sendAppendEntries(%d), update current term", server))
 	}
-	rf.mu.Unlock()
 
 	return ok
 }
@@ -472,9 +478,14 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 }
 
 func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply *InstallSnapshotReply) bool {
+	rf.mu.Lock()
 	DPrintf("[%d] term:%d %-9s  -- install snapshot --> [%d] args=%+v", rf.me, rf.currentTerm, rf.state, server, args)
+	rf.mu.Unlock()
 
 	ok := rf.peers[server].Call("Raft.InstallSnapshot", args, reply)
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
 	if reply.Success {
 		DPrintf("[%d] term:%d %-9s <-- install snapshot --  [%d] reply=%+v", rf.me, rf.currentTerm, rf.state, server, reply)
@@ -482,7 +493,6 @@ func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply
 		DPrintf("[%d] term:%d %-9s x-- install snapshot --  [%d] reply=%+v", rf.me, rf.currentTerm, rf.state, server, reply)
 	}
 
-	rf.mu.Lock()
 	if rf.currentTerm < reply.Term {
 		rf.currentTerm = reply.Term
 		rf.voteFor = NoVote
@@ -490,7 +500,6 @@ func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply
 		rf.persist()
 		rf.Debug(fmt.Sprintf("sendInstallSnapshot(%d), update current term", server))
 	}
-	rf.mu.Unlock()
 
 	return ok
 }

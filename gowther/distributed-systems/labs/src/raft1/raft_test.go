@@ -1247,13 +1247,11 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 		if disconnect {
 			ts.g.DisconnectAll(victim)
 			tester.AnnotateConnection(ts.g.GetConnected())
-			DPrintf("ts.g.DisconnectAll(%d)", victim)
 			ts.one(rand.Int(), servers-1, true)
 		}
 		if crash {
 			ts.g.ShutdownServer(victim)
 			tester.AnnotateShutdown([]int{victim})
-			DPrintf("ts.g.ShutdownServer(%d)", victim)
 			ts.one(rand.Int(), servers-1, true)
 		}
 
@@ -1284,14 +1282,12 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 			// needs to rceive a snapshot to catch up.
 			ts.g.ConnectOne(victim)
 			tester.AnnotateConnection(ts.g.GetConnected())
-			DPrintf("ts.g.ConnectOne(%d)", victim)
 			ts.one(rand.Int(), servers, true)
 			leader1 = ts.checkOneLeader()
 		}
 		if crash {
 			ts.restart(victim)
 			tester.AnnotateRestart([]int{victim})
-			DPrintf("ts.g.restart(%d)", victim)
 			ts.one(rand.Int(), servers, true)
 			leader1 = ts.checkOneLeader()
 		}
