@@ -24,11 +24,11 @@ import (
 
 const NoVote = -1
 
-const electionTimeout time.Duration = 500 * time.Millisecond
+const electionTimeout time.Duration = 300 * time.Millisecond
 
 // The tester requires that the leader send heartbeat RPCs no more than ten times
 // per second.
-const sendAppendEntriesInterval time.Duration = 200 * time.Millisecond
+const sendAppendEntriesInterval time.Duration = 130 * time.Millisecond
 
 const applyCommittedEntriesInterval time.Duration = 10 * time.Millisecond
 
@@ -87,7 +87,7 @@ type Raft struct {
 
 func (rf *Raft) Debug(label string) {
 	DPrintf(`[%d] term:%d %-9s  - %s
-	{	
+	{
 		voteFor:     %d,
 		commitIndex: %d,
 		lastApplied: %d,
@@ -764,7 +764,10 @@ func (rf *Raft) applyLogEntriesIfNeeded() {
 	rf.mu.Unlock()
 
 	if lastApplied < commitIndex {
+		rf.mu.Lock()
 		rf.Debug("applyLogEntries start")
+		rf.mu.Unlock()
+
 		for i := lastApplied + 1; i <= commitIndex; i++ {
 			rf.mu.Lock()
 			logEntry, ok := rf.log.getLogEntry(i)
@@ -783,7 +786,10 @@ func (rf *Raft) applyLogEntriesIfNeeded() {
 			rf.lastApplied = i
 			rf.mu.Unlock()
 		}
+
+		rf.mu.Lock()
 		rf.Debug("applyLogEntries done")
+		rf.mu.Unlock()
 	}
 }
 
