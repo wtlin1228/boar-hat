@@ -188,6 +188,9 @@ func (rf *Raft) PersistBytes() int {
 // service no longer needs the log through (and including)
 // that index. Raft should now trim its log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
 	rf.Debug(fmt.Sprintf("Snapshot(%d) start", index))
 
 	// Your code here (3D).
@@ -407,12 +410,17 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 }
 
 type InstallSnapshotArgs struct {
+	Term          int
 	Snapshot      []byte
 	SnapshotTerm  int
 	SnapshotIndex int
+
+	// the remaining log entries
+	Entries []LogEntry
 }
 
 type InstallSnapshotReply struct {
+	Term    int
 	Success bool
 }
 
@@ -422,15 +430,24 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 	rf.Debug(fmt.Sprintf("InstallSnapshot start, snapshotTerm=%d, snapshotIndex=%d, log.startAt=%d", args.SnapshotTerm, args.SnapshotIndex, rf.log.startAt))
 
+	if rf.currentTerm > args.Term {
+		reply.Term = rf.currentTerm
+		return
+	} else if rf.currentTerm < args.Term {
+		rf.voteFor = NoVote
+		rf.currentTerm = args.Term
+	}
+
+	reply.Term = args.Term
+	rf.lastHeartbeatAt = time.Now()
+	rf.state = Follower
+
 	if rf.log.startAt >= args.SnapshotIndex {
 		reply.Success = false
 		return
 	}
 
-	rf.lastHeartbeatAt = time.Now()
-
-	rf.log.data = []LogEntry{{Term: args.SnapshotTerm, Command: nil}}
-	rf.log.startAt = args.SnapshotIndex
+	rf.log.installSnapshot(args.SnapshotIndex, args.Entries)
 	if rf.commitIndex < args.SnapshotIndex {
 		rf.commitIndex = args.SnapshotIndex
 	}
@@ -463,6 +480,16 @@ func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply
 	} else {
 		DPrintf("[%d] term:%d %-9s x-- install snapshot --  [%d] reply=%+v", rf.me, rf.currentTerm, rf.state, server, reply)
 	}
+
+	rf.mu.Lock()
+	if rf.currentTerm < reply.Term {
+		rf.currentTerm = reply.Term
+		rf.voteFor = NoVote
+		rf.state = Follower
+		rf.persist()
+		rf.Debug(fmt.Sprintf("sendInstallSnapshot(%d), update current term", server))
+	}
+	rf.mu.Unlock()
 
 	return ok
 }
@@ -650,9 +677,11 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 		if nextIndex-1 < rf.log.startAt {
 			logEntry, _ := rf.log.getLogEntry(rf.log.startAt)
 			allInstallSnapshotArgs[i] = &InstallSnapshotArgs{
+				Term:          term,
 				Snapshot:      rf.snapshot,
 				SnapshotTerm:  logEntry.Term,
 				SnapshotIndex: rf.log.startAt,
+				Entries:       rf.log.data,
 			}
 		} else {
 			prevLogEntry, _ := rf.log.getLogEntry(nextIndex - 1)
@@ -704,10 +733,11 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 				reply := InstallSnapshotReply{}
 				ok := rf.sendInstallSnapshot(i, args, &reply)
 
-				if ok && reply.Success {
+				if ok && reply.Term == term && reply.Success {
 					rf.mu.Lock()
-					rf.nextIndex[i] = args.SnapshotIndex + 1
-					rf.matchIndex[i] = args.SnapshotIndex
+					matchIndex := args.SnapshotIndex + len(args.Entries) - 1
+					rf.nextIndex[i] = matchIndex + 1
+					rf.matchIndex[i] = matchIndex
 					rf.commitIfPossible()
 					rf.Debug(fmt.Sprintf("sendInstallSnapshot(%d) done", i))
 					rf.mu.Unlock()
@@ -719,23 +749,30 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 
 func (rf *Raft) applyLogEntriesIfNeeded() {
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	lastApplied := rf.lastApplied
+	commitIndex := rf.commitIndex
+	rf.mu.Unlock()
 
-	if rf.lastApplied < rf.commitIndex {
+	if lastApplied < commitIndex {
 		rf.Debug("applyLogEntries start")
-		for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+		for i := lastApplied + 1; i <= commitIndex; i++ {
+			rf.mu.Lock()
 			logEntry, ok := rf.log.getLogEntry(i)
 			if !ok {
 				log.Fatalln("unimplemented!")
 			}
+			rf.mu.Unlock()
 
 			var msg raftapi.ApplyMsg
 			msg.CommandValid = true
 			msg.Command = logEntry.Command
 			msg.CommandIndex = i
 			rf.applyCh <- msg
+
+			rf.mu.Lock()
+			rf.lastApplied = i
+			rf.mu.Unlock()
 		}
-		rf.lastApplied = rf.commitIndex
 		rf.Debug("applyLogEntries done")
 	}
 }
