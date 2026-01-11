@@ -12,15 +12,15 @@ func assertCount(t *testing.T, rfLog *RaftLog, expectCount int) {
 }
 
 func assertLogEntry(t *testing.T, rfLog *RaftLog, index int, expectTerm int, expectCommand any) {
-	logEntry, _ := rfLog.getLogEntry(index)
+	logEntry := rfLog.getLogEntry(index)
 	if logEntry.Term != expectTerm || logEntry.Command != expectCommand {
 		t.Fatalf("#%d log entry is %+v, but should be {Term:%d Command:%v}", index, logEntry, expectTerm, expectCommand)
 	}
 }
 
 func assertTrimmedLogEntry(t *testing.T, rfLog *RaftLog, index int) {
-	logEntry, ok := rfLog.getLogEntry(index)
-	if logEntry != nil || ok != false {
+	if rfLog.isLogEntryExist(index) {
+		logEntry := rfLog.getLogEntry(index)
 		t.Fatalf("#%d log entry is %+v, but should be nil", index, logEntry)
 	}
 }
@@ -159,7 +159,7 @@ func TestTrimLog(t *testing.T) {
 
 	assertCount(t, trimmedRfLog, rfLog.getCount())
 	for i := 3; i <= 10; i++ {
-		expectLogEntry, _ := rfLog.getLogEntry(i)
+		expectLogEntry := rfLog.getLogEntry(i)
 		assertLogEntry(t, trimmedRfLog, i, expectLogEntry.Term, expectLogEntry.Command)
 	}
 	assertLastLogIndex(t, trimmedRfLog, rfLog.getLastLogIndex())
@@ -207,7 +207,7 @@ func TestAppendOnTrimmedLog(t *testing.T) {
 
 	assertCount(t, trimmedRfLog, rfLog.getCount())
 	for i := 3; i <= 13; i++ {
-		expectLogEntry, _ := rfLog.getLogEntry(i)
+		expectLogEntry := rfLog.getLogEntry(i)
 		assertLogEntry(t, trimmedRfLog, i, expectLogEntry.Term, expectLogEntry.Command)
 	}
 	assertLastLogIndex(t, trimmedRfLog, rfLog.getLastLogIndex())
@@ -238,7 +238,7 @@ func TestReplaceOnTrimmedLog(t *testing.T) {
 
 	assertCount(t, trimmedRfLog, rfLog.getCount())
 	for i := 3; i <= 7; i++ {
-		expectLogEntry, _ := rfLog.getLogEntry(i)
+		expectLogEntry := rfLog.getLogEntry(i)
 		assertLogEntry(t, trimmedRfLog, i, expectLogEntry.Term, expectLogEntry.Command)
 	}
 	assertLastLogIndex(t, trimmedRfLog, rfLog.getLastLogIndex())

@@ -62,13 +62,12 @@ func (rfLog *RaftLog) installSnapshot(snapshotIndex int, entries []LogEntry) {
 
 // ⚠️ WARNING: The following methods must not depend on or reference `startAt`.
 
-func (rfLog *RaftLog) getLogEntry(index int) (*LogEntry, bool) {
-	dataIndex := rfLog.l2d(index)
-	if dataIndex < 0 {
-		// this log entry has been trimmed
-		return nil, false
-	}
-	return &rfLog.data[dataIndex], true
+func (rfLog *RaftLog) isLogEntryExist(index int) bool {
+	return rfLog.l2d(index) >= 0
+}
+
+func (rfLog *RaftLog) getLogEntry(index int) *LogEntry {
+	return &rfLog.data[rfLog.l2d(index)]
 }
 
 func (rfLog *RaftLog) getCount() int {
@@ -84,13 +83,11 @@ func (rfLog *RaftLog) getFirstLogIndex() int {
 }
 
 func (rfLog *RaftLog) getLastLogTerm() int {
-	logEntry, _ := rfLog.getLogEntry(rfLog.getLastLogIndex())
-	return logEntry.Term
+	return rfLog.getLogEntry(rfLog.getLastLogIndex()).Term
 }
 
 func (rfLog *RaftLog) getFirstLogTerm() int {
-	logEntry, _ := rfLog.getLogEntry(rfLog.getFirstLogIndex())
-	return logEntry.Term
+	return rfLog.getLogEntry(rfLog.getFirstLogIndex()).Term
 }
 
 func (rfLog *RaftLog) getLogEntriesStartedFrom(index int) []LogEntry {
@@ -112,10 +109,11 @@ func (rfLog *RaftLog) getXIndex(term int, index int) int {
 
 	// 1. find the largest term T that is smaller than given term
 	for {
-		logEntry, ok := rfLog.getLogEntry(xIndex)
-		if !ok {
+		if !rfLog.isLogEntryExist(xIndex) {
 			return rfLog.getFirstLogIndex() + 1
 		}
+
+		logEntry := rfLog.getLogEntry(xIndex)
 
 		if logEntry.Term < term {
 			xTerm = logEntry.Term
@@ -127,10 +125,11 @@ func (rfLog *RaftLog) getXIndex(term int, index int) int {
 
 	// 2. find the first log for term T
 	for {
-		logEntry, ok := rfLog.getLogEntry(xIndex - 1)
-		if !ok {
+		if !rfLog.isLogEntryExist(xIndex - 1) {
 			return rfLog.getFirstLogIndex() + 1
 		}
+
+		logEntry := rfLog.getLogEntry(xIndex - 1)
 
 		if logEntry.Term != xTerm {
 			break

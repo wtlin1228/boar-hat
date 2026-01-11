@@ -357,18 +357,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.lastHeartbeatAt = time.Now()
 	rf.state = Follower
 
-	var prevLogEntry *LogEntry
-	var ok bool
-	if rf.log.getLastLogIndex() >= args.PrevLogIndex {
-		prevLogEntry, ok = rf.log.getLogEntry(args.PrevLogIndex)
-		if !ok {
-			log.Fatalln("unimplemented!")
-		}
-	}
-
 	isPrevLogEntryIdentical :=
 		rf.log.getLastLogIndex() >= args.PrevLogIndex &&
-			prevLogEntry.Term == args.PrevLogTerm
+			rf.log.getLogEntry(args.PrevLogIndex).Term == args.PrevLogTerm
 
 	if isPrevLogEntryIdentical {
 		reply.Success = true
@@ -685,7 +676,7 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 		nextIndex := rf.nextIndex[i]
 
 		if nextIndex-1 < rf.log.startAt {
-			logEntry, _ := rf.log.getLogEntry(rf.log.startAt)
+			logEntry := rf.log.getLogEntry(rf.log.startAt)
 			allInstallSnapshotArgs[i] = &InstallSnapshotArgs{
 				Term:          term,
 				Snapshot:      rf.snapshot,
@@ -694,7 +685,7 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 				Entries:       rf.log.data,
 			}
 		} else {
-			prevLogEntry, _ := rf.log.getLogEntry(nextIndex - 1)
+			prevLogEntry := rf.log.getLogEntry(nextIndex - 1)
 			allAppendEntriesArgs[i] = &AppendEntriesArgs{
 				Term:         term,
 				LeaderId:     me,
@@ -770,16 +761,13 @@ func (rf *Raft) applyLogEntriesIfNeeded() {
 
 		for i := lastApplied + 1; i <= commitIndex; i++ {
 			rf.mu.Lock()
-			logEntry, ok := rf.log.getLogEntry(i)
-			if !ok {
-				log.Fatalln("unimplemented!")
-			}
-			rf.mu.Unlock()
-
+			logEntry := rf.log.getLogEntry(i)
 			var msg raftapi.ApplyMsg
 			msg.CommandValid = true
 			msg.Command = logEntry.Command
 			msg.CommandIndex = i
+			rf.mu.Unlock()
+
 			rf.applyCh <- msg
 
 			rf.mu.Lock()
