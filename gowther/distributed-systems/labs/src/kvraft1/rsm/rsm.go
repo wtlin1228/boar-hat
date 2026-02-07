@@ -1,6 +1,9 @@
 package rsm
 
 import (
+	"fmt"
+	"log"
+	"slices"
 	"sync"
 
 	"6.5840/kvsrv1/rpc"
@@ -8,7 +11,11 @@ import (
 	raft "6.5840/raft1"
 	"6.5840/raftapi"
 	tester "6.5840/tester1"
+
+	"github.com/google/uuid"
 )
+
+const Debug = true
 
 var useRaftStateMachine bool // to plug in another raft besided raft1
 
@@ -16,6 +23,21 @@ type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
+	Me  int
+	Id  string
+	Req any
+}
+
+type OpResult struct {
+	val any
+	ok  bool
+}
+
+type OpQueueEntry struct {
+	logTerm  int
+	logIndex int
+	ch       chan OpResult
+	op       *Op
 }
 
 // A server (i.e., ../server.go) that wants to replicate itself calls
@@ -38,6 +60,14 @@ type RSM struct {
 	maxraftstate int // snapshot if log grows this big
 	sm           StateMachine
 	// Your definitions here.
+
+	opQueue []OpQueueEntry
+}
+
+func (rf *RSM) Debug(format string, a ...interface{}) {
+	if Debug {
+		log.Printf("[%d] - %s\n", rf.me, fmt.Sprintf(format, a...))
+	}
 }
 
 // servers[] contains the ports of the set of
@@ -65,6 +95,41 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 	if !useRaftStateMachine {
 		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh)
 	}
+
+	go func() {
+		for cmd := range rsm.applyCh {
+			rsm.Debug("receive from applyCh, %v", cmd)
+			op := cmd.Command.(Op)
+
+			rsm.mu.Lock()
+			for len(rsm.opQueue) > 0 {
+				if rsm.opQueue[0].logIndex >= cmd.CommandIndex {
+					break
+				}
+				rsm.opQueue[0].ch <- OpResult{
+					val: nil,
+					ok:  false,
+				}
+				rsm.Debug("remove entry %v", rsm.opQueue[0])
+				rsm.opQueue = slices.Delete(rsm.opQueue, 0, 1)
+			}
+			rsm.mu.Unlock()
+
+			res := rsm.sm.DoOp(op.Req)
+
+			rsm.mu.Lock()
+			if len(rsm.opQueue) > 0 && rsm.opQueue[0].op.Id == op.Id {
+				rsm.opQueue[0].ch <- OpResult{
+					val: res,
+					ok:  true,
+				}
+				rsm.Debug("remove entry %v", rsm.opQueue[0])
+				rsm.opQueue = slices.Delete(rsm.opQueue, 0, 1)
+			}
+			rsm.mu.Unlock()
+		}
+	}()
+
 	return rsm
 }
 
@@ -81,6 +146,56 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	// for example: op := Op{Me: rsm.me, Id: id, Req: req}, where req
 	// is the argument to Submit and id is a unique id for the op.
 
-	// your code here
-	return rpc.ErrWrongLeader, nil // i'm dead, try another server.
+	op := Op{
+		Me:  rsm.me,
+		Id:  uuid.NewString(),
+		Req: req,
+	}
+
+	rsm.Debug("Raft.Start        - Op=%v", op)
+
+	index, term, isLeader := rsm.Raft().Start(op)
+
+	rsm.Debug("Raft.Start return - Op=%v, index=%d, term=%d, isLeader=%v", op, index, term, isLeader)
+
+	if !isLeader {
+		return rpc.ErrWrongLeader, nil // i'm dead, try another server.
+	}
+
+	newEntry := OpQueueEntry{
+		logTerm:  term,
+		logIndex: index,
+		ch:       make(chan OpResult, 1),
+		op:       &op,
+	}
+
+	rsm.mu.Lock()
+	// Remove any entries with log index >= the new entry's index.
+	// These entries were created by a partitioned leader.
+	for i := len(rsm.opQueue) - 1; i >= 0; i-- {
+		if rsm.opQueue[i].logIndex < newEntry.logIndex {
+			break
+		}
+		rsm.opQueue[i].ch <- OpResult{
+			val: nil,
+			ok:  false,
+		}
+		rsm.Debug("remove entry %v", rsm.opQueue[i])
+		rsm.opQueue = slices.Delete(rsm.opQueue, i, i+1)
+	}
+	rsm.Debug("append entry %v", newEntry)
+	rsm.opQueue = append(rsm.opQueue, newEntry)
+	rsm.mu.Unlock()
+
+	opRes := <-newEntry.ch
+
+	rsm.mu.Lock()
+	rsm.Debug("operation done %v", opRes)
+	rsm.mu.Unlock()
+
+	if !opRes.ok {
+		return rpc.ErrWrongLeader, nil // i'm dead, try another server.
+	}
+
+	return rpc.OK, opRes.val
 }
