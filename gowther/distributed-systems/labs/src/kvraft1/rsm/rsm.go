@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const Debug = true
+const Debug = false
 
 var useRaftStateMachine bool // to plug in another raft besided raft1
 
@@ -146,6 +146,8 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	// for example: op := Op{Me: rsm.me, Id: id, Req: req}, where req
 	// is the argument to Submit and id is a unique id for the op.
 
+	rsm.mu.Lock()
+
 	op := Op{
 		Me:  rsm.me,
 		Id:  uuid.NewString(),
@@ -159,6 +161,7 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	rsm.Debug("Raft.Start return - Op=%v, index=%d, term=%d, isLeader=%v", op, index, term, isLeader)
 
 	if !isLeader {
+		rsm.mu.Unlock()
 		return rpc.ErrWrongLeader, nil // i'm dead, try another server.
 	}
 
@@ -169,7 +172,6 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 		op:       &op,
 	}
 
-	rsm.mu.Lock()
 	// Remove any entries with log index >= the new entry's index.
 	// These entries were created by a partitioned leader.
 	for i := len(rsm.opQueue) - 1; i >= 0; i-- {
@@ -185,12 +187,13 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	}
 	rsm.Debug("append entry %v", newEntry)
 	rsm.opQueue = append(rsm.opQueue, newEntry)
+
 	rsm.mu.Unlock()
 
 	opRes := <-newEntry.ch
 
 	rsm.mu.Lock()
-	rsm.Debug("operation done %v", opRes)
+	rsm.Debug("operation done, entry=%v, opRes=%v", newEntry, opRes)
 	rsm.mu.Unlock()
 
 	if !opRes.ok {
