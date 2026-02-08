@@ -98,26 +98,25 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 
 	go func() {
 		for cmd := range rsm.applyCh {
+			rsm.mu.Lock()
+
 			rsm.Debug("receive from applyCh, %v", cmd)
+
 			op := cmd.Command.(Op)
 
-			rsm.mu.Lock()
-			for len(rsm.opQueue) > 0 {
-				if rsm.opQueue[0].logIndex >= cmd.CommandIndex {
-					break
+			if len(rsm.opQueue) > 0 && rsm.opQueue[0].logIndex == cmd.CommandIndex && rsm.opQueue[0].op.Id != op.Id {
+				for _, entry := range rsm.opQueue {
+					entry.ch <- OpResult{
+						val: nil,
+						ok:  false,
+					}
+					rsm.Debug("remove entry %v", entry)
 				}
-				rsm.opQueue[0].ch <- OpResult{
-					val: nil,
-					ok:  false,
-				}
-				rsm.Debug("remove entry %v", rsm.opQueue[0])
-				rsm.opQueue = slices.Delete(rsm.opQueue, 0, 1)
+				rsm.opQueue = make([]OpQueueEntry, 0)
 			}
-			rsm.mu.Unlock()
 
 			res := rsm.sm.DoOp(op.Req)
 
-			rsm.mu.Lock()
 			if len(rsm.opQueue) > 0 && rsm.opQueue[0].op.Id == op.Id {
 				rsm.opQueue[0].ch <- OpResult{
 					val: res,
@@ -126,6 +125,7 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 				rsm.Debug("remove entry %v", rsm.opQueue[0])
 				rsm.opQueue = slices.Delete(rsm.opQueue, 0, 1)
 			}
+
 			rsm.mu.Unlock()
 		}
 	}()
@@ -172,8 +172,16 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 		op:       &op,
 	}
 
-	// Remove any entries with log index >= the new entry's index.
-	// These entries were created by a partitioned leader.
+	// Wins election for term 1 and starts 3 operations
+	// queue: [t1 1] -> [t1 2] -> [t1 3]
+	//
+	// Steps down to follower after another server wins election for term 2.
+	//
+	// Wins election again for term 3 and starts 1 operation.
+	// [t3 2]
+	//
+	// Removes uncommitted entries and appends the new entry.
+	// queue: [t1 1] -> [t3 2]
 	for i := len(rsm.opQueue) - 1; i >= 0; i-- {
 		if rsm.opQueue[i].logIndex < newEntry.logIndex {
 			break
@@ -193,11 +201,12 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	opRes := <-newEntry.ch
 
 	rsm.mu.Lock()
+	defer rsm.mu.Unlock()
+
 	rsm.Debug("operation done, entry=%v, opRes=%v", newEntry, opRes)
-	rsm.mu.Unlock()
 
 	if !opRes.ok {
-		return rpc.ErrWrongLeader, nil // i'm dead, try another server.
+		return rpc.ErrWrongLeader, nil // this operation is not committed.
 	}
 
 	return rpc.OK, opRes.val
