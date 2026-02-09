@@ -128,6 +128,18 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 
 			rsm.mu.Unlock()
 		}
+
+		rsm.mu.Lock()
+		defer rsm.mu.Unlock()
+
+		for _, entry := range rsm.opQueue {
+			entry.ch <- OpResult{
+				val: nil,
+				ok:  false,
+			}
+			rsm.Debug("remove entry %v", entry)
+		}
+		rsm.opQueue = make([]OpQueueEntry, 0)
 	}()
 
 	return rsm
