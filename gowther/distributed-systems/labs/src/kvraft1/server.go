@@ -1,6 +1,7 @@
 package kvraft
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"6.5840/kvraft1/rsm"
@@ -10,12 +11,19 @@ import (
 	tester "6.5840/tester1"
 )
 
+type Entry struct {
+	value   string
+	version rpc.Tversion
+}
+
 type KVServer struct {
 	me   int
 	dead int32 // set by Kill()
 	rsm  *rsm.RSM
 
 	// Your definitions here.
+	mu   sync.Mutex
+	data map[string]Entry
 }
 
 // To type-cast req to the right type, take a look at Go's type switches or type
