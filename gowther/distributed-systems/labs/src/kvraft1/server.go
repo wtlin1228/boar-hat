@@ -1,6 +1,7 @@
 package kvraft
 
 import (
+	"log"
 	"sync"
 	"sync/atomic"
 
@@ -33,6 +34,38 @@ type KVServer struct {
 // https://go.dev/tour/methods/15
 func (kv *KVServer) DoOp(req any) any {
 	// Your code here
+	switch args := req.(type) {
+	case rpc.GetArgs:
+		kv.mu.Lock()
+		entry, ok := kv.data[args.Key]
+		kv.mu.Unlock()
+		if !ok {
+			return &rpc.GetReply{Err: rpc.ErrNoKey}
+		} else {
+			return &rpc.GetReply{
+				Value:   entry.value,
+				Version: entry.version,
+				Err:     rpc.OK,
+			}
+		}
+	case rpc.PutArgs:
+		kv.mu.Lock()
+		entry, ok := kv.data[args.Key]
+		kv.mu.Unlock()
+		if !ok && args.Version == 0 {
+			kv.data[args.Key] = Entry{args.Value, 1}
+			return &rpc.PutReply{Err: rpc.OK}
+		} else if !ok {
+			return &rpc.PutReply{Err: rpc.ErrNoKey}
+		} else if entry.version == args.Version {
+			kv.data[args.Key] = Entry{args.Value, entry.version + 1}
+			return &rpc.PutReply{Err: rpc.OK}
+		} else {
+			return &rpc.PutReply{Err: rpc.ErrVersion}
+		}
+	default:
+		log.Fatalf("DoOp should execute only Get and Put and not %T", req)
+	}
 	return nil
 }
 
@@ -49,12 +82,24 @@ func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 	// Your code here. Use kv.rsm.Submit() to submit args
 	// You can use go's type casts to turn the any return value
 	// of Submit() into a GetReply: rep.(rpc.GetReply)
+	err, res := kv.rsm.Submit(args)
+	if err == rpc.ErrWrongLeader {
+		reply.Err = rpc.ErrWrongLeader
+	} else {
+		reply = res.(*rpc.GetReply)
+	}
 }
 
 func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 	// Your code here. Use kv.rsm.Submit() to submit args
 	// You can use go's type casts to turn the any return value
 	// of Submit() into a PutReply: rep.(rpc.PutReply)
+	err, res := kv.rsm.Submit(args)
+	if err == rpc.ErrWrongLeader {
+		reply.Err = err
+	} else {
+		reply = res.(*rpc.PutReply)
+	}
 }
 
 // the tester calls Kill() when a KVServer instance won't
