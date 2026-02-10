@@ -82,11 +82,14 @@ func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 	// Your code here. Use kv.rsm.Submit() to submit args
 	// You can use go's type casts to turn the any return value
 	// of Submit() into a GetReply: rep.(rpc.GetReply)
-	err, res := kv.rsm.Submit(args)
+	err, res := kv.rsm.Submit(*args)
 	if err == rpc.ErrWrongLeader {
 		reply.Err = rpc.ErrWrongLeader
 	} else {
-		reply = res.(*rpc.GetReply)
+		res := res.(*rpc.GetReply)
+		reply.Value = res.Value
+		reply.Version = res.Version
+		reply.Err = res.Err
 	}
 }
 
@@ -94,11 +97,12 @@ func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 	// Your code here. Use kv.rsm.Submit() to submit args
 	// You can use go's type casts to turn the any return value
 	// of Submit() into a PutReply: rep.(rpc.PutReply)
-	err, res := kv.rsm.Submit(args)
+	err, res := kv.rsm.Submit(*args)
 	if err == rpc.ErrWrongLeader {
 		reply.Err = err
 	} else {
-		reply = res.(*rpc.PutReply)
+		res := res.(*rpc.PutReply)
+		reply.Err = res.Err
 	}
 }
 
@@ -133,5 +137,6 @@ func StartKVServer(servers []*labrpc.ClientEnd, gid tester.Tgid, me int, persist
 
 	kv.rsm = rsm.MakeRSM(servers, me, persister, maxraftstate, kv)
 	// You may need initialization code here.
+	kv.data = make(map[string]Entry)
 	return []tester.IService{kv, kv.rsm.Raft()}
 }

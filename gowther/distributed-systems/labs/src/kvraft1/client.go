@@ -38,9 +38,11 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 		reply := rpc.GetReply{}
 		ok := ck.clnt.Call(ck.servers[ck.leader], "KVServer.Get", &args, &reply)
 		if ok {
-			return reply.Value, reply.Version, reply.Err
-		} else if reply.Err == rpc.ErrWrongLeader {
-			ck.leader = (ck.leader + 1) % len(ck.servers)
+			if reply.Err == rpc.ErrWrongLeader {
+				ck.leader = (ck.leader + 1) % len(ck.servers)
+			} else {
+				return reply.Value, reply.Version, reply.Err
+			}
 		} else {
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -72,12 +74,14 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 		reply := rpc.PutReply{}
 		ok := ck.clnt.Call(ck.servers[ck.leader], "KVServer.Put", &args, &reply)
 		if ok {
-			if retryTimes > 0 && reply.Err == rpc.ErrVersion {
-				reply.Err = rpc.ErrMaybe
+			if reply.Err == rpc.ErrWrongLeader {
+				ck.leader = (ck.leader + 1) % len(ck.servers)
+			} else {
+				if retryTimes > 0 && reply.Err == rpc.ErrVersion {
+					reply.Err = rpc.ErrMaybe
+				}
+				return reply.Err
 			}
-			return reply.Err
-		} else if reply.Err == rpc.ErrWrongLeader {
-			ck.leader = (ck.leader + 1) % len(ck.servers)
 		} else {
 			time.Sleep(100 * time.Millisecond)
 			retryTimes += 1
