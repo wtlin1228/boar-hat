@@ -51,18 +51,20 @@ func (kv *KVServer) DoOp(req any) any {
 	case rpc.PutArgs:
 		kv.mu.Lock()
 		entry, ok := kv.data[args.Key]
-		kv.mu.Unlock()
+		var reply rpc.PutReply
 		if !ok && args.Version == 0 {
 			kv.data[args.Key] = Entry{args.Value, 1}
-			return &rpc.PutReply{Err: rpc.OK}
+			reply = rpc.PutReply{Err: rpc.OK}
 		} else if !ok {
-			return &rpc.PutReply{Err: rpc.ErrNoKey}
+			reply = rpc.PutReply{Err: rpc.ErrNoKey}
 		} else if entry.version == args.Version {
 			kv.data[args.Key] = Entry{args.Value, entry.version + 1}
-			return &rpc.PutReply{Err: rpc.OK}
+			reply = rpc.PutReply{Err: rpc.OK}
 		} else {
-			return &rpc.PutReply{Err: rpc.ErrVersion}
+			reply = rpc.PutReply{Err: rpc.ErrVersion}
 		}
+		kv.mu.Unlock()
+		return &reply
 	default:
 		log.Fatalf("DoOp should execute only Get and Put and not %T", req)
 	}

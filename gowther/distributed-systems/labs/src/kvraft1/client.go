@@ -37,15 +37,17 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 		args := rpc.GetArgs{Key: key}
 		reply := rpc.GetReply{}
 		ok := ck.clnt.Call(ck.servers[ck.leader], "KVServer.Get", &args, &reply)
+
 		if ok {
 			if reply.Err == rpc.ErrWrongLeader {
 				ck.leader = (ck.leader + 1) % len(ck.servers)
-			} else {
-				return reply.Value, reply.Version, reply.Err
+				time.Sleep(2 * time.Millisecond) // to prevent excessive RPC calls
+				continue
 			}
-		} else {
-			time.Sleep(100 * time.Millisecond)
+			return reply.Value, reply.Version, reply.Err
 		}
+
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -73,18 +75,20 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 		args := rpc.PutArgs{Key: key, Value: value, Version: version}
 		reply := rpc.PutReply{}
 		ok := ck.clnt.Call(ck.servers[ck.leader], "KVServer.Put", &args, &reply)
+
 		if ok {
 			if reply.Err == rpc.ErrWrongLeader {
 				ck.leader = (ck.leader + 1) % len(ck.servers)
-			} else {
-				if retryTimes > 0 && reply.Err == rpc.ErrVersion {
-					reply.Err = rpc.ErrMaybe
-				}
-				return reply.Err
+				time.Sleep(2 * time.Millisecond) // to prevent excessive RPC calls
+				continue
 			}
-		} else {
-			time.Sleep(100 * time.Millisecond)
-			retryTimes += 1
+			if retryTimes > 0 && reply.Err == rpc.ErrVersion {
+				reply.Err = rpc.ErrMaybe
+			}
+			return reply.Err
 		}
+
+		time.Sleep(100 * time.Millisecond)
+		retryTimes += 1
 	}
 }
