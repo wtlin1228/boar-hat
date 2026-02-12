@@ -26,6 +26,9 @@ const NoVote = -1
 
 const electionTimeout time.Duration = 300 * time.Millisecond
 
+// for throttling the AppendEntries RPC calls
+const appendEntriesThrottle time.Duration = 5 * time.Millisecond
+
 // The tester requires that the leader send heartbeat RPCs no more than ten times
 // per second.
 const sendAppendEntriesInterval time.Duration = 130 * time.Millisecond
@@ -47,6 +50,9 @@ type Raft struct {
 	// at any given time each server is in one of three states:
 	// leader, follower, or candidate
 	state State
+
+	// for throttling the AppendEntries RPC calls
+	lastAppendEntriesAt time.Time
 
 	// updated when an AppendEntries RPC is received
 	lastHeartbeatAt time.Time
@@ -510,7 +516,6 @@ func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	// Your code here (3B).
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	term := rf.currentTerm
 	isLeader := rf.state == Leader
@@ -523,6 +528,10 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	}
 
 	index := rf.log.getLastLogIndex()
+
+	rf.mu.Unlock()
+
+	rf.sendAppendEntriesIfNeeded()
 
 	return index, term, isLeader
 }
@@ -657,10 +666,11 @@ func (rf *Raft) commitIfPossible() {
 func (rf *Raft) sendAppendEntriesIfNeeded() {
 	rf.mu.Lock()
 
-	if rf.state != Leader {
+	if rf.state != Leader || rf.lastAppendEntriesAt.Add(appendEntriesThrottle).After(time.Now()) {
 		rf.mu.Unlock()
 		return
 	}
+	rf.lastAppendEntriesAt = time.Now()
 
 	term := rf.currentTerm
 	me := rf.me
