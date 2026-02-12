@@ -38,16 +38,19 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 		reply := rpc.GetReply{}
 		ok := ck.clnt.Call(ck.servers[ck.leader], "KVServer.Get", &args, &reply)
 
-		if ok {
-			if reply.Err == rpc.ErrWrongLeader {
-				ck.leader = (ck.leader + 1) % len(ck.servers)
-				time.Sleep(2 * time.Millisecond) // to prevent excessive RPC calls
-				continue
-			}
-			return reply.Value, reply.Version, reply.Err
+		if !ok {
+			ck.leader = (ck.leader + 1) % len(ck.servers) // to prevent partition
+			time.Sleep(100 * time.Millisecond)
+			continue
 		}
 
-		time.Sleep(100 * time.Millisecond)
+		if reply.Err == rpc.ErrWrongLeader {
+			ck.leader = (ck.leader + 1) % len(ck.servers)
+			time.Sleep(2 * time.Millisecond) // to prevent excessive RPC calls
+			continue
+		}
+
+		return reply.Value, reply.Version, reply.Err
 	}
 }
 
@@ -76,19 +79,23 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 		reply := rpc.PutReply{}
 		ok := ck.clnt.Call(ck.servers[ck.leader], "KVServer.Put", &args, &reply)
 
-		if ok {
-			if reply.Err == rpc.ErrWrongLeader {
-				ck.leader = (ck.leader + 1) % len(ck.servers)
-				time.Sleep(2 * time.Millisecond) // to prevent excessive RPC calls
-				continue
-			}
-			if retryTimes > 0 && reply.Err == rpc.ErrVersion {
-				reply.Err = rpc.ErrMaybe
-			}
-			return reply.Err
+		if !ok {
+			ck.leader = (ck.leader + 1) % len(ck.servers) // to prevent partition
+			time.Sleep(100 * time.Millisecond)
+			retryTimes += 1
+			continue
 		}
 
-		time.Sleep(100 * time.Millisecond)
-		retryTimes += 1
+		if reply.Err == rpc.ErrWrongLeader {
+			ck.leader = (ck.leader + 1) % len(ck.servers)
+			time.Sleep(2 * time.Millisecond) // to prevent excessive RPC calls
+			continue
+		}
+
+		if retryTimes > 0 && reply.Err == rpc.ErrVersion {
+			reply.Err = rpc.ErrMaybe
+		}
+
+		return reply.Err
 	}
 }
