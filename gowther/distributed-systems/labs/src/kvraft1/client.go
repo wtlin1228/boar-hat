@@ -1,6 +1,9 @@
 package kvraft
 
 import (
+	"fmt"
+	"log"
+	"sync"
 	"time"
 
 	"6.5840/kvsrv1/rpc"
@@ -12,13 +15,28 @@ type Clerk struct {
 	clnt    *tester.Clnt
 	servers []string
 	// You will have to modify this struct.
+	mu     sync.Mutex
 	leader int
+}
+
+func (ck *Clerk) Debug(format string, a ...interface{}) {
+	if Debug {
+		log.Printf("[Clerk] - %s\n", fmt.Sprintf(format, a...))
+	}
 }
 
 func MakeClerk(clnt *tester.Clnt, servers []string) kvtest.IKVClerk {
 	ck := &Clerk{clnt: clnt, servers: servers, leader: 0}
 	// You'll have to add code here.
 	return ck
+}
+
+func (ck *Clerk) changeLeader(leader int) {
+	ck.mu.Lock()
+	defer ck.mu.Unlock()
+	if ck.leader != leader {
+		ck.leader = leader
+	}
 }
 
 // Get fetches the current value and version for a key.  It returns
@@ -33,19 +51,29 @@ func MakeClerk(clnt *tester.Clnt, servers []string) kvtest.IKVClerk {
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	// You will have to modify this function.
+
+	ck.mu.Lock()
+	ck.Debug("Get(%s) -> server_%d", key, ck.leader)
+	ck.mu.Unlock()
+
 	for {
 		args := rpc.GetArgs{Key: key}
 		reply := rpc.GetReply{}
-		ok := ck.clnt.Call(ck.servers[ck.leader], "KVServer.Get", &args, &reply)
+
+		ck.mu.Lock()
+		leader := ck.leader
+		ck.mu.Unlock()
+
+		ok := ck.clnt.Call(ck.servers[leader], "KVServer.Get", &args, &reply)
 
 		if !ok {
-			ck.leader = (ck.leader + 1) % len(ck.servers) // to prevent partition
+			ck.changeLeader((leader + 1) % len(ck.servers)) // to prevent partition
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
 
 		if reply.Err == rpc.ErrWrongLeader {
-			ck.leader = (ck.leader + 1) % len(ck.servers)
+			ck.changeLeader((leader + 1) % len(ck.servers))
 			time.Sleep(2 * time.Millisecond) // to prevent excessive RPC calls
 			continue
 		}
@@ -73,21 +101,29 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	// You will have to modify this function.
+
+	ck.Debug("Put(%s, %s, %d) -> server_%d", key, value, version, ck.leader)
+
 	retryTimes := 0
 	for {
 		args := rpc.PutArgs{Key: key, Value: value, Version: version}
 		reply := rpc.PutReply{}
-		ok := ck.clnt.Call(ck.servers[ck.leader], "KVServer.Put", &args, &reply)
+
+		ck.mu.Lock()
+		leader := ck.leader
+		ck.mu.Unlock()
+
+		ok := ck.clnt.Call(ck.servers[leader], "KVServer.Put", &args, &reply)
 
 		if !ok {
-			ck.leader = (ck.leader + 1) % len(ck.servers) // to prevent partition
+			ck.changeLeader((leader + 1) % len(ck.servers)) // to prevent partition
 			time.Sleep(100 * time.Millisecond)
 			retryTimes += 1
 			continue
 		}
 
 		if reply.Err == rpc.ErrWrongLeader {
-			ck.leader = (ck.leader + 1) % len(ck.servers)
+			ck.changeLeader((leader + 1) % len(ck.servers))
 			time.Sleep(2 * time.Millisecond) // to prevent excessive RPC calls
 			continue
 		}

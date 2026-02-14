@@ -1,6 +1,7 @@
 package kvraft
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -27,6 +28,12 @@ type KVServer struct {
 	data map[string]Entry
 }
 
+func (kv *KVServer) Debug(format string, a ...interface{}) {
+	if Debug {
+		log.Printf("[KVServer_%d] - %s\n", kv.me, fmt.Sprintf(format, a...))
+	}
+}
+
 // To type-cast req to the right type, take a look at Go's type switches or type
 // assertions below:
 //
@@ -37,19 +44,24 @@ func (kv *KVServer) DoOp(req any) any {
 	switch args := req.(type) {
 	case rpc.GetArgs:
 		kv.mu.Lock()
+		kv.Debug("DoOp(Get(%s))", args.Key)
 		entry, ok := kv.data[args.Key]
-		kv.mu.Unlock()
+		var reply rpc.GetReply
 		if !ok {
-			return &rpc.GetReply{Err: rpc.ErrNoKey}
+			reply = rpc.GetReply{Err: rpc.ErrNoKey}
 		} else {
-			return &rpc.GetReply{
+			reply = rpc.GetReply{
 				Value:   entry.value,
 				Version: entry.version,
 				Err:     rpc.OK,
 			}
 		}
+		kv.mu.Unlock()
+		kv.Debug("DoOp(Get(%s)) reply=%v", args.Key, reply)
+		return &reply
 	case rpc.PutArgs:
 		kv.mu.Lock()
+		kv.Debug("DoOp(Put(%s, %s, %d))", args.Key, args.Value, args.Version)
 		entry, ok := kv.data[args.Key]
 		var reply rpc.PutReply
 		if !ok && args.Version == 0 {
@@ -64,6 +76,7 @@ func (kv *KVServer) DoOp(req any) any {
 			reply = rpc.PutReply{Err: rpc.ErrVersion}
 		}
 		kv.mu.Unlock()
+		kv.Debug("DoOp(Put(%s, %s, %d)) reply=%v", args.Key, args.Value, args.Version, reply)
 		return &reply
 	default:
 		log.Fatalf("DoOp should execute only Get and Put and not %T", req)
@@ -81,6 +94,7 @@ func (kv *KVServer) Restore(data []byte) {
 }
 
 func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
+	kv.Debug("Get(%s)", args.Key)
 	// Your code here. Use kv.rsm.Submit() to submit args
 	// You can use go's type casts to turn the any return value
 	// of Submit() into a GetReply: rep.(rpc.GetReply)
@@ -96,6 +110,7 @@ func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 }
 
 func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
+	kv.Debug("Put(%s, %s, %d)", args.Key, args.Value, args.Version)
 	// Your code here. Use kv.rsm.Submit() to submit args
 	// You can use go's type casts to turn the any return value
 	// of Submit() into a PutReply: rep.(rpc.PutReply)
