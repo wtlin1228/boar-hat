@@ -30,7 +30,7 @@ type KVServer struct {
 
 func (kv *KVServer) Debug(format string, a ...interface{}) {
 	if Debug {
-		log.Printf("[KVServer_%d] - %s\n", kv.me, fmt.Sprintf(format, a...))
+		log.Printf("[KVServer_%d] %s\n", kv.me, fmt.Sprintf(format, a...))
 	}
 }
 

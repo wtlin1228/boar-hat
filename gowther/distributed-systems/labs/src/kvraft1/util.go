@@ -1,3 +1,3 @@
 package kvraft
 
-const Debug = true
+const Debug = false

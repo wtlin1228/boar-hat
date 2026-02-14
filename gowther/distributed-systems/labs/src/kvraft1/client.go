@@ -21,7 +21,7 @@ type Clerk struct {
 
 func (ck *Clerk) Debug(format string, a ...interface{}) {
 	if Debug {
-		log.Printf("[Clerk] - %s\n", fmt.Sprintf(format, a...))
+		log.Printf("[Clerk] %s\n", fmt.Sprintf(format, a...))
 	}
 }
 

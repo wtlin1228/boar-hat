@@ -66,7 +66,7 @@ type RSM struct {
 
 func (rf *RSM) Debug(format string, a ...interface{}) {
 	if Debug {
-		log.Printf("[%d] - %s\n", rf.me, fmt.Sprintf(format, a...))
+		log.Printf("[RSM_%d] %s\n", rf.me, fmt.Sprintf(format, a...))
 	}
 }
 
