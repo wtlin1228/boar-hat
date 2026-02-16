@@ -89,31 +89,33 @@ type Raft struct {
 	snapshot []byte
 
 	applyCh chan raftapi.ApplyMsg
+
+	applyChMu sync.Mutex
 }
 
 func (rf *Raft) Debug(format string, a ...interface{}) {
-	DPrintf("[Raft_%d] term:%d %-9s  - %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
+	// DPrintf("[Raft_%d] term:%d %-9s  - %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
 
-	// DPrintf(`[Raft_%d] term:%d %-9s  - %s
-	// {
-	// 	voteFor:     %d,
-	// 	commitIndex: %d,
-	// 	lastApplied: %d,
-	// 	nextIndex:   %v,
-	// 	matchIndex:  %v,
-	// 	log.startAt: %d,
-	// 	log count:   %d,
-	// 	log.data:    %+v
-	// }
-	// `, rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...),
-	// 	rf.voteFor,
-	// 	rf.commitIndex,
-	// 	rf.lastApplied,
-	// 	rf.nextIndex,
-	// 	rf.matchIndex,
-	// 	rf.log.startAt,
-	// 	rf.log.getCount(),
-	// 	rf.log.data)
+	DPrintf(`[Raft_%d] term:%d %-9s  - %s
+	{
+		voteFor:     %d,
+		commitIndex: %d,
+		lastApplied: %d,
+		nextIndex:   %v,
+		matchIndex:  %v,
+		log.startAt: %d,
+		log count:   %d,
+		log.data:    %+v
+	}
+	`, rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...),
+		rf.voteFor,
+		rf.commitIndex,
+		rf.lastApplied,
+		rf.nextIndex,
+		rf.matchIndex,
+		rf.log.startAt,
+		rf.log.getCount(),
+		rf.log.data)
 }
 
 // return currentTerm and whether this server
@@ -303,7 +305,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 // the struct itself.
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
 	rf.mu.Lock()
-	rf.Debug("[%d]  -- vote --> [%d] args=%+v", rf.state, server, args)
+	rf.Debug("[%d]  -- vote --> [%d] args=%+v", rf.me, server, args)
 	rf.mu.Unlock()
 
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
@@ -312,9 +314,9 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	defer rf.mu.Unlock()
 
 	if reply.VoteGranted {
-		rf.Debug("[%d] <-- vote --  [%d] reply=%+v", rf.state, server, reply)
+		rf.Debug("[%d] <-- vote --  [%d] reply=%+v", rf.me, server, reply)
 	} else {
-		rf.Debug("[%d] x-- vote --  [%d] reply=%+v", rf.state, server, reply)
+		rf.Debug("[%d] x-- vote --  [%d] reply=%+v", rf.me, server, reply)
 	}
 
 	if rf.currentTerm < reply.Term {
@@ -478,7 +480,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply *InstallSnapshotReply) bool {
 	rf.mu.Lock()
-	rf.Debug("[%d]  -- install snapshot --> [%d] args=%+v", rf.state, server, args)
+	rf.Debug("[%d]  -- install snapshot --> [%d] args=%+v", rf.me, server, args)
 	rf.mu.Unlock()
 
 	ok := rf.peers[server].Call("Raft.InstallSnapshot", args, reply)
@@ -487,9 +489,9 @@ func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply
 	defer rf.mu.Unlock()
 
 	if reply.Success {
-		rf.Debug("[%d] <-- install snapshot --  [%d] reply=%+v", rf.state, server, reply)
+		rf.Debug("[%d] <-- install snapshot --  [%d] reply=%+v", rf.me, server, reply)
 	} else {
-		rf.Debug("[%d] x-- install snapshot --  [%d] reply=%+v", rf.state, server, reply)
+		rf.Debug("[%d] x-- install snapshot --  [%d] reply=%+v", rf.me, server, reply)
 	}
 
 	if rf.currentTerm < reply.Term {
@@ -552,11 +554,11 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
-	rf.mu.Lock()
+	rf.applyChMu.Lock()
 	rf.Debug("about to close applyCh")
 	close(rf.applyCh)
 	rf.Debug("applyCh closed")
-	rf.mu.Unlock()
+	rf.applyChMu.Unlock()
 }
 
 func (rf *Raft) killed() bool {
@@ -608,7 +610,7 @@ func (rf *Raft) election(peersCount int, term int, candidateId int, lastLogIndex
 		}
 
 		if count > peersCount/2 {
-			DPrintf("[%d] wins the election for term %d with %d votes", rf.me, term, count)
+			rf.Debug("[%d] wins the election for term %d with %d votes", rf.me, term, count)
 			rf.mu.Lock()
 			rf.state = Leader
 			for i := range len(rf.peers) {
@@ -787,9 +789,11 @@ func (rf *Raft) applyLogEntriesIfNeeded() {
 			msg.CommandIndex = i
 			rf.mu.Unlock()
 
+			rf.applyChMu.Lock()
 			rf.Debug("rf.applyCh <- msg#%d", i)
 			rf.applyCh <- msg
 			rf.Debug("rf.applyCh <- msg#%d done", i)
+			rf.applyChMu.Unlock()
 
 			rf.mu.Lock()
 			rf.lastApplied = i
