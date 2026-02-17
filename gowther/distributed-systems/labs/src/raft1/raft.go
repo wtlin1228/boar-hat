@@ -375,6 +375,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		reply.Success = true
 		if len(args.Entries) > 0 {
 			rf.Debug("before replaces %d log entries starts from %d, entries=%+v", len(args.Entries), args.PrevLogIndex+1, args.Entries)
+			// race condition could incorrectly erase some log entries
 			rf.log.replace(args.PrevLogIndex+1, args.Entries)
 			rf.Debug("after replaces %d log entries starts from %d, entries=%+v", len(args.Entries), args.PrevLogIndex+1, args.Entries)
 		}
@@ -455,6 +456,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		return
 	}
 
+	// race condition could incorrectly erase some log entries
 	rf.log.installSnapshot(args.SnapshotIndex, args.Entries)
 	if rf.commitIndex < args.SnapshotIndex {
 		rf.commitIndex = args.SnapshotIndex
@@ -536,6 +538,16 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Unlock()
 
 	if isLeader {
+		// this raise the problems of race condition:
+		//
+		// 1. 2nd AE RPC request arrived earlier than the 1st AE RPC request
+		//
+		//    BAD: some log entries could be ereased
+		//
+		// 2. 2nd AE RPC response arrived earlier than the 1st AE RPC response
+		//
+		//    BAD: matchIndex and nextIndex could be decremented
+		//
 		rf.sendAppendEntriesIfNeeded()
 	}
 
@@ -734,6 +746,7 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 					rf.mu.Lock()
 					if reply.Success {
 						matchIndex := args.PrevLogIndex + len(args.Entries)
+						// race condition could incorrectly decrement the nextIndex and matchIndex
 						rf.nextIndex[i] = matchIndex + 1
 						rf.matchIndex[i] = matchIndex
 
@@ -758,6 +771,7 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 				if ok && reply.Term == term && reply.Success {
 					rf.mu.Lock()
 					matchIndex := args.SnapshotIndex + len(args.Entries) - 1
+					// race condition could incorrectly decrement the nextIndex and matchIndex
 					rf.nextIndex[i] = matchIndex + 1
 					rf.matchIndex[i] = matchIndex
 					rf.commitIfPossible()
