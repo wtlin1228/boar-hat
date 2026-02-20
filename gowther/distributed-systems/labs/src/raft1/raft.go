@@ -376,8 +376,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		if len(args.Entries) > 0 {
 			rf.Debug("before replaces %d log entries starts from %d, entries=%+v", len(args.Entries), args.PrevLogIndex+1, args.Entries)
 			// race condition could incorrectly erase some log entries
-			rf.log.replace(args.PrevLogIndex+1, args.Entries)
-			rf.Debug("after replaces %d log entries starts from %d, entries=%+v", len(args.Entries), args.PrevLogIndex+1, args.Entries)
+			if rf.log.isReplaceNeeded(args.PrevLogIndex+1, args.Entries) {
+				rf.log.replace(args.PrevLogIndex+1, args.Entries)
+				rf.Debug("after replaces %d log entries starts from %d, entries=%+v", len(args.Entries), args.PrevLogIndex+1, args.Entries)
+			} else {
+				rf.Debug("no need to update the log")
+			}
 		}
 		rf.commitIndex = args.LeaderCommit
 	} else {
@@ -450,7 +454,8 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	rf.lastHeartbeatAt = time.Now()
 	rf.state = Follower
 
-	if rf.log.startAt >= args.SnapshotIndex {
+	if rf.log.startAt >= args.SnapshotIndex &&
+		!rf.log.isReplaceNeeded(args.SnapshotIndex, args.Entries) {
 		// already install, return true because the network is unreliable
 		reply.Success = true
 		return
@@ -747,8 +752,8 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 					if reply.Success {
 						matchIndex := args.PrevLogIndex + len(args.Entries)
 						// race condition could incorrectly decrement the nextIndex and matchIndex
-						rf.nextIndex[i] = matchIndex + 1
-						rf.matchIndex[i] = matchIndex
+						rf.nextIndex[i] = max(rf.nextIndex[i], matchIndex+1)
+						rf.matchIndex[i] = max(rf.matchIndex[i], matchIndex)
 
 						// leader can commit a log entry if it has been
 						// replicated in the majority servers only if the
@@ -772,8 +777,8 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 					rf.mu.Lock()
 					matchIndex := args.SnapshotIndex + len(args.Entries) - 1
 					// race condition could incorrectly decrement the nextIndex and matchIndex
-					rf.nextIndex[i] = matchIndex + 1
-					rf.matchIndex[i] = matchIndex
+					rf.nextIndex[i] = max(rf.nextIndex[i], matchIndex+1)
+					rf.matchIndex[i] = max(rf.matchIndex[i], matchIndex)
 					rf.commitIfPossible()
 					rf.Debug("sendInstallSnapshot(%d) done", i)
 					rf.mu.Unlock()
