@@ -815,12 +815,15 @@ func (rf *Raft) applyLogEntriesIfNeeded() {
 			rf.mu.Unlock()
 
 			rf.applyChMu.Lock()
-			rf.Debug("rf.applyCh <- msg#%d", i)
+			if rf.killed() {
+				rf.applyChMu.Unlock()
+				return
+			}
 			rf.applyCh <- msg
-			rf.Debug("rf.applyCh <- msg#%d done", i)
 			rf.applyChMu.Unlock()
 
 			rf.mu.Lock()
+			rf.Debug("rf.applyCh <- msg#%d", i)
 			rf.lastApplied = i
 			rf.mu.Unlock()
 		}
