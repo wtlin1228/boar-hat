@@ -562,3 +562,91 @@ func TestGetXIndexOnTrimmedLog(t *testing.T) {
 	assertXIndex(t, trimmedRfLog, 7, 1, 11)
 	assertXIndex(t, trimmedRfLog, 7, 0, 11)
 }
+
+func TestIsReplaceNeededLog(t *testing.T) {
+	rfLog := newRaftLog()
+
+	// index: 0 1 2 3 4 5 6 7
+	// term:  0 1 1 1 2 2 2 2
+	rfLog.appendOne(LogEntry{Term: 1, Command: nil})
+	rfLog.appendOne(LogEntry{Term: 1, Command: nil})
+	rfLog.appendOne(LogEntry{Term: 1, Command: nil})
+	rfLog.appendOne(LogEntry{Term: 2, Command: nil})
+	rfLog.appendOne(LogEntry{Term: 2, Command: nil})
+	rfLog.appendOne(LogEntry{Term: 2, Command: nil})
+	rfLog.appendOne(LogEntry{Term: 2, Command: nil})
+
+	if rfLog.isReplaceNeeded(4, []LogEntry{}) == true {
+		t.Fatalf("there is no replace needed")
+	}
+
+	if rfLog.isReplaceNeeded(4, []LogEntry{
+		{2, nil},
+	}) == true {
+		t.Fatalf("there is no replace needed")
+	}
+
+	if rfLog.isReplaceNeeded(4, []LogEntry{
+		{2, nil},
+		{2, nil},
+	}) == true {
+		t.Fatalf("there is no replace needed")
+	}
+
+	if rfLog.isReplaceNeeded(4, []LogEntry{
+		{2, nil},
+		{2, nil},
+		{2, nil},
+	}) == true {
+		t.Fatalf("there is no replace needed")
+	}
+
+	if rfLog.isReplaceNeeded(4, []LogEntry{
+		{2, nil},
+		{2, nil},
+		{2, nil},
+		{2, nil},
+	}) == true {
+		t.Fatalf("there is no replace needed")
+	}
+
+	if rfLog.isReplaceNeeded(4, []LogEntry{
+		{3, nil},
+	}) == false {
+		t.Fatalf("replace is needed")
+	}
+
+	if rfLog.isReplaceNeeded(4, []LogEntry{
+		{3, nil},
+		{3, nil},
+	}) == false {
+		t.Fatalf("replace is needed")
+	}
+
+	if rfLog.isReplaceNeeded(4, []LogEntry{
+		{3, nil},
+		{3, nil},
+		{3, nil},
+	}) == false {
+		t.Fatalf("replace is needed")
+	}
+
+	if rfLog.isReplaceNeeded(4, []LogEntry{
+		{3, nil},
+		{3, nil},
+		{3, nil},
+		{3, nil},
+	}) == false {
+		t.Fatalf("replace is needed")
+	}
+
+	if rfLog.isReplaceNeeded(4, []LogEntry{
+		{2, nil},
+		{2, nil},
+		{2, nil},
+		{2, nil},
+		{2, nil},
+	}) == false {
+		t.Fatalf("replace is needed")
+	}
+}

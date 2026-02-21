@@ -375,8 +375,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		reply.Success = true
 		if len(args.Entries) > 0 {
 			rf.Debug("before replaces %d log entries starts from %d, entries=%+v", len(args.Entries), args.PrevLogIndex+1, args.Entries)
-			rf.log.replace(args.PrevLogIndex+1, args.Entries)
-			rf.Debug("after replaces %d log entries starts from %d, entries=%+v", len(args.Entries), args.PrevLogIndex+1, args.Entries)
+			// race condition could incorrectly erase some log entries
+			if rf.log.isReplaceNeeded(args.PrevLogIndex+1, args.Entries) {
+				rf.log.replace(args.PrevLogIndex+1, args.Entries)
+				rf.Debug("after replaces %d log entries starts from %d, entries=%+v", len(args.Entries), args.PrevLogIndex+1, args.Entries)
+			} else {
+				rf.Debug("no need to update the log")
+			}
 		}
 		rf.commitIndex = args.LeaderCommit
 	} else {
@@ -449,12 +454,14 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	rf.lastHeartbeatAt = time.Now()
 	rf.state = Follower
 
-	if rf.log.startAt >= args.SnapshotIndex {
+	if rf.log.startAt >= args.SnapshotIndex &&
+		!rf.log.isReplaceNeeded(args.SnapshotIndex, args.Entries) {
 		// already install, return true because the network is unreliable
 		reply.Success = true
 		return
 	}
 
+	// race condition could incorrectly erase some log entries
 	rf.log.installSnapshot(args.SnapshotIndex, args.Entries)
 	if rf.commitIndex < args.SnapshotIndex {
 		rf.commitIndex = args.SnapshotIndex
@@ -536,6 +543,16 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Unlock()
 
 	if isLeader {
+		// this raise the problems of race condition:
+		//
+		// 1. 2nd AE RPC request arrived earlier than the 1st AE RPC request
+		//
+		//    BAD: some log entries could be ereased
+		//
+		// 2. 2nd AE RPC response arrived earlier than the 1st AE RPC response
+		//
+		//    BAD: matchIndex and nextIndex could be decremented
+		//
 		rf.sendAppendEntriesIfNeeded()
 	}
 
@@ -554,11 +571,17 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
-	rf.applyChMu.Lock()
+	rf.mu.Lock()
 	rf.Debug("about to close applyCh")
+	rf.mu.Unlock()
+
+	rf.applyChMu.Lock()
 	close(rf.applyCh)
-	rf.Debug("applyCh closed")
 	rf.applyChMu.Unlock()
+
+	rf.mu.Lock()
+	rf.Debug("applyCh closed")
+	rf.mu.Unlock()
 }
 
 func (rf *Raft) killed() bool {
@@ -734,8 +757,9 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 					rf.mu.Lock()
 					if reply.Success {
 						matchIndex := args.PrevLogIndex + len(args.Entries)
-						rf.nextIndex[i] = matchIndex + 1
-						rf.matchIndex[i] = matchIndex
+						// race condition could incorrectly decrement the nextIndex and matchIndex
+						rf.nextIndex[i] = max(rf.nextIndex[i], matchIndex+1)
+						rf.matchIndex[i] = max(rf.matchIndex[i], matchIndex)
 
 						// leader can commit a log entry if it has been
 						// replicated in the majority servers only if the
@@ -758,8 +782,9 @@ func (rf *Raft) sendAppendEntriesIfNeeded() {
 				if ok && reply.Term == term && reply.Success {
 					rf.mu.Lock()
 					matchIndex := args.SnapshotIndex + len(args.Entries) - 1
-					rf.nextIndex[i] = matchIndex + 1
-					rf.matchIndex[i] = matchIndex
+					// race condition could incorrectly decrement the nextIndex and matchIndex
+					rf.nextIndex[i] = max(rf.nextIndex[i], matchIndex+1)
+					rf.matchIndex[i] = max(rf.matchIndex[i], matchIndex)
 					rf.commitIfPossible()
 					rf.Debug("sendInstallSnapshot(%d) done", i)
 					rf.mu.Unlock()

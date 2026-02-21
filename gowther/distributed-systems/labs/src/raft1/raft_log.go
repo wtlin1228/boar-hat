@@ -94,6 +94,20 @@ func (rfLog *RaftLog) getLogEntriesStartedFrom(index int) []LogEntry {
 	return rfLog.data[rfLog.l2d(index):]
 }
 
+func (rfLog *RaftLog) isReplaceNeeded(startFrom int, entries []LogEntry) bool {
+	if rfLog.getLastLogIndex() < startFrom+len(entries)-1 {
+		return true
+	}
+
+	for i := range len(entries) {
+		if rfLog.data[rfLog.l2d(startFrom+i)].Term != entries[i].Term {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (rfLog *RaftLog) replace(startFrom int, entries []LogEntry) {
 	rfLog.data = slices.Delete(rfLog.data, rfLog.l2d(startFrom), len(rfLog.data))
 	rfLog.data = slices.Concat(rfLog.data, entries)
