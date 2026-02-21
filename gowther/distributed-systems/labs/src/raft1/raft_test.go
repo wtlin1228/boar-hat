@@ -996,23 +996,19 @@ func TestFigure8Unreliable3C(t *testing.T) {
 	tester.AnnotateTest("TestFigure8Unreliable3C", servers)
 	ts.Begin("Test (3C): Figure 8 (unreliable)")
 
-	// ts.one(rand.Int()%10000, 1, true)
-	ts.one(10001, 1, true)
+	ts.one(rand.Int()%10000, 1, true)
 
 	nup := servers
 	for iters := 0; iters < 1000; iters++ {
-		fmt.Printf("GetConnected: %v\n", ts.g.GetConnected())
 		if iters == 200 {
 			ts.SetLongReordering(true)
 		}
 		leader := -1
 		for i := 0; i < servers; i++ {
-			// cmd := rand.Int() % 10000
-			cmd := i*10000 + iters
+			cmd := rand.Int() % 10000
 			_, _, ok := ts.srvs[i].Raft().Start(cmd)
 			if ok {
 				text := fmt.Sprintf("submitted command %v to server %v", cmd, i)
-				fmt.Println(text)
 				tester.AnnotateInfo(text, text)
 			}
 			if ok && ts.g.IsConnected(i) {
@@ -1029,7 +1025,6 @@ func TestFigure8Unreliable3C(t *testing.T) {
 		}
 
 		if leader != -1 && (rand.Int()%1000) < int(RaftElectionTimeout/time.Millisecond)/2 {
-			fmt.Printf("disconnect leader [%d]\n", leader)
 			ts.g.DisconnectAll(leader)
 			tester.AnnotateConnection(ts.g.GetConnected())
 			nup -= 1
@@ -1038,7 +1033,6 @@ func TestFigure8Unreliable3C(t *testing.T) {
 		if nup < 3 {
 			s := rand.Int() % servers
 			if !ts.g.IsConnected(s) {
-				fmt.Printf("connect [%d]\n", s)
 				ts.g.ConnectOne(s)
 				tester.AnnotateConnection(ts.g.GetConnected())
 				nup += 1
@@ -1048,14 +1042,12 @@ func TestFigure8Unreliable3C(t *testing.T) {
 
 	for i := 0; i < servers; i++ {
 		if !ts.g.IsConnected(i) {
-			fmt.Printf("final connect [%d]\n", i)
 			ts.g.ConnectOne(i)
 		}
 	}
 	tester.AnnotateConnection(ts.g.GetConnected())
 
-	// ts.one(rand.Int()%10000, servers, true)
-	ts.one(88888, servers, true)
+	ts.one(rand.Int()%10000, servers, true)
 }
 
 func internalChurn(t *testing.T, reliable bool) {

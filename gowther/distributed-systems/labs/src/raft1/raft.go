@@ -571,11 +571,17 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
-	rf.applyChMu.Lock()
+	rf.mu.Lock()
 	rf.Debug("about to close applyCh")
+	rf.mu.Unlock()
+
+	rf.applyChMu.Lock()
 	close(rf.applyCh)
-	rf.Debug("applyCh closed")
 	rf.applyChMu.Unlock()
+
+	rf.mu.Lock()
+	rf.Debug("applyCh closed")
+	rf.mu.Unlock()
 }
 
 func (rf *Raft) killed() bool {
