@@ -100,7 +100,7 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 		for cmd := range rsm.applyCh {
 			rsm.mu.Lock()
 
-			rsm.Debug("receive from applyCh, %v", cmd)
+			rsm.Debug("receive from applyCh, %+v", cmd)
 
 			op := cmd.Command.(Op)
 
@@ -110,7 +110,7 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 						val: nil,
 						ok:  false,
 					}
-					rsm.Debug("remove entry %v", entry)
+					rsm.Debug("remove entry %+v", entry)
 				}
 				rsm.opQueue = make([]OpQueueEntry, 0)
 			}
@@ -122,7 +122,7 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 					val: res,
 					ok:  true,
 				}
-				rsm.Debug("remove entry %v", rsm.opQueue[0])
+				rsm.Debug("remove entry %+v", rsm.opQueue[0])
 				rsm.opQueue = slices.Delete(rsm.opQueue, 0, 1)
 			}
 
@@ -137,7 +137,7 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 				val: nil,
 				ok:  false,
 			}
-			rsm.Debug("remove entry %v", entry)
+			rsm.Debug("remove entry %+v", entry)
 		}
 		rsm.opQueue = make([]OpQueueEntry, 0)
 	}()
@@ -166,11 +166,11 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 		Req: req,
 	}
 
-	rsm.Debug("Raft.Start        - Op=%v", op)
+	rsm.Debug("Raft.Start        - Op=%+v", op)
 
 	index, term, isLeader := rsm.Raft().Start(op)
 
-	rsm.Debug("Raft.Start return - Op=%v, index=%d, term=%d, isLeader=%v", op, index, term, isLeader)
+	rsm.Debug("Raft.Start return - Op=%+v, index=%d, term=%d, isLeader=%v", op, index, term, isLeader)
 
 	if !isLeader {
 		rsm.mu.Unlock()
@@ -202,20 +202,24 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 			val: nil,
 			ok:  false,
 		}
-		rsm.Debug("remove entry %v", rsm.opQueue[i])
+		rsm.Debug("remove entry %+v", rsm.opQueue[i])
 		rsm.opQueue = slices.Delete(rsm.opQueue, i, i+1)
 	}
-	rsm.Debug("append entry %v", newEntry)
+	rsm.Debug("append entry %+v", newEntry)
 	rsm.opQueue = append(rsm.opQueue, newEntry)
 
 	rsm.mu.Unlock()
 
+	// The RSM may block the client indefinitely because the started log
+	// entry is never applied when there is only one client and its Raft
+	// server steps down from leader to follower before replicating the
+	// command to a majority of the cluster.
 	opRes := <-newEntry.ch
 
 	rsm.mu.Lock()
 	defer rsm.mu.Unlock()
 
-	rsm.Debug("operation done, entry=%v, opRes=%v", newEntry, opRes)
+	rsm.Debug("operation done, entry=%+v, opRes=%+v", newEntry, opRes)
 
 	if !opRes.ok {
 		return rpc.ErrWrongLeader, nil // this operation is not committed.

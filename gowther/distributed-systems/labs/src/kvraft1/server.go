@@ -57,7 +57,7 @@ func (kv *KVServer) DoOp(req any) any {
 			}
 		}
 		kv.mu.Unlock()
-		kv.Debug("DoOp(Get(%s)) reply=%v", args.Key, reply)
+		kv.Debug("DoOp(Get(%s)) reply=%+v", args.Key, reply)
 		return &reply
 	case rpc.PutArgs:
 		kv.mu.Lock()
@@ -76,7 +76,7 @@ func (kv *KVServer) DoOp(req any) any {
 			reply = rpc.PutReply{Err: rpc.ErrVersion}
 		}
 		kv.mu.Unlock()
-		kv.Debug("DoOp(Put(%s, %s, %d)) reply=%v", args.Key, args.Value, args.Version, reply)
+		kv.Debug("DoOp(Put(%s, %s, %d)) reply=%+v", args.Key, args.Value, args.Version, reply)
 		return &reply
 	default:
 		log.Fatalf("DoOp should execute only Get and Put and not %T", req)

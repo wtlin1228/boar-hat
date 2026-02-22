@@ -52,15 +52,12 @@ func (ck *Clerk) changeLeader(leader int) {
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	// You will have to modify this function.
 
-	ck.mu.Lock()
-	ck.Debug("Get(%s) -> server_%d", key, ck.leader)
-	ck.mu.Unlock()
-
 	for {
 		args := rpc.GetArgs{Key: key}
 		reply := rpc.GetReply{}
 
 		ck.mu.Lock()
+		ck.Debug("Get(%s) -> server_%d", key, ck.leader)
 		leader := ck.leader
 		ck.mu.Unlock()
 
@@ -77,6 +74,10 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 			time.Sleep(2 * time.Millisecond) // to prevent excessive RPC calls
 			continue
 		}
+
+		ck.mu.Lock()
+		ck.Debug("Get(%s) -> server_%d done, reply=%+v", key, ck.leader, reply)
+		ck.mu.Unlock()
 
 		return reply.Value, reply.Version, reply.Err
 	}
@@ -102,14 +103,13 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	// You will have to modify this function.
 
-	ck.Debug("Put(%s, %s, %d) -> server_%d", key, value, version, ck.leader)
-
 	retryTimes := 0
 	for {
 		args := rpc.PutArgs{Key: key, Value: value, Version: version}
 		reply := rpc.PutReply{}
 
 		ck.mu.Lock()
+		ck.Debug("Put(%s, %s, %d) -> server_%d", key, value, version, ck.leader)
 		leader := ck.leader
 		ck.mu.Unlock()
 
@@ -131,6 +131,10 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 		if retryTimes > 0 && reply.Err == rpc.ErrVersion {
 			reply.Err = rpc.ErrMaybe
 		}
+
+		ck.mu.Lock()
+		ck.Debug("Put(%s, %s, %d) -> server_%d done, reply=%+v", key, value, version, ck.leader, reply)
+		ck.mu.Unlock()
 
 		return reply.Err
 	}

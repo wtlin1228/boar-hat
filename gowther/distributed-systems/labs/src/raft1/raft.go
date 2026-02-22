@@ -94,28 +94,28 @@ type Raft struct {
 }
 
 func (rf *Raft) Debug(format string, a ...interface{}) {
-	// DPrintf("[Raft_%d] term:%d %-9s  - %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
+	DPrintf("[Raft_%d] term:%d %-9s  - %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
 
-	DPrintf(`[Raft_%d] term:%d %-9s  - %s
-	{
-		voteFor:     %d,
-		commitIndex: %d,
-		lastApplied: %d,
-		nextIndex:   %v,
-		matchIndex:  %v,
-		log.startAt: %d,
-		log count:   %d,
-		log.data:    %+v
-	}
-	`, rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...),
-		rf.voteFor,
-		rf.commitIndex,
-		rf.lastApplied,
-		rf.nextIndex,
-		rf.matchIndex,
-		rf.log.startAt,
-		rf.log.getCount(),
-		rf.log.data)
+	// DPrintf(`[Raft_%d] term:%d %-9s  - %s
+	// {
+	// 	voteFor:     %d,
+	// 	commitIndex: %d,
+	// 	lastApplied: %d,
+	// 	nextIndex:   %v,
+	// 	matchIndex:  %v,
+	// 	log.startAt: %d,
+	// 	log count:   %d,
+	// 	log.data:    %+v
+	// }
+	// `, rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...),
+	// 	rf.voteFor,
+	// 	rf.commitIndex,
+	// 	rf.lastApplied,
+	// 	rf.nextIndex,
+	// 	rf.matchIndex,
+	// 	rf.log.startAt,
+	// 	rf.log.getCount(),
+	// 	rf.log.data)
 }
 
 // return currentTerm and whether this server
