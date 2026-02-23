@@ -94,28 +94,28 @@ type Raft struct {
 }
 
 func (rf *Raft) Debug(format string, a ...interface{}) {
-	// DPrintf("[Raft_%d] term:%d %-9s  - %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
+	DPrintf("[Raft_%d] term:%d %-9s  - %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
 
-	DPrintf(`[Raft_%d] term:%d %-9s  - %s
-	{
-		voteFor:     %d,
-		commitIndex: %d,
-		lastApplied: %d,
-		nextIndex:   %v,
-		matchIndex:  %v,
-		log.startAt: %d,
-		log count:   %d,
-		log.data:    %+v
-	}
-	`, rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...),
-		rf.voteFor,
-		rf.commitIndex,
-		rf.lastApplied,
-		rf.nextIndex,
-		rf.matchIndex,
-		rf.log.startAt,
-		rf.log.getCount(),
-		rf.log.data)
+	// DPrintf(`[Raft_%d] term:%d %-9s  - %s
+	// {
+	// 	voteFor:     %d,
+	// 	commitIndex: %d,
+	// 	lastApplied: %d,
+	// 	nextIndex:   %v,
+	// 	matchIndex:  %v,
+	// 	log.startAt: %d,
+	// 	log count:   %d,
+	// 	log.data:    %+v
+	// }
+	// `, rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...),
+	// 	rf.voteFor,
+	// 	rf.commitIndex,
+	// 	rf.lastApplied,
+	// 	rf.nextIndex,
+	// 	rf.matchIndex,
+	// 	rf.log.startAt,
+	// 	rf.log.getCount(),
+	// 	rf.log.data)
 }
 
 // return currentTerm and whether this server
@@ -250,6 +250,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	reply.Term = args.Term
 	rf.currentTerm = args.Term
+	rf.abortLogEntriesIfNeeded()
 	rf.state = Follower
 
 	lastLogIndex := rf.log.getLastLogIndex()
@@ -322,6 +323,7 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	if rf.currentTerm < reply.Term {
 		rf.currentTerm = reply.Term
 		rf.voteFor = NoVote
+		rf.abortLogEntriesIfNeeded()
 		rf.state = Follower
 		rf.persist()
 		rf.Debug("sendRequestVote(%d), update current term", server)
@@ -365,6 +367,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	reply.Term = args.Term
 	rf.lastHeartbeatAt = time.Now()
+	rf.abortLogEntriesIfNeeded()
 	rf.state = Follower
 
 	isPrevLogEntryIdentical :=
@@ -383,7 +386,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				rf.Debug("no need to update the log")
 			}
 		}
-		rf.commitIndex = args.LeaderCommit
+		rf.commitIndex = max(rf.commitIndex, args.LeaderCommit)
 	} else {
 		reply.Success = false
 		reply.XIndex = rf.log.getXIndex(args.PrevLogTerm, args.PrevLogIndex)
@@ -413,6 +416,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	if rf.currentTerm < reply.Term {
 		rf.currentTerm = reply.Term
 		rf.voteFor = NoVote
+		rf.abortLogEntriesIfNeeded()
 		rf.state = Follower
 		rf.persist()
 		rf.Debug("sendAppendEntries(%d), update current term", server)
@@ -452,6 +456,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 	reply.Term = args.Term
 	rf.lastHeartbeatAt = time.Now()
+	rf.abortLogEntriesIfNeeded()
 	rf.state = Follower
 
 	if rf.log.startAt >= args.SnapshotIndex &&
@@ -463,12 +468,8 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 	// race condition could incorrectly erase some log entries
 	rf.log.installSnapshot(args.SnapshotIndex, args.Entries)
-	if rf.commitIndex < args.SnapshotIndex {
-		rf.commitIndex = args.SnapshotIndex
-	}
-	if rf.lastApplied < args.SnapshotIndex {
-		rf.lastApplied = args.SnapshotIndex
-	}
+	rf.commitIndex = max(rf.commitIndex, args.SnapshotIndex)
+	rf.lastApplied = max(rf.lastApplied, args.SnapshotIndex)
 	rf.snapshot = args.Snapshot
 
 	rf.persist()
@@ -504,6 +505,7 @@ func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply
 	if rf.currentTerm < reply.Term {
 		rf.currentTerm = reply.Term
 		rf.voteFor = NoVote
+		rf.abortLogEntriesIfNeeded()
 		rf.state = Follower
 		rf.persist()
 		rf.Debug("sendInstallSnapshot(%d), update current term", server)
@@ -688,12 +690,10 @@ func (rf *Raft) commitIfPossible() {
 	slices.Sort(matchIndexes)
 	l := len(matchIndexes)
 	commitIndex := matchIndexes[l-l/2]
-	// when the leader is just selected, matchIndexes
+	// when the leader is just elected, matchIndexes
 	// will be reset to 0, but the commitIndex shouldn't
 	// decrease
-	if commitIndex > rf.commitIndex {
-		rf.commitIndex = commitIndex
-	}
+	rf.commitIndex = max(rf.commitIndex, commitIndex)
 }
 
 func (rf *Raft) sendAppendEntriesIfNeeded() {
@@ -832,6 +832,32 @@ func (rf *Raft) applyLogEntriesIfNeeded() {
 		rf.Debug("applyLogEntries done")
 		rf.mu.Unlock()
 	}
+}
+
+// Invoke `abortLogEntriesIfNeeded` before transitioning to Follower.
+// Otherwise, the RSM may block the client indefinitely if the “started”
+// log entry is never applied. This scenario occurs when no other client
+// submits a request in the current term and the Raft server steps down
+// from Leader to Follower before the command is replicated to a
+// majority of the cluster.
+func (rf *Raft) abortLogEntriesIfNeeded() {
+	if rf.state != Leader || rf.commitIndex == rf.log.getLastLogIndex() {
+		return
+	}
+
+	rf.applyChMu.Lock()
+	defer rf.applyChMu.Unlock()
+
+	if rf.killed() {
+		return
+	}
+
+	var msg raftapi.ApplyMsg
+	msg.CommandValid = false
+	msg.SnapshotValid = false
+	msg.Command = rf.log.getLogEntry(rf.commitIndex + 1).Command
+	msg.CommandIndex = rf.commitIndex + 1
+	rf.applyCh <- msg
 }
 
 // the service or tester wants to create a Raft server. the ports
