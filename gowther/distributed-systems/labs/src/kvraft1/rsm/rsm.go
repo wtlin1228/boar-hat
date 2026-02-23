@@ -64,9 +64,76 @@ type RSM struct {
 	opQueue []OpQueueEntry
 }
 
-func (rf *RSM) Debug(format string, a ...interface{}) {
+func (rsm *RSM) Debug(format string, a ...interface{}) {
 	if Debug {
-		log.Printf("[RSM_%d] %s\n", rf.me, fmt.Sprintf(format, a...))
+		log.Printf("[RSM_%d] %s\n", rsm.me, fmt.Sprintf(format, a...))
+	}
+}
+
+func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
+	rsm.mu.Lock()
+	defer rsm.mu.Unlock()
+
+	rsm.Debug("handle command, %+v", msg)
+
+	op := msg.Command.(Op)
+
+	if len(rsm.opQueue) > 0 && rsm.opQueue[0].logIndex == msg.CommandIndex && rsm.opQueue[0].op.Id != op.Id {
+		for _, entry := range rsm.opQueue {
+			entry.ch <- OpResult{
+				val: nil,
+				ok:  false,
+			}
+			rsm.Debug("remove entry %+v", entry)
+		}
+		rsm.opQueue = make([]OpQueueEntry, 0)
+	}
+
+	res := rsm.sm.DoOp(op.Req)
+
+	if len(rsm.opQueue) > 0 && rsm.opQueue[0].op.Id == op.Id {
+		rsm.opQueue[0].ch <- OpResult{
+			val: res,
+			ok:  true,
+		}
+		rsm.Debug("remove entry %+v", rsm.opQueue[0])
+		rsm.opQueue = slices.Delete(rsm.opQueue, 0, 1)
+	}
+}
+
+func (rsm *RSM) handleSnapshot(msg raftapi.ApplyMsg) {
+	rsm.mu.Lock()
+	defer rsm.mu.Unlock()
+
+	rsm.Debug("handle snapshot, %+v", msg)
+}
+
+func (rsm *RSM) abortCommand(msg raftapi.ApplyMsg) {
+	rsm.mu.Lock()
+	defer rsm.mu.Unlock()
+
+	rsm.Debug("abort command, %+v", msg)
+
+	op := msg.Command.(Op)
+
+	shouldAbort := false
+	abortIndex := -1
+	for i, entry := range rsm.opQueue {
+		if entry.logIndex == msg.CommandIndex && entry.op.Id == op.Id {
+			shouldAbort = true
+			abortIndex = i
+		}
+		if shouldAbort {
+			entry.ch <- OpResult{
+				val: nil,
+				ok:  false,
+			}
+			rsm.Debug("abort entry %+v", entry)
+		}
+	}
+
+	if abortIndex >= 0 {
+		rsm.opQueue = slices.Delete(rsm.opQueue, abortIndex, len(rsm.opQueue))
 	}
 }
 
@@ -97,36 +164,18 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 	}
 
 	go func() {
-		for cmd := range rsm.applyCh {
+		for msg := range rsm.applyCh {
 			rsm.mu.Lock()
-
-			rsm.Debug("receive from applyCh, %+v", cmd)
-
-			op := cmd.Command.(Op)
-
-			if len(rsm.opQueue) > 0 && rsm.opQueue[0].logIndex == cmd.CommandIndex && rsm.opQueue[0].op.Id != op.Id {
-				for _, entry := range rsm.opQueue {
-					entry.ch <- OpResult{
-						val: nil,
-						ok:  false,
-					}
-					rsm.Debug("remove entry %+v", entry)
-				}
-				rsm.opQueue = make([]OpQueueEntry, 0)
-			}
-
-			res := rsm.sm.DoOp(op.Req)
-
-			if len(rsm.opQueue) > 0 && rsm.opQueue[0].op.Id == op.Id {
-				rsm.opQueue[0].ch <- OpResult{
-					val: res,
-					ok:  true,
-				}
-				rsm.Debug("remove entry %+v", rsm.opQueue[0])
-				rsm.opQueue = slices.Delete(rsm.opQueue, 0, 1)
-			}
-
+			rsm.Debug("receive msg from applyCh, %+v", msg)
 			rsm.mu.Unlock()
+
+			if msg.CommandValid {
+				rsm.handleCommand(msg)
+			} else if msg.SnapshotValid {
+				rsm.handleSnapshot(msg)
+			} else {
+				rsm.abortCommand(msg)
+			}
 		}
 
 		rsm.mu.Lock()
@@ -210,10 +259,11 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 
 	rsm.mu.Unlock()
 
-	// The RSM may block the client indefinitely because the started log
-	// entry is never applied when there is only one client and its Raft
-	// server steps down from leader to follower before replicating the
-	// command to a majority of the cluster.
+	// The RSM may block the client indefinitely if the “started” log entry
+	// is never applied. This can occur when no other client submits a new
+	// request to the leader in the current term, and the Raft server steps
+	// down from leader to follower before the command is replicated to a
+	// majority of the cluster.
 	opRes := <-newEntry.ch
 
 	rsm.mu.Lock()

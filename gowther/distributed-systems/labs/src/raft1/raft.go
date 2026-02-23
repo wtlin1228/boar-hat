@@ -250,6 +250,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	reply.Term = args.Term
 	rf.currentTerm = args.Term
+	rf.abortLogEntriesIfNeeded()
 	rf.state = Follower
 
 	lastLogIndex := rf.log.getLastLogIndex()
@@ -322,6 +323,7 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	if rf.currentTerm < reply.Term {
 		rf.currentTerm = reply.Term
 		rf.voteFor = NoVote
+		rf.abortLogEntriesIfNeeded()
 		rf.state = Follower
 		rf.persist()
 		rf.Debug("sendRequestVote(%d), update current term", server)
@@ -365,6 +367,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	reply.Term = args.Term
 	rf.lastHeartbeatAt = time.Now()
+	rf.abortLogEntriesIfNeeded()
 	rf.state = Follower
 
 	isPrevLogEntryIdentical :=
@@ -413,6 +416,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	if rf.currentTerm < reply.Term {
 		rf.currentTerm = reply.Term
 		rf.voteFor = NoVote
+		rf.abortLogEntriesIfNeeded()
 		rf.state = Follower
 		rf.persist()
 		rf.Debug("sendAppendEntries(%d), update current term", server)
@@ -452,6 +456,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 	reply.Term = args.Term
 	rf.lastHeartbeatAt = time.Now()
+	rf.abortLogEntriesIfNeeded()
 	rf.state = Follower
 
 	if rf.log.startAt >= args.SnapshotIndex &&
@@ -500,6 +505,7 @@ func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply
 	if rf.currentTerm < reply.Term {
 		rf.currentTerm = reply.Term
 		rf.voteFor = NoVote
+		rf.abortLogEntriesIfNeeded()
 		rf.state = Follower
 		rf.persist()
 		rf.Debug("sendInstallSnapshot(%d), update current term", server)
@@ -826,6 +832,32 @@ func (rf *Raft) applyLogEntriesIfNeeded() {
 		rf.Debug("applyLogEntries done")
 		rf.mu.Unlock()
 	}
+}
+
+// Invoke `abortLogEntriesIfNeeded` before transitioning to Follower.
+// Otherwise, the RSM may block the client indefinitely if the “started”
+// log entry is never applied. This scenario occurs when no other client
+// submits a request in the current term and the Raft server steps down
+// from Leader to Follower before the command is replicated to a
+// majority of the cluster.
+func (rf *Raft) abortLogEntriesIfNeeded() {
+	if rf.state != Leader || rf.commitIndex == rf.log.getLastLogIndex() {
+		return
+	}
+
+	rf.applyChMu.Lock()
+	defer rf.applyChMu.Unlock()
+
+	if rf.killed() {
+		return
+	}
+
+	var msg raftapi.ApplyMsg
+	msg.CommandValid = false
+	msg.SnapshotValid = false
+	msg.Command = rf.log.getLogEntry(rf.commitIndex + 1).Command
+	msg.CommandIndex = rf.commitIndex + 1
+	rf.applyCh <- msg
 }
 
 // the service or tester wants to create a Raft server. the ports
