@@ -383,7 +383,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				rf.Debug("no need to update the log")
 			}
 		}
-		rf.commitIndex = args.LeaderCommit
+		rf.commitIndex = max(rf.commitIndex, args.LeaderCommit)
 	} else {
 		reply.Success = false
 		reply.XIndex = rf.log.getXIndex(args.PrevLogTerm, args.PrevLogIndex)
@@ -463,12 +463,8 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 	// race condition could incorrectly erase some log entries
 	rf.log.installSnapshot(args.SnapshotIndex, args.Entries)
-	if rf.commitIndex < args.SnapshotIndex {
-		rf.commitIndex = args.SnapshotIndex
-	}
-	if rf.lastApplied < args.SnapshotIndex {
-		rf.lastApplied = args.SnapshotIndex
-	}
+	rf.commitIndex = max(rf.commitIndex, args.SnapshotIndex)
+	rf.lastApplied = max(rf.lastApplied, args.SnapshotIndex)
 	rf.snapshot = args.Snapshot
 
 	rf.persist()
@@ -688,12 +684,10 @@ func (rf *Raft) commitIfPossible() {
 	slices.Sort(matchIndexes)
 	l := len(matchIndexes)
 	commitIndex := matchIndexes[l-l/2]
-	// when the leader is just selected, matchIndexes
+	// when the leader is just elected, matchIndexes
 	// will be reset to 0, but the commitIndex shouldn't
 	// decrease
-	if commitIndex > rf.commitIndex {
-		rf.commitIndex = commitIndex
-	}
+	rf.commitIndex = max(rf.commitIndex, commitIndex)
 }
 
 func (rf *Raft) sendAppendEntriesIfNeeded() {
