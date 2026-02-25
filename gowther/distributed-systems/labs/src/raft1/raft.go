@@ -690,10 +690,14 @@ func (rf *Raft) commitIfPossible() {
 	slices.Sort(matchIndexes)
 	l := len(matchIndexes)
 	commitIndex := matchIndexes[l-l/2]
-	// when the leader is just elected, matchIndexes
-	// will be reset to 0, but the commitIndex shouldn't
-	// decrease
-	rf.commitIndex = max(rf.commitIndex, commitIndex)
+	// A leader commits entries by counting replicas only for
+	// entries from its current term.
+	if rf.log.getLogEntry(commitIndex).Term == rf.currentTerm {
+		// when the leader is just elected, matchIndexes
+		// will be reset to 0, but the commitIndex shouldn't
+		// decrease
+		rf.commitIndex = max(rf.commitIndex, commitIndex)
+	}
 }
 
 func (rf *Raft) sendAppendEntriesIfNeeded() {
