@@ -33,7 +33,12 @@ This can occur even if the request has already been replicated to a majority.
 
 ```
 
-Assume Raft_0 is the elected leader for term_1. A Clerk sends a command to KVServer_0 (--> RSM_0 --> Raft_0).
+Assume Raft_0 is elected leader in term_1. A Clerk sends a command to KVServer_0 (--> RSM_0 --> Raft_0). After that, **no further commands are submitted by any client**.
+
+- If this command has been replicated to the minority, it's not guaranteed to be committed, RSM_0 can wait forever.
+- If this command has been replicated to the majority, it's guaranteed to be committed, but RSM_0 can still wait forever.
+
+## Explanation
 
 Consider the following scenario:
 
@@ -53,6 +58,14 @@ A network partition occurs:
 - `p2 = [1,2,3,4]`
 
 Within `p2`, a new leader must be elected. Since Raft_1 and Raft_2 have more up-to-date logs, the next leader can only be one of them. Suppose Raft_1 wins the election and replicates its log to Raft_3 and Raft_4.
+
+```text
+Raft_0.logs = [term_0/nil, term_1/command]
+Raft_1.logs = [term_0/nil, term_1/command]
+Raft_2.logs = [term_0/nil, term_1/command]
+Raft_3.logs = [term_0/nil, term_1/command]
+Raft_4.logs = [term_0/nil, term_1/command]
+```
 
 At this point, `term_1/command` is stored on all servers in p2. However, Raft_1 cannot commit this entry because it was created in a previous term. According to the Raft paper (Figure 8), a leader may only advance commitIndex for entries from the current term by counting replicas.
 
