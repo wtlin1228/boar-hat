@@ -72,3 +72,9 @@ At this point, `term_1/command` is stored on all servers in p2. However, Raft_1 
 When Raft_0 later reconnects, it steps down and follows Raft_1. Nevertheless, `term_1/command` remains uncommitted unless a new command from the current term is appended and replicated to a majority.
 
 Consequently, RSM_0 may wait indefinitely for `term_1/command` to be applied if no new client request arrives to trigger commitment.
+
+## Solution: periodically submit a "No-Op" command from all RSM instances
+
+Each RSM instance periodically submits a no-op command to its local Raft node.
+
+The interval can be relatively long (e.g., 1 second), since this scenario is rare under normal traffic. However, introducing a periodic no-op ensures that a command will not remain uncommitted indefinitely even if it has already been replicated to all Raft instances.

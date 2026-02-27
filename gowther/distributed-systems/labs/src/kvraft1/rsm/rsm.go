@@ -5,6 +5,7 @@ import (
 	"log"
 	"slices"
 	"sync"
+	"time"
 
 	"6.5840/kvsrv1/rpc"
 	"6.5840/labrpc"
@@ -23,9 +24,10 @@ type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
-	Me  int
-	Id  string
-	Req any
+	Me     int
+	Id     string
+	Req    any
+	IsNoOp bool
 }
 
 type OpResult struct {
@@ -61,7 +63,8 @@ type RSM struct {
 	sm           StateMachine
 	// Your definitions here.
 
-	opQueue []OpQueueEntry
+	opQueue      []OpQueueEntry
+	lastSubmitAt time.Time
 }
 
 func (rsm *RSM) Debug(format string, a ...interface{}) {
@@ -89,7 +92,12 @@ func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 		rsm.opQueue = make([]OpQueueEntry, 0)
 	}
 
-	res := rsm.sm.DoOp(op.Req)
+	var res any
+	if op.IsNoOp {
+		res = nil
+	} else {
+		res = rsm.sm.DoOp(op.Req)
+	}
 
 	if len(rsm.opQueue) > 0 && rsm.opQueue[0].op.Id == op.Id {
 		rsm.opQueue[0].ch <- OpResult{
@@ -162,6 +170,16 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 		rsm.opQueue = make([]OpQueueEntry, 0)
 	}()
 
+	// periodically submit a "No-Op" command to prevent the RSM from waiting forever
+	go func() {
+		for {
+			if rsm.lastSubmitAt.Add(1 * time.Second).Before(time.Now()) {
+				rsm.submit(nil, true)
+			}
+			time.Sleep(1 * time.Second)
+		}
+	}()
+
 	return rsm
 }
 
@@ -173,17 +191,23 @@ func (rsm *RSM) Raft() raftapi.Raft {
 // should return ErrWrongLeader if client should find new leader and
 // try again.
 func (rsm *RSM) Submit(req any) (rpc.Err, any) {
+	return rsm.submit(req, false)
+}
 
+func (rsm *RSM) submit(req any, isNoOp bool) (rpc.Err, any) {
 	// Submit creates an Op structure to run a command through Raft;
 	// for example: op := Op{Me: rsm.me, Id: id, Req: req}, where req
 	// is the argument to Submit and id is a unique id for the op.
 
 	rsm.mu.Lock()
 
+	rsm.lastSubmitAt = time.Now()
+
 	op := Op{
-		Me:  rsm.me,
-		Id:  uuid.NewString(),
-		Req: req,
+		Me:     rsm.me,
+		Id:     uuid.NewString(),
+		Req:    req,
+		IsNoOp: isNoOp,
 	}
 
 	rsm.Debug("Raft.Start        - Op=%+v", op)
