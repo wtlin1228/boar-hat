@@ -108,35 +108,6 @@ func (rsm *RSM) handleSnapshot(msg raftapi.ApplyMsg) {
 	rsm.Debug("handle snapshot, %+v", msg)
 }
 
-func (rsm *RSM) abortCommand(msg raftapi.ApplyMsg) {
-	rsm.mu.Lock()
-	defer rsm.mu.Unlock()
-
-	rsm.Debug("abort command, %+v", msg)
-
-	op := msg.Command.(Op)
-
-	shouldAbort := false
-	abortIndex := -1
-	for i, entry := range rsm.opQueue {
-		if entry.logIndex == msg.CommandIndex && entry.op.Id == op.Id {
-			shouldAbort = true
-			abortIndex = i
-		}
-		if shouldAbort {
-			entry.ch <- OpResult{
-				val: nil,
-				ok:  false,
-			}
-			rsm.Debug("abort entry %+v", entry)
-		}
-	}
-
-	if abortIndex >= 0 {
-		rsm.opQueue = slices.Delete(rsm.opQueue, abortIndex, len(rsm.opQueue))
-	}
-}
-
 // servers[] contains the ports of the set of
 // servers that will cooperate via Raft to
 // form the fault-tolerant key/value service.
@@ -174,7 +145,7 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 			} else if msg.SnapshotValid {
 				rsm.handleSnapshot(msg)
 			} else {
-				rsm.abortCommand(msg)
+				log.Fatalf("msg is neither a valid command nor a valid snapshot, msg=%+v\n", msg)
 			}
 		}
 
