@@ -16,7 +16,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const Debug = false
+const Debug = true
 
 var useRaftStateMachine bool // to plug in another raft besided raft1
 
@@ -107,6 +107,11 @@ func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 		rsm.Debug("remove entry %+v", rsm.opQueue[0])
 		rsm.opQueue = slices.Delete(rsm.opQueue, 0, 1)
 	}
+
+	if rsm.maxraftstate > -1 && rsm.Raft().PersistBytes()*10 > rsm.maxraftstate*9 {
+		rsm.Debug("create snapshot, index=%d", msg.CommandIndex)
+		rsm.Raft().Snapshot(msg.CommandIndex, rsm.sm.Snapshot())
+	}
 }
 
 func (rsm *RSM) handleSnapshot(msg raftapi.ApplyMsg) {
@@ -114,6 +119,8 @@ func (rsm *RSM) handleSnapshot(msg raftapi.ApplyMsg) {
 	defer rsm.mu.Unlock()
 
 	rsm.Debug("handle snapshot, %+v", msg)
+	rsm.sm.Restore(msg.Snapshot)
+
 }
 
 // servers[] contains the ports of the set of
@@ -174,7 +181,7 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 	go func() {
 		for {
 			if rsm.lastSubmitAt.Add(1 * time.Second).Before(time.Now()) {
-go 				rsm.submit(nil, true)
+				go rsm.submit(nil, true)
 			}
 			time.Sleep(1 * time.Second)
 		}
