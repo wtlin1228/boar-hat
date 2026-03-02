@@ -174,7 +174,7 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 	go func() {
 		for {
 			if rsm.lastSubmitAt.Add(1 * time.Second).Before(time.Now()) {
-				rsm.submit(nil, true)
+go 				rsm.submit(nil, true)
 			}
 			time.Sleep(1 * time.Second)
 		}
