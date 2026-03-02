@@ -16,7 +16,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const Debug = true
+const Debug = false
 
 var useRaftStateMachine bool // to plug in another raft besided raft1
 
@@ -120,7 +120,6 @@ func (rsm *RSM) handleSnapshot(msg raftapi.ApplyMsg) {
 
 	rsm.Debug("handle snapshot, %+v", msg)
 	rsm.sm.Restore(msg.Snapshot)
-
 }
 
 // servers[] contains the ports of the set of
@@ -147,6 +146,11 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 	}
 	if !useRaftStateMachine {
 		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh)
+	}
+
+	snapshot := persister.ReadSnapshot()
+	if len(snapshot) != 0 {
+		rsm.sm.Restore(snapshot)
 	}
 
 	go func() {
@@ -180,7 +184,11 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 	// periodically submit a "No-Op" command to prevent the RSM from waiting forever
 	go func() {
 		for {
-			if rsm.lastSubmitAt.Add(1 * time.Second).Before(time.Now()) {
+			rsm.mu.Lock()
+			lastSubmitAt := rsm.lastSubmitAt
+			rsm.mu.Unlock()
+
+			if lastSubmitAt.Add(1 * time.Second).Before(time.Now()) {
 				go rsm.submit(nil, true)
 			}
 			time.Sleep(1 * time.Second)
