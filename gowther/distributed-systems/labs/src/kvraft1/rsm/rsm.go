@@ -73,6 +73,17 @@ func (rsm *RSM) Debug(format string, a ...interface{}) {
 	}
 }
 
+func (rsm *RSM) clearOpQueue() {
+	rsm.Debug("clear OpQueue")
+	for _, entry := range rsm.opQueue {
+		entry.ch <- OpResult{
+			val: nil,
+			ok:  false,
+		}
+	}
+	rsm.opQueue = make([]OpQueueEntry, 0)
+}
+
 func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 	rsm.mu.Lock()
 	defer rsm.mu.Unlock()
@@ -82,14 +93,7 @@ func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 	op := msg.Command.(Op)
 
 	if len(rsm.opQueue) > 0 && rsm.opQueue[0].logIndex == msg.CommandIndex && rsm.opQueue[0].op.Id != op.Id {
-		for _, entry := range rsm.opQueue {
-			entry.ch <- OpResult{
-				val: nil,
-				ok:  false,
-			}
-			rsm.Debug("remove entry %+v", entry)
-		}
-		rsm.opQueue = make([]OpQueueEntry, 0)
+		rsm.clearOpQueue()
 	}
 
 	var res any
@@ -120,6 +124,8 @@ func (rsm *RSM) handleSnapshot(msg raftapi.ApplyMsg) {
 
 	rsm.Debug("handle snapshot, %+v", msg)
 	rsm.sm.Restore(msg.Snapshot)
+
+	rsm.clearOpQueue()
 }
 
 // servers[] contains the ports of the set of
