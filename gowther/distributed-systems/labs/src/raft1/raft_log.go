@@ -100,6 +100,9 @@ func (rfLog *RaftLog) isReplaceNeeded(startFrom int, entries []LogEntry) bool {
 	}
 
 	for i := range len(entries) {
+		if rfLog.l2d(startFrom+i) < rfLog.startAt {
+			continue
+		}
 		if rfLog.data[rfLog.l2d(startFrom+i)].Term != entries[i].Term {
 			return true
 		}

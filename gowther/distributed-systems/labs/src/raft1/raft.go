@@ -369,6 +369,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	isPrevLogEntryIdentical :=
 		rf.log.getLastLogIndex() >= args.PrevLogIndex &&
+			rf.log.startAt <= args.PrevLogIndex &&
 			rf.log.getLogEntry(args.PrevLogIndex).Term == args.PrevLogTerm
 
 	if isPrevLogEntryIdentical {
