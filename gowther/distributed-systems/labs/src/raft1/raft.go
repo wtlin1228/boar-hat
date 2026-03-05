@@ -7,17 +7,40 @@ package raft
 // Make() creates a new raft peer that implements the raft interface.
 
 import (
-	//	"bytes"
+	"bytes"
+	"fmt"
+	"log"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	//	"6.5840/labgob"
+	"6.5840/labgob"
 	"6.5840/labrpc"
 	"6.5840/raftapi"
 	tester "6.5840/tester1"
 )
+
+type State int
+
+const (
+	Leader State = iota
+	Follower
+	Candidate
+)
+
+func (s State) String() string {
+	switch s {
+	case Leader:
+		return "Leader"
+	case Follower:
+		return "Follower"
+	case Candidate:
+		return "Candidate"
+	default:
+		return "Unknown"
+	}
+}
 
 // A Go object implementing a single Raft peer.
 type Raft struct {
@@ -31,16 +54,92 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
+	// Persistent state
+	currentTerm int
+	votedFor    int
+	log         *RaftLog
+
+	// Volatile state
+	state               State
+	commitIndex         int
+	lastApplied         int
+	nextIndex           []int
+	matchIndex          []int
+	lastAppendEntriesAt time.Time // for throttling the AppendEntries RPC calls
+	lastHeartbeatAt     time.Time // updated when an Heartbeat RPC is received
+	applyChMu           sync.Mutex
+	applyCh             chan raftapi.ApplyMsg
+	snapshot            []byte
+}
+
+func (rf *Raft) debug(format string, a ...interface{}) {
+	DPrintf("[Raft_%d] term:%d %-9s  - %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
+
+	// DPrintf(`[Raft_%d] term:%d %-9s  - %s
+	// {
+	// 	voteFor:     %d,
+	// 	commitIndex: %d,
+	// 	lastApplied: %d,
+	// 	nextIndex:   %v,
+	// 	matchIndex:  %v,
+	// 	log.startAt: %d,
+	// 	log count:   %d,
+	// 	log.data:    %+v
+	// }
+	// `, rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...),
+	// 	rf.voteFor,
+	// 	rf.commitIndex,
+	// 	rf.lastApplied,
+	// 	rf.nextIndex,
+	// 	rf.matchIndex,
+	// 	rf.log.startAt,
+	// 	rf.log.getCount(),
+	// 	rf.log.data)
+}
+
+func (rf *Raft) catchUpTerm(term int) {
+	if rf.currentTerm >= term {
+		log.Fatalf("no need to catch up term, term=%d\n", term)
+	}
+	rf.debug("catch up term, %d -> %d", rf.currentTerm, term)
+	rf.currentTerm = term
+}
+
+func (rf *Raft) voteFor(server int) {
+	rf.debug("vote for server_%d", server)
+	rf.votedFor = server
+}
+
+func (rf *Raft) changeState(state State) {
+	if rf.state == state {
+		log.Fatalf("no need to change state, state=%s\n", state)
+	}
+	rf.debug("change state, %s -> %s", rf.state, state)
+	rf.state = state
+}
+
+func (rf *Raft) increaseCommitIndex(index int) {
+	if index < rf.commitIndex {
+		log.Fatalf("commit index can only increase monotonically , %d is less than %d\n", index, rf.commitIndex)
+	}
+	rf.debug("increase commit index, %d -> %d", rf.commitIndex, index)
+	rf.commitIndex = index
+}
+
+func (rf *Raft) increaseLastApplied(index int) {
+	if index < rf.lastApplied {
+		log.Fatalf("last applied can only increase monotonically , %d is less than %d\n", index, rf.lastApplied)
+	}
+	rf.debug("increase last applied, %d -> %d", rf.lastApplied, index)
+	rf.lastApplied = index
 }
 
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
-
-	var term int
-	var isleader bool
-	// Your code here (3A).
-	return term, isleader
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	return rf.currentTerm, rf.state == Leader
 }
 
 // save Raft's persistent state to stable storage,
@@ -51,19 +150,23 @@ func (rf *Raft) GetState() (int, bool) {
 // after you've implemented snapshots, pass the current snapshot
 // (or nil if there's not yet a snapshot).
 func (rf *Raft) persist() {
-	// Your code here (3C).
-	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// raftstate := w.Bytes()
-	// rf.persister.Save(raftstate, nil)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	e.Encode(rf.log.data)
+	e.Encode(rf.log.startAt)
+	raftstate := w.Bytes()
+	if len(rf.snapshot) > 0 {
+		rf.persister.Save(raftstate, rf.snapshot)
+	} else {
+		rf.persister.Save(raftstate, nil)
+	}
 }
 
 // restore previously persisted state.
 func (rf *Raft) readPersist(data []byte) {
-	if data == nil || len(data) < 1 { // bootstrap without any state?
+	if len(data) < 1 { // bootstrap without any state?
 		return
 	}
 	// Your code here (3C).
@@ -94,6 +197,20 @@ func (rf *Raft) PersistBytes() int {
 // that index. Raft should now trim its log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (3D).
+
+}
+
+type HeartbeatArgs struct {
+	Term int // leader's term
+}
+
+type HeartbeatReply struct {
+	Term    int // currentTerm, for leader to update itself
+	Success bool
+}
+
+// example RequestVote RPC handler.
+func (rf *Raft) Heartbeat(args *HeartbeatArgs, reply *HeartbeatReply) {
 
 }
 
