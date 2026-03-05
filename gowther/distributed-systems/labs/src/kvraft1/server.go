@@ -1,6 +1,7 @@
 package kvraft
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"sync"
@@ -14,8 +15,8 @@ import (
 )
 
 type Entry struct {
-	value   string
-	version rpc.Tversion
+	Value   string
+	Version rpc.Tversion
 }
 
 type KVServer struct {
@@ -51,8 +52,8 @@ func (kv *KVServer) DoOp(req any) any {
 			reply = rpc.GetReply{Err: rpc.ErrNoKey}
 		} else {
 			reply = rpc.GetReply{
-				Value:   entry.value,
-				Version: entry.version,
+				Value:   entry.Value,
+				Version: entry.Version,
 				Err:     rpc.OK,
 			}
 		}
@@ -69,8 +70,8 @@ func (kv *KVServer) DoOp(req any) any {
 			reply = rpc.PutReply{Err: rpc.OK}
 		} else if !ok {
 			reply = rpc.PutReply{Err: rpc.ErrNoKey}
-		} else if entry.version == args.Version {
-			kv.data[args.Key] = Entry{args.Value, entry.version + 1}
+		} else if entry.Version == args.Version {
+			kv.data[args.Key] = Entry{args.Value, entry.Version + 1}
 			reply = rpc.PutReply{Err: rpc.OK}
 		} else {
 			reply = rpc.PutReply{Err: rpc.ErrVersion}
@@ -86,11 +87,28 @@ func (kv *KVServer) DoOp(req any) any {
 
 func (kv *KVServer) Snapshot() []byte {
 	// Your code here
-	return nil
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(kv.data)
+	return w.Bytes()
 }
 
 func (kv *KVServer) Restore(data []byte) {
 	// Your code here
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var decodedData map[string]Entry
+	if d.Decode(&decodedData) != nil {
+		log.Fatalln("fail to decode the restore data")
+	} else {
+		kv.data = decodedData
+	}
 }
 
 func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
@@ -152,8 +170,9 @@ func StartKVServer(servers []*labrpc.ClientEnd, gid tester.Tgid, me int, persist
 
 	kv := &KVServer{me: me}
 
-	kv.rsm = rsm.MakeRSM(servers, me, persister, maxraftstate, kv)
 	// You may need initialization code here.
 	kv.data = make(map[string]Entry)
+	kv.rsm = rsm.MakeRSM(servers, me, persister, maxraftstate, kv)
+
 	return []tester.IService{kv, kv.rsm.Raft()}
 }

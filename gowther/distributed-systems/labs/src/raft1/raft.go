@@ -369,6 +369,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	isPrevLogEntryIdentical :=
 		rf.log.getLastLogIndex() >= args.PrevLogIndex &&
+			rf.log.startAt <= args.PrevLogIndex &&
 			rf.log.getLogEntry(args.PrevLogIndex).Term == args.PrevLogTerm
 
 	if isPrevLogEntryIdentical {
@@ -454,14 +455,14 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	rf.lastHeartbeatAt = time.Now()
 	rf.state = Follower
 
-	if rf.log.startAt >= args.SnapshotIndex &&
-		!rf.log.isReplaceNeeded(args.SnapshotIndex, args.Entries) {
+	// race condition could incorrectly erase some log entries
+	if !rf.log.isReplaceNeeded(args.SnapshotIndex, args.Entries) {
+		rf.persist()
 		// already install, return true because the network is unreliable
 		reply.Success = true
 		return
 	}
 
-	// race condition could incorrectly erase some log entries
 	rf.log.installSnapshot(args.SnapshotIndex, args.Entries)
 	rf.commitIndex = max(rf.commitIndex, args.SnapshotIndex)
 	rf.lastApplied = max(rf.lastApplied, args.SnapshotIndex)
@@ -475,7 +476,17 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	msg.Snapshot = args.Snapshot
 	msg.SnapshotTerm = args.SnapshotTerm
 	msg.SnapshotIndex = args.SnapshotIndex
-	rf.applyCh <- msg
+	rf.Debug("InstallSnapshot before sending msg %+v", msg)
+	go func() {
+		rf.applyChMu.Lock()
+		if rf.killed() {
+			rf.applyChMu.Unlock()
+			return
+		}
+		rf.applyCh <- msg
+		rf.applyChMu.Unlock()
+	}()
+	rf.Debug("InstallSnapshot after sending msg %+v", msg)
 
 	reply.Success = true
 	rf.Debug("InstallSnapshot done")
@@ -684,13 +695,15 @@ func (rf *Raft) commitIfPossible() {
 	slices.Sort(matchIndexes)
 	l := len(matchIndexes)
 	commitIndex := matchIndexes[l-l/2]
-	// A leader commits entries by counting replicas only for
-	// entries from its current term.
-	if rf.log.getLogEntry(commitIndex).Term == rf.currentTerm {
-		// when the leader is just elected, matchIndexes
-		// will be reset to 0, but the commitIndex shouldn't
-		// decrease
-		rf.commitIndex = max(rf.commitIndex, commitIndex)
+
+	// when the leader is just elected, matchIndexes
+	// will be reset to 0, but the commitIndex shouldn't
+	// decrease
+	if commitIndex > rf.commitIndex &&
+		// A leader commits entries by counting replicas only for
+		// entries from its current term.
+		rf.log.getLogEntry(commitIndex).Term == rf.currentTerm {
+		rf.commitIndex = commitIndex
 	}
 }
 
@@ -805,6 +818,10 @@ func (rf *Raft) applyLogEntriesIfNeeded() {
 
 		for i := lastApplied + 1; i <= commitIndex; i++ {
 			rf.mu.Lock()
+			if i < rf.log.startAt {
+				rf.mu.Unlock()
+				continue
+			}
 			logEntry := rf.log.getLogEntry(i)
 			var msg raftapi.ApplyMsg
 			msg.CommandValid = true

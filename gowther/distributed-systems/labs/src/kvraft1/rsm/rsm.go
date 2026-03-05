@@ -73,6 +73,17 @@ func (rsm *RSM) Debug(format string, a ...interface{}) {
 	}
 }
 
+func (rsm *RSM) clearOpQueue() {
+	rsm.Debug("clear OpQueue")
+	for _, entry := range rsm.opQueue {
+		entry.ch <- OpResult{
+			val: nil,
+			ok:  false,
+		}
+	}
+	rsm.opQueue = make([]OpQueueEntry, 0)
+}
+
 func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 	rsm.mu.Lock()
 	defer rsm.mu.Unlock()
@@ -82,14 +93,7 @@ func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 	op := msg.Command.(Op)
 
 	if len(rsm.opQueue) > 0 && rsm.opQueue[0].logIndex == msg.CommandIndex && rsm.opQueue[0].op.Id != op.Id {
-		for _, entry := range rsm.opQueue {
-			entry.ch <- OpResult{
-				val: nil,
-				ok:  false,
-			}
-			rsm.Debug("remove entry %+v", entry)
-		}
-		rsm.opQueue = make([]OpQueueEntry, 0)
+		rsm.clearOpQueue()
 	}
 
 	var res any
@@ -107,6 +111,11 @@ func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 		rsm.Debug("remove entry %+v", rsm.opQueue[0])
 		rsm.opQueue = slices.Delete(rsm.opQueue, 0, 1)
 	}
+
+	if rsm.maxraftstate > -1 && rsm.Raft().PersistBytes()*10 > rsm.maxraftstate*9 {
+		rsm.Debug("create snapshot, index=%d", msg.CommandIndex)
+		rsm.Raft().Snapshot(msg.CommandIndex, rsm.sm.Snapshot())
+	}
 }
 
 func (rsm *RSM) handleSnapshot(msg raftapi.ApplyMsg) {
@@ -114,6 +123,9 @@ func (rsm *RSM) handleSnapshot(msg raftapi.ApplyMsg) {
 	defer rsm.mu.Unlock()
 
 	rsm.Debug("handle snapshot, %+v", msg)
+	rsm.sm.Restore(msg.Snapshot)
+
+	rsm.clearOpQueue()
 }
 
 // servers[] contains the ports of the set of
@@ -140,6 +152,11 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 	}
 	if !useRaftStateMachine {
 		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh)
+	}
+
+	snapshot := persister.ReadSnapshot()
+	if len(snapshot) != 0 {
+		rsm.sm.Restore(snapshot)
 	}
 
 	go func() {
@@ -173,8 +190,12 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 	// periodically submit a "No-Op" command to prevent the RSM from waiting forever
 	go func() {
 		for {
-			if rsm.lastSubmitAt.Add(1 * time.Second).Before(time.Now()) {
-go 				rsm.submit(nil, true)
+			rsm.mu.Lock()
+			lastSubmitAt := rsm.lastSubmitAt
+			rsm.mu.Unlock()
+
+			if lastSubmitAt.Add(1 * time.Second).Before(time.Now()) {
+				go rsm.submit(nil, true)
 			}
 			time.Sleep(1 * time.Second)
 		}
