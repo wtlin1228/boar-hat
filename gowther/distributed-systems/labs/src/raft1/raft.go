@@ -7,7 +7,6 @@ package raft
 // Make() creates a new raft peer that implements the raft interface.
 
 import (
-	"bytes"
 	"fmt"
 	"log"
 	"math/rand"
@@ -15,7 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"6.5840/labgob"
 	"6.5840/labrpc"
 	"6.5840/raftapi"
 	tester "6.5840/tester1"
@@ -42,6 +40,24 @@ func (s State) String() string {
 	}
 }
 
+type Entry struct {
+	Term    int
+	Command any
+}
+
+type Snapshot struct {
+	LastIncludedIndex int
+	LastIncludedTerm  int
+	StateMachineState []byte
+}
+
+func (s *Snapshot) String() string {
+	if s == nil {
+		return ""
+	}
+	return fmt.Sprintf("Snapshot{LastIncludedIndex=%d, LastIncludedTerm=%d}", s.LastIncludedIndex, s.LastIncludedTerm)
+}
+
 // A Go object implementing a single Raft peer.
 type Raft struct {
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
@@ -57,7 +73,9 @@ type Raft struct {
 	// Persistent state
 	currentTerm int
 	votedFor    int
-	log         *RaftLog
+	log         []Entry
+	logOffset   int
+	snapshot    *Snapshot
 
 	// Volatile state
 	state               State
@@ -65,11 +83,10 @@ type Raft struct {
 	lastApplied         int
 	nextIndex           []int
 	matchIndex          []int
-	lastAppendEntriesAt time.Time // for throttling the AppendEntries RPC calls
-	lastHeartbeatAt     time.Time // updated when an Heartbeat RPC is received
-	applyChMu           sync.Mutex
+	lastAppendEntriesAt time.Time  // for throttling the AppendEntries RPC calls
+	lastHeartbeatAt     time.Time  // updated when an Heartbeat RPC is received
+	applyChMu           sync.Mutex // for preventing sending on closed channel
 	applyCh             chan raftapi.ApplyMsg
-	snapshot            []byte
 }
 
 func (rf *Raft) debug(format string, a ...interface{}) {
@@ -119,19 +136,27 @@ func (rf *Raft) changeState(state State) {
 }
 
 func (rf *Raft) increaseCommitIndex(index int) {
-	if index < rf.commitIndex {
-		log.Fatalf("commit index can only increase monotonically , %d is less than %d\n", index, rf.commitIndex)
+	if index <= rf.commitIndex {
+		log.Fatalf("commit index can only increase monotonically, index=%d, rf.commitIndex=%d\n", index, rf.commitIndex)
 	}
 	rf.debug("increase commit index, %d -> %d", rf.commitIndex, index)
 	rf.commitIndex = index
 }
 
 func (rf *Raft) increaseLastApplied(index int) {
-	if index < rf.lastApplied {
-		log.Fatalf("last applied can only increase monotonically , %d is less than %d\n", index, rf.lastApplied)
+	if index <= rf.lastApplied {
+		log.Fatalf("last applied can only increase monotonically, index=%d, rf.lastApplied=%d\n", index, rf.lastApplied)
 	}
 	rf.debug("increase last applied, %d -> %d", rf.lastApplied, index)
 	rf.lastApplied = index
+}
+
+func (rf *Raft) updateSnapshot(snapshot *Snapshot) {
+	if rf.snapshot != nil && snapshot.LastIncludedIndex <= rf.snapshot.LastIncludedIndex {
+		log.Fatalf("no need to update snapshot, snapshot.LastIncludedIndex=%d, rf.snapshot.LastIncludedIndex=%d\n", snapshot.LastIncludedIndex, rf.snapshot.LastIncludedIndex)
+	}
+	rf.debug("update snapshot, %s -> %s", rf.snapshot, snapshot)
+	rf.snapshot = snapshot
 }
 
 // return currentTerm and whether this server
@@ -150,18 +175,18 @@ func (rf *Raft) GetState() (int, bool) {
 // after you've implemented snapshots, pass the current snapshot
 // (or nil if there's not yet a snapshot).
 func (rf *Raft) persist() {
-	w := new(bytes.Buffer)
-	e := labgob.NewEncoder(w)
-	e.Encode(rf.currentTerm)
-	e.Encode(rf.votedFor)
-	e.Encode(rf.log.data)
-	e.Encode(rf.log.startAt)
-	raftstate := w.Bytes()
-	if len(rf.snapshot) > 0 {
-		rf.persister.Save(raftstate, rf.snapshot)
-	} else {
-		rf.persister.Save(raftstate, nil)
-	}
+	// w := new(bytes.Buffer)
+	// e := labgob.NewEncoder(w)
+	// e.Encode(rf.currentTerm)
+	// e.Encode(rf.votedFor)
+	// e.Encode(rf.log.data)
+	// e.Encode(rf.log.startAt)
+	// raftstate := w.Bytes()
+	// if len(rf.snapshot) > 0 {
+	// 	rf.persister.Save(raftstate, rf.snapshot)
+	// } else {
+	// 	rf.persister.Save(raftstate, nil)
+	// }
 }
 
 // restore previously persisted state.
