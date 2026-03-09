@@ -40,7 +40,7 @@ func (s State) String() string {
 	}
 }
 
-type Entry struct {
+type LogEntry struct {
 	Term    int
 	Command any
 }
@@ -73,7 +73,7 @@ type Raft struct {
 	// Persistent state
 	currentTerm int
 	votedFor    int
-	log         []Entry
+	log         []LogEntry
 	logOffset   int
 	snapshot    *Snapshot
 
@@ -91,27 +91,22 @@ type Raft struct {
 
 func (rf *Raft) debug(format string, a ...interface{}) {
 	DPrintf("[Raft_%d] term:%d %-9s  - %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
+}
 
-	// DPrintf(`[Raft_%d] term:%d %-9s  - %s
-	// {
-	// 	voteFor:     %d,
-	// 	commitIndex: %d,
-	// 	lastApplied: %d,
-	// 	nextIndex:   %v,
-	// 	matchIndex:  %v,
-	// 	log.startAt: %d,
-	// 	log count:   %d,
-	// 	log.data:    %+v
-	// }
-	// `, rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...),
-	// 	rf.voteFor,
-	// 	rf.commitIndex,
-	// 	rf.lastApplied,
-	// 	rf.nextIndex,
-	// 	rf.matchIndex,
-	// 	rf.log.startAt,
-	// 	rf.log.getCount(),
-	// 	rf.log.data)
+func (rf *Raft) getLogEntry(logIndex int) *LogEntry {
+	if logIndex == 0 {
+		return &rf.log[0]
+	}
+
+	if logIndex < rf.logOffset {
+		log.Fatalf("log has been trimmed, logIndex=%d, rf.logOffset=%d\n", logIndex, rf.logOffset)
+	}
+
+	if logIndex > rf.logOffset+len(rf.log)-1 {
+		log.Fatalf("log doesn't exist, logIndex=%d, log count=%d\n", logIndex, rf.logOffset+len(rf.log)-1)
+	}
+
+	return &rf.log[logIndex-rf.logOffset]
 }
 
 func (rf *Raft) catchUpTerm(term int) {
@@ -226,34 +221,37 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 }
 
 type HeartbeatArgs struct {
-	Term int // leader's term
+	Term     int // leader's term
+	LeaderId int // so follower can redirect clients
 }
 
 type HeartbeatReply struct {
-	Term    int // currentTerm, for leader to update itself
-	Success bool
+	Term int // currentTerm, for leader to update itself
 }
 
-// example RequestVote RPC handler.
 func (rf *Raft) Heartbeat(args *HeartbeatArgs, reply *HeartbeatReply) {
 
 }
 
-// example RequestVote RPC arguments structure.
-// field names must start with capital letters!
+func (rf *Raft) sendHeartbeat(server int, args *HeartbeatArgs, reply *HeartbeatReply) bool {
+	ok := rf.peers[server].Call("Raft.Heartbeat", args, reply)
+	return ok
+}
+
 type RequestVoteArgs struct {
-	// Your data here (3A, 3B).
+	Term         int // candidate's term
+	CandidateId  int // candidate requesting vote
+	LastLogIndex int // index of candidate's last log entry (§5.4)
+	LastLogTerm  int // term of candidate's last log entry (§5.4)
 }
 
-// example RequestVote RPC reply structure.
-// field names must start with capital letters!
 type RequestVoteReply struct {
-	// Your data here (3A).
+	Term        int  // currentTerm, for candidate to update itself
+	VoteGranted bool // true means candidate received vote
 }
 
-// example RequestVote RPC handler.
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	// Your code here (3A, 3B).
+
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -285,6 +283,54 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 // the struct itself.
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+	return ok
+}
+
+type AppendEntriesArgs struct {
+	Term         int        // leader's term
+	LeaderId     int        // so follower can redirect clients
+	PrevLogIndex int        // index of log entry immediately preceding new ones
+	PrevLogTerm  int        // term of prevLogIndex entry
+	Entries      []LogEntry // log entries to store (may send more than one for efficiency)
+	LeaderCommit int        // leader's commitIndex
+}
+
+type AppendEntriesReply struct {
+	Term    int  // currentTerm, for leader to update itself
+	Success bool // true if follower contained entry matching prevLogIndex and prevLogTerm
+	XIndex  int  // faster backup: index of the first entry within XTerm
+	XTerm   int
+}
+
+func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+
+}
+
+func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+	return ok
+}
+
+type InstallSnapshotArgs struct {
+	Term              int    // leader's term
+	LeaderId          int    // so follower can redirect clients
+	lastIncludedIndex int    // the snapshot replaces all entries up through and including this index
+	LastIncludedTerm  int    // term of lastIncludedIndex
+	Offset            int    // byte offset where chunk is positioned in the snapshot file
+	Data              []byte // raw bytes of the snapshot chunk, starting at offset
+	Done              bool   // true if this is the last chunk
+}
+
+type InstallSnapshotReply struct {
+	Term int // currentTerm, for leader to update itself
+}
+
+func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapshotReply) {
+
+}
+
+func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply *InstallSnapshotReply) bool {
+	ok := rf.peers[server].Call("Raft.InstallSnapshot", args, reply)
 	return ok
 }
 
