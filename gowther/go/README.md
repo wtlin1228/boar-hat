@@ -226,3 +226,71 @@ func Schedule(servers chan string, numTask int, call func(srv string, task int) 
 	exit <- true
 }
 ```
+
+## Replicated service client
+
+```go
+type ReplicatedClient interface {
+	// Init initializes the client to use the given servers.
+	// To make a particular request later,
+	// the client can use callOne(srv, args), where srv
+	// is one of the servers from the list.
+	Init(servers []string, callOne func(string, Args) Reply)
+
+	// Multiple goroutines may call Call concurrently.
+	// Call makes a request on any available server.
+	Call(args Args) Reply
+}
+
+type Client struct {
+	servers []string
+	callOne func(string, Args) Reply
+
+	mu     sync.Mutex
+	prefer int
+}
+
+func (c *Client) Init(servers []string, callOne func(string, Args) Reply) {
+	c.servers = servers
+	c.callOne = callOne
+}
+
+func (c *Client) Call(args Args) Reply {
+	type result struct {
+		serverId int
+		reply    Reply
+	}
+
+	const timeout = 1 * time.Second
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+
+	done := make(chan result, len(c.servers))
+
+	c.mu.Lock()
+	prefer := c.prefer
+	c.mu.Unlock()
+
+	var r result
+	for offset := 0; offset < len(c.servers); offset++ {
+		id := (offset + prefer) % len(c.servers)
+		go func() {
+			done <- result{id, c.callOne(c.servers[id], args)}
+		}()
+
+		select {
+		case r = <-done:
+			goto Done
+		case <-t.C:
+			t.Reset(timeout)
+		}
+	}
+
+	r = <-done
+Done:
+	c.mu.Lock()
+	c.prefer = r.serverId
+	c.mu.Unlock()
+	return r.reply
+}
+```
