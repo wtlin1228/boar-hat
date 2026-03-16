@@ -19,6 +19,14 @@ import (
 	tester "6.5840/tester1"
 )
 
+const (
+	ElectionTimeout time.Duration = 300 * time.Microsecond
+)
+
+const (
+	NoVote = -1
+)
+
 type State int
 
 const (
@@ -109,6 +117,26 @@ func (rf *Raft) getLogEntry(logIndex int) *LogEntry {
 	return &rf.log[logIndex-rf.logOffset]
 }
 
+func (rf *Raft) getLastLogEntryIndexAndTerm() (index int, term int) {
+	if rf.logOffset == 0 {
+		// not trimmed yet, return the last one
+		return len(rf.log) - 1, rf.log[len(rf.log)-1].Term
+	}
+
+	if len(rf.log) == 1 {
+		// no new log entry after trimmed, return snapshot's last included one
+		return rf.snapshot.LastIncludedIndex, rf.snapshot.LastIncludedTerm
+	}
+
+	// new log entries after trimmed, return the last one
+	return len(rf.log) - 1 + rf.logOffset, rf.log[len(rf.log)-1].Term
+}
+
+func (rf *Raft) incrementTerm() {
+	rf.debug("increment current term, %d -> %d", rf.currentTerm, rf.currentTerm+1)
+	rf.currentTerm = rf.currentTerm + 1
+}
+
 func (rf *Raft) catchUpTerm(term int) {
 	if rf.currentTerm >= term {
 		log.Fatalf("no need to catch up term, term=%d\n", term)
@@ -128,6 +156,21 @@ func (rf *Raft) changeState(state State) {
 	}
 	rf.debug("change state, %s -> %s", rf.state, state)
 	rf.state = state
+}
+
+func (rf *Raft) initNextIndex() {
+	index, _ := rf.getLastLogEntryIndexAndTerm()
+	rf.debug("initialize next index, %d", index)
+	for i := range len(rf.peers) {
+		rf.nextIndex[i] = index + 1
+	}
+}
+
+func (rf *Raft) initMatchIndex() {
+	rf.debug("initialize match index to 0")
+	for i := range len(rf.peers) {
+		rf.matchIndex[i] = 0
+	}
 }
 
 func (rf *Raft) increaseCommitIndex(index int) {
@@ -375,11 +418,80 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
-func (rf *Raft) ticker() {
-	for rf.killed() == false {
+func (rf *Raft) startElection(args RequestVoteArgs) {
+	done := make(chan bool)
 
-		// Your code here (3A)
-		// Check if a leader election should be started.
+	winElection := func() {
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
+
+		if rf.currentTerm != args.Term || rf.state != Candidate {
+			return
+		}
+
+		rf.changeState(Leader)
+		rf.initMatchIndex()
+		rf.initNextIndex()
+	}
+
+	requestVote := func(server int) {
+		reply := RequestVoteReply{}
+		ok := rf.sendRequestVote(server, &args, &reply)
+		if !ok {
+			done <- false
+			return
+		}
+
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
+
+		if rf.currentTerm < reply.Term {
+			rf.catchUpTerm(reply.Term)
+			rf.voteFor(NoVote)
+			if rf.state != Follower {
+				rf.changeState(Follower)
+			}
+			rf.persist()
+			done <- false
+			return
+		}
+
+		done <- reply.VoteGranted
+	}
+
+	for server := range len(rf.peers) {
+		if server != rf.me {
+			go requestVote(server)
+		}
+	}
+
+	count := 1
+	for i := 0; i < len(rf.peers)-1; i++ {
+		voteGranted := <-done
+		if voteGranted {
+			count += 1
+			if count > len(rf.peers)/2 {
+				winElection()
+				return
+			}
+		}
+	}
+}
+
+func (rf *Raft) electionLoop() {
+	for rf.killed() == false {
+		rf.mu.Lock()
+		if rf.state == Follower && rf.lastHeartbeatAt.Add(ElectionTimeout).Before(time.Now()) {
+			rf.changeState(Candidate)
+		}
+		if rf.state == Candidate {
+			rf.incrementTerm()
+			rf.voteFor(rf.me)
+			rf.persist()
+			index, term := rf.getLastLogEntryIndexAndTerm()
+			go rf.startElection(RequestVoteArgs{rf.currentTerm, rf.me, index, term})
+		}
+		rf.mu.Unlock()
 
 		// pause for a random amount of time between 50 and 350
 		// milliseconds.
@@ -410,7 +522,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.readPersist(persister.ReadRaftState())
 
 	// start ticker goroutine to start elections
-	go rf.ticker()
+	go rf.electionLoop()
 
 	return rf
 }
