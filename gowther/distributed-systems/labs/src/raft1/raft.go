@@ -20,7 +20,8 @@ import (
 )
 
 const (
-	ElectionTimeout time.Duration = 300 * time.Microsecond
+	ElectionTimeout   time.Duration = 300 * time.Millisecond
+	HeartbeatInterval time.Duration = 100 * time.Millisecond
 )
 
 const (
@@ -160,7 +161,7 @@ func (rf *Raft) changeState(state State) {
 
 func (rf *Raft) initNextIndex() {
 	index, _ := rf.getLastLogEntryIndexAndTerm()
-	rf.debug("initialize next index, %d", index)
+	rf.debug("initialize next index to %d", index+1)
 	for i := range len(rf.peers) {
 		rf.nextIndex[i] = index + 1
 	}
@@ -195,6 +196,16 @@ func (rf *Raft) updateSnapshot(snapshot *Snapshot) {
 	}
 	rf.debug("update snapshot, %s -> %s", rf.snapshot, snapshot)
 	rf.snapshot = snapshot
+}
+
+func (rf *Raft) stepDownAsFollower(term int) {
+	rf.debug("step down as follower")
+	rf.catchUpTerm(term)
+	rf.voteFor(NoVote)
+	if rf.state != Follower {
+		rf.changeState(Follower)
+	}
+	rf.persist()
 }
 
 // return currentTerm and whether this server
@@ -273,7 +284,17 @@ type HeartbeatReply struct {
 }
 
 func (rf *Raft) Heartbeat(args *HeartbeatArgs, reply *HeartbeatReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
+	rf.debug("handle Heartbeat, args=%+v", args)
+
+	if args.Term < rf.currentTerm {
+		reply.Term = rf.currentTerm
+		return
+	}
+
+	rf.lastHeartbeatAt = time.Now()
 }
 
 func (rf *Raft) sendHeartbeat(server int, args *HeartbeatArgs, reply *HeartbeatReply) bool {
@@ -294,7 +315,40 @@ type RequestVoteReply struct {
 }
 
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
+	rf.debug("handle RequestVote, args=%+v", args)
+
+	if args.Term <= rf.currentTerm {
+		reply.Term = rf.currentTerm
+		reply.VoteGranted = false
+		return
+	}
+
+	rf.catchUpTerm(args.Term)
+	if rf.state != Follower {
+		rf.changeState(Follower)
+	}
+
+	lastLogIndex, lastLogTerm := rf.getLastLogEntryIndexAndTerm()
+	isMyLogMoreUpToDate :=
+		// If the logs have last entries with different terms,
+		// then the log with the later term is more up-to-date.
+		args.LastLogTerm < lastLogTerm ||
+			// If the logs end with the same term, then whichever
+			// log is longer is more up-to-date.
+			(args.LastLogTerm == lastLogTerm && args.LastLogIndex < lastLogIndex)
+
+	if isMyLogMoreUpToDate {
+		rf.voteFor(NoVote)
+		reply.VoteGranted = false
+	} else {
+		rf.voteFor(args.CandidateId)
+		reply.VoteGranted = true
+	}
+
+	rf.persist()
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -421,7 +475,13 @@ func (rf *Raft) killed() bool {
 func (rf *Raft) startElection(args RequestVoteArgs) {
 	done := make(chan bool)
 
+	win := false
 	winElection := func() {
+		if win == true {
+			return
+		}
+		win = true
+
 		rf.mu.Lock()
 		defer rf.mu.Unlock()
 
@@ -446,12 +506,7 @@ func (rf *Raft) startElection(args RequestVoteArgs) {
 		defer rf.mu.Unlock()
 
 		if rf.currentTerm < reply.Term {
-			rf.catchUpTerm(reply.Term)
-			rf.voteFor(NoVote)
-			if rf.state != Follower {
-				rf.changeState(Follower)
-			}
-			rf.persist()
+			rf.stepDownAsFollower(reply.Term)
 			done <- false
 			return
 		}
@@ -472,7 +527,6 @@ func (rf *Raft) startElection(args RequestVoteArgs) {
 			count += 1
 			if count > len(rf.peers)/2 {
 				winElection()
-				return
 			}
 		}
 	}
@@ -500,6 +554,42 @@ func (rf *Raft) electionLoop() {
 	}
 }
 
+func (rf *Raft) startHeartbeat(args HeartbeatArgs) {
+	send := func(server int) {
+		reply := HeartbeatReply{}
+		ok := rf.sendHeartbeat(server, &args, &reply)
+		if !ok {
+			return
+		}
+
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
+
+		if rf.currentTerm < reply.Term {
+			rf.stepDownAsFollower(reply.Term)
+			return
+		}
+	}
+
+	for server := range len(rf.peers) {
+		if server != rf.me {
+			go send(server)
+		}
+	}
+}
+
+func (rf *Raft) heartbeatLoop() {
+	for rf.killed() == false {
+		rf.mu.Lock()
+		if rf.state == Leader {
+			go rf.startHeartbeat(HeartbeatArgs{rf.currentTerm, rf.me})
+		}
+		rf.mu.Unlock()
+
+		time.Sleep(HeartbeatInterval)
+	}
+}
+
 // the service or tester wants to create a Raft server. the ports
 // of all the Raft servers (including this one) are in peers[]. this
 // server's port is peers[me]. all the servers' peers[] arrays
@@ -516,13 +606,28 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.persister = persister
 	rf.me = me
 
-	// Your initialization code here (3A, 3B, 3C).
-
+	// Persistent state
+	rf.currentTerm = 0
+	rf.votedFor = NoVote
+	rf.log = []LogEntry{
+		{Term: 0, Command: nil},
+	}
+	rf.logOffset = 0
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	// start ticker goroutine to start elections
+	// Volatile state
+	rf.state = Follower
+	rf.commitIndex = 0
+	rf.lastApplied = 0
+	rf.nextIndex = make([]int, len(peers))
+	rf.matchIndex = make([]int, len(peers))
+	rf.lastAppendEntriesAt = time.Now()
+	rf.lastHeartbeatAt = time.Now()
+	rf.applyCh = applyCh
+
 	go rf.electionLoop()
+	go rf.heartbeatLoop()
 
 	return rf
 }
