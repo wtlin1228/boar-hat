@@ -87,19 +87,27 @@ type Raft struct {
 	snapshot    *Snapshot
 
 	// Volatile state
-	state               State
-	commitIndex         int
-	lastApplied         int
-	nextIndex           []int
-	matchIndex          []int
-	lastAppendEntriesAt time.Time  // for throttling the AppendEntries RPC calls
-	lastHeartbeatAt     time.Time  // updated when an Heartbeat RPC is received
-	applyChMu           sync.Mutex // for preventing sending on closed channel
-	applyCh             chan raftapi.ApplyMsg
+	state           State
+	commitIndex     int
+	lastApplied     int
+	nextIndex       []int
+	matchIndex      []int
+	lastSyncLogAt   time.Time  // for throttling the AppendEntries and InstallSnapshot RPC calls
+	lastHeartbeatAt time.Time  // updated when an Heartbeat RPC is received
+	applyChMu       sync.Mutex // for preventing sending on closed channel
+	applyCh         chan raftapi.ApplyMsg
 }
 
 func (rf *Raft) debug(format string, a ...interface{}) {
 	DPrintf("[Raft_%d] term:%d %-9s  - %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
+}
+
+func (rf *Raft) debugWithLock(format string, a ...interface{}) {
+	if Debug {
+		rf.mu.Lock()
+		DPrintf("[Raft_%d] term:%d %-9s  - %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
+		rf.mu.Unlock()
+	}
 }
 
 func (rf *Raft) getLogEntry(logIndex int) *LogEntry {
@@ -298,7 +306,12 @@ func (rf *Raft) Heartbeat(args *HeartbeatArgs, reply *HeartbeatReply) {
 }
 
 func (rf *Raft) sendHeartbeat(server int, args *HeartbeatArgs, reply *HeartbeatReply) bool {
+	rf.debugWithLock("--- Heartbeat ---> %d, term=%d", server, args.Term)
+
 	ok := rf.peers[server].Call("Raft.Heartbeat", args, reply)
+
+	rf.debugWithLock("<-- Heartbeat ---- %d, term=%d, reply=%+v", server, args.Term, reply)
+
 	return ok
 }
 
@@ -379,7 +392,14 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 // that the caller passes the address of the reply struct with &, not
 // the struct itself.
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
+	rf.debugWithLock("--- RequestVote ---> %d, term=%d, lastLogIndex=%d, lastLogTerm=%d",
+		server, args.Term, args.LastLogIndex, args.LastLogTerm)
+
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+
+	rf.debugWithLock("<-- RequestVote ---- %d, term=%d, lastLogIndex=%d, lastLogTerm=%d, reply=%+v",
+		server, args.Term, args.LastLogIndex, args.LastLogTerm, reply)
+
 	return ok
 }
 
@@ -473,15 +493,11 @@ func (rf *Raft) killed() bool {
 }
 
 func (rf *Raft) startElection(args RequestVoteArgs) {
+	rf.debugWithLock("start election for term %d", args.Term)
+
 	done := make(chan bool)
 
-	win := false
 	winElection := func() {
-		if win == true {
-			return
-		}
-		win = true
-
 		rf.mu.Lock()
 		defer rf.mu.Unlock()
 
@@ -492,6 +508,8 @@ func (rf *Raft) startElection(args RequestVoteArgs) {
 		rf.changeState(Leader)
 		rf.initMatchIndex()
 		rf.initNextIndex()
+
+		go rf.startHeartbeat(HeartbeatArgs{rf.currentTerm, rf.me})
 	}
 
 	requestVote := func(server int) {
@@ -503,14 +521,21 @@ func (rf *Raft) startElection(args RequestVoteArgs) {
 		}
 
 		rf.mu.Lock()
-		defer rf.mu.Unlock()
+
+		if rf.currentTerm != args.Term {
+			done <- false
+			rf.mu.Unlock()
+			return
+		}
 
 		if rf.currentTerm < reply.Term {
 			rf.stepDownAsFollower(reply.Term)
+			rf.mu.Unlock()
 			done <- false
 			return
 		}
 
+		rf.mu.Unlock()
 		done <- reply.VoteGranted
 	}
 
@@ -521,15 +546,19 @@ func (rf *Raft) startElection(args RequestVoteArgs) {
 	}
 
 	count := 1
+	finished := false
 	for i := 0; i < len(rf.peers)-1; i++ {
 		voteGranted := <-done
 		if voteGranted {
 			count += 1
-			if count > len(rf.peers)/2 {
+			if finished == false && count > len(rf.peers)/2 {
+				finished = true
 				winElection()
 			}
 		}
 	}
+
+	close(done)
 }
 
 func (rf *Raft) electionLoop() {
@@ -555,6 +584,8 @@ func (rf *Raft) electionLoop() {
 }
 
 func (rf *Raft) startHeartbeat(args HeartbeatArgs) {
+	rf.debugWithLock("start heartbeat for term %d", args.Term)
+
 	send := func(server int) {
 		reply := HeartbeatReply{}
 		ok := rf.sendHeartbeat(server, &args, &reply)
@@ -581,7 +612,7 @@ func (rf *Raft) startHeartbeat(args HeartbeatArgs) {
 func (rf *Raft) heartbeatLoop() {
 	for rf.killed() == false {
 		rf.mu.Lock()
-		if rf.state == Leader {
+		if rf.state == Leader && rf.lastSyncLogAt.Add(HeartbeatInterval).Before(time.Now()) {
 			go rf.startHeartbeat(HeartbeatArgs{rf.currentTerm, rf.me})
 		}
 		rf.mu.Unlock()
@@ -622,7 +653,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.lastApplied = 0
 	rf.nextIndex = make([]int, len(peers))
 	rf.matchIndex = make([]int, len(peers))
-	rf.lastAppendEntriesAt = time.Now()
+	rf.lastSyncLogAt = time.Now()
 	rf.lastHeartbeatAt = time.Now()
 	rf.applyCh = applyCh
 
