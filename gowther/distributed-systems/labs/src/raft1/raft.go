@@ -22,6 +22,7 @@ import (
 const (
 	ElectionTimeout   time.Duration = 300 * time.Millisecond
 	HeartbeatInterval time.Duration = 100 * time.Millisecond
+	ApplyLogInterval  time.Duration = 10 * time.Millisecond
 )
 
 const (
@@ -98,13 +99,13 @@ type Raft struct {
 }
 
 func (rf *Raft) debug(format string, a ...interface{}) {
-	DPrintf("[Raft_%d] term:%d %-9s  - %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
+	DPrintf("[Raft_%d] term:%d %-9s | %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
 }
 
 func (rf *Raft) debugWithLock(format string, a ...interface{}) {
 	if Debug {
 		rf.mu.Lock()
-		DPrintf("[Raft_%d] term:%d %-9s  - %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
+		rf.debug(format, a...)
 		rf.mu.Unlock()
 	}
 }
@@ -159,12 +160,22 @@ func (rf *Raft) getLastLogEntryIndexAndTerm() (index int, term int) {
 	return rf.getSnapshotLastIncludedIndex() + len(rf.log) - 1, rf.log[len(rf.log)-1].Term
 }
 
+func (rf *Raft) appendLogEntry(logEntry LogEntry) {
+	rf.debug("append log entry, %+v", logEntry)
+	rf.log = append(rf.log, logEntry)
+}
+
+func (rf *Raft) replaceLogEntry(logIndex int, logEntry LogEntry) {
+	rf.debug("replace #%d log entry, %+v -> %+v", logIndex, rf.getLogEntry(logIndex), logEntry)
+	rf.log[logIndex] = logEntry
+}
+
 func (rf *Raft) submitNoOpCommand() {
 	if rf.state != Leader {
 		log.Fatalf("can only submit command to a leader, command=NoOp\n")
 	}
 	rf.debug("submit a NoOp command")
-	rf.log = append(rf.log, LogEntry{rf.currentTerm, nil})
+	rf.appendLogEntry(LogEntry{rf.currentTerm, nil})
 }
 
 func (rf *Raft) incrementTerm() {
@@ -482,14 +493,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		for i := range len(args.Entries) {
 			logIndex := args.PrevLogIndex + 1 + i
 			if logIndex > lastIndex {
-				rf.log = append(rf.log, args.Entries[i])
+				rf.appendLogEntry(args.Entries[i])
 			} else {
-				rf.log[logIndex] = args.Entries[i]
+				rf.replaceLogEntry(logIndex, args.Entries[i])
 			}
 		}
 		if args.LeaderCommit > rf.commitIndex {
 			rf.increaseCommitIndex(args.LeaderCommit)
-			// TODO: apply the committed logs
 		}
 		reply.Success = true
 	}
@@ -840,6 +850,37 @@ func (rf *Raft) heartbeatLoop() {
 	}
 }
 
+func (rf *Raft) applyLogEntries() {
+	rf.mu.Lock()
+	lastApplied := rf.lastApplied
+	commitIndex := rf.commitIndex
+	rf.mu.Unlock()
+
+	for i := lastApplied + 1; i <= commitIndex; i++ {
+		rf.mu.Lock()
+		logEntry := rf.getLogEntry(i)
+		rf.mu.Unlock()
+		if logEntry.Command != nil {
+			rf.debugWithLock("apply log entry, %+v", logEntry)
+			rf.applyCh <- raftapi.ApplyMsg{
+				CommandValid: true,
+				Command:      logEntry.Command,
+				CommandIndex: i,
+			}
+			rf.mu.Lock()
+			rf.increaseLastApplied(i)
+			rf.mu.Unlock()
+		}
+	}
+}
+
+func (rf *Raft) applyLogLoop() {
+	for rf.killed() == false {
+		rf.applyLogEntries()
+		time.Sleep(ApplyLogInterval)
+	}
+}
+
 // the service or tester wants to create a Raft server. the ports
 // of all the Raft servers (including this one) are in peers[]. this
 // server's port is peers[me]. all the servers' peers[] arrays
@@ -877,6 +918,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	go rf.electionLoop()
 	go rf.heartbeatLoop()
+	go rf.applyLogLoop()
 
 	return rf
 }
