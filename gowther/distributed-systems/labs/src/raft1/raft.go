@@ -161,7 +161,7 @@ func (rf *Raft) getLastLogEntryIndexAndTerm() (index int, term int) {
 }
 
 func (rf *Raft) appendLogEntry(logEntry LogEntry) {
-	rf.debug("append log entry, %+v", logEntry)
+	rf.debug("append #%d log entry, %+v", rf.getSnapshotLastIncludedIndex()+len(rf.log), logEntry)
 	rf.log = append(rf.log, logEntry)
 }
 
@@ -230,7 +230,8 @@ func (rf *Raft) increaseCommitIndex(index int) {
 func (rf *Raft) commitIfPossible() {
 	matchIndex := slices.Clone(rf.matchIndex)
 	slices.Sort(matchIndex)
-	commitIndex := matchIndex[len(matchIndex)/2]
+	l := len(matchIndex)
+	commitIndex := matchIndex[l-l/2]
 	if commitIndex > rf.commitIndex {
 		rf.increaseCommitIndex(commitIndex)
 	}
@@ -489,13 +490,31 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		reply.XIndex = xIndex
 		reply.XTerm = xTerm
 	} else {
+		maybeNeedCleanUp := false
+		lastReplacedIndex := -1
 		lastIndex, _ := rf.getLastLogEntryIndexAndTerm()
 		for i := range len(args.Entries) {
 			logIndex := args.PrevLogIndex + 1 + i
 			if logIndex > lastIndex {
 				rf.appendLogEntry(args.Entries[i])
+				maybeNeedCleanUp = false
 			} else {
 				rf.replaceLogEntry(logIndex, args.Entries[i])
+				lastReplacedIndex = logIndex
+				maybeNeedCleanUp = true
+			}
+		}
+		if maybeNeedCleanUp {
+			lastIndex, _ := rf.getLastLogEntryIndexAndTerm()
+			for i := lastReplacedIndex + 1; i <= lastIndex; i++ {
+				logEntry := rf.getLogEntry(i)
+				if logEntry.Term < args.Entries[len(args.Entries)-1].Term {
+					rf.debug("the term of #%d entry %+v is smaller than the term of #%d entry (last replaced entry) %+v",
+						i, logEntry, lastReplacedIndex, args.Entries[len(args.Entries)-1])
+					rf.debug("do clean up, log %+v -> log %+v", rf.log, rf.log[:i])
+					rf.log = rf.log[:i]
+					break
+				}
 			}
 		}
 		if args.LeaderCommit > rf.commitIndex {
@@ -609,14 +628,24 @@ func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply
 // if it's ever committed. the second return value is the current
 // term. the third return value is true if this server believes it is
 // the leader.
-func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
-	isLeader := true
+func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
-	// Your code here (3B).
+	if rf.state != Leader {
+		return -1, -1, false
+	}
 
-	return index, term, isLeader
+	rf.appendLogEntry(LogEntry{
+		Term:    rf.currentTerm,
+		Command: command,
+	})
+
+	lastIndex, lastTerm := rf.getLastLogEntryIndexAndTerm()
+
+	go rf.startSyncLog()
+
+	return lastIndex, lastTerm, true
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
@@ -654,7 +683,9 @@ func (rf *Raft) startElection(args RequestVoteArgs) {
 		rf.changeState(Leader)
 		rf.initMatchIndex()
 		rf.initNextIndex()
-		rf.submitNoOpCommand()
+		// from paper: leader commits a no-op entry at the start of its term
+		// but it will fail the 2B test, so let's disable it for now
+		// rf.submitNoOpCommand()
 		rf.persist()
 
 		go rf.startSyncLog()
@@ -859,18 +890,19 @@ func (rf *Raft) applyLogEntries() {
 	for i := lastApplied + 1; i <= commitIndex; i++ {
 		rf.mu.Lock()
 		logEntry := rf.getLogEntry(i)
+		command := logEntry.Command
+		rf.debug("apply #%d log entry, %+v", i, logEntry)
 		rf.mu.Unlock()
-		if logEntry.Command != nil {
-			rf.debugWithLock("apply log entry, %+v", logEntry)
+		if command != nil {
 			rf.applyCh <- raftapi.ApplyMsg{
 				CommandValid: true,
-				Command:      logEntry.Command,
+				Command:      command,
 				CommandIndex: i,
 			}
-			rf.mu.Lock()
-			rf.increaseLastApplied(i)
-			rf.mu.Unlock()
 		}
+		rf.mu.Lock()
+		rf.increaseLastApplied(i)
+		rf.mu.Unlock()
 	}
 }
 
