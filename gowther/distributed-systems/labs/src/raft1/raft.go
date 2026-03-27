@@ -375,6 +375,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.voteFor(NoVote)
 		reply.VoteGranted = false
 	} else {
+		rf.updateLastHeartbeatAt()
 		rf.voteFor(args.CandidateId)
 		reply.VoteGranted = true
 	}
