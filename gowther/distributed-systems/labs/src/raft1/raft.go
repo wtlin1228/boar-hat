@@ -285,6 +285,8 @@ func (rf *Raft) GetState() (int, bool) {
 // after you've implemented snapshots, pass the current snapshot
 // (or nil if there's not yet a snapshot).
 func (rf *Raft) persist() {
+	rf.debug("persist, currentTerm=%d, votedFor=%d, log=%d, snapshot=%+v",
+		rf.currentTerm, rf.votedFor, rf.log, rf.snapshot)
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
 	e.Encode(rf.currentTerm)
@@ -663,6 +665,7 @@ func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) 
 		Term:    rf.currentTerm,
 		Command: command,
 	})
+	rf.persist()
 
 	lastIndex, lastTerm := rf.getLastLogEntryIndexAndTerm()
 
@@ -889,7 +892,7 @@ func (rf *Raft) startSyncLog() {
 					LeaderId:     rf.me,
 					PrevLogIndex: nextIndex - 1,
 					PrevLogTerm:  rf.getLogEntryTerm(nextIndex - 1),
-					Entries:      rf.log[nextIndex-rf.getSnapshotLastIncludedIndex():],
+					Entries:      append([]LogEntry{}, rf.log[nextIndex-rf.getSnapshotLastIncludedIndex():]...),
 					LeaderCommit: rf.commitIndex,
 				})
 			}
