@@ -6,6 +6,7 @@ package raft
 // - success
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"math/rand"
@@ -14,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"6.5840/labgob"
 	"6.5840/labrpc"
 	"6.5840/raftapi"
 	tester "6.5840/tester1"
@@ -283,18 +285,22 @@ func (rf *Raft) GetState() (int, bool) {
 // after you've implemented snapshots, pass the current snapshot
 // (or nil if there's not yet a snapshot).
 func (rf *Raft) persist() {
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.currentTerm)
-	// e.Encode(rf.votedFor)
-	// e.Encode(rf.log.data)
-	// e.Encode(rf.log.startAt)
-	// raftstate := w.Bytes()
-	// if len(rf.snapshot) > 0 {
-	// 	rf.persister.Save(raftstate, rf.snapshot)
-	// } else {
-	// 	rf.persister.Save(raftstate, nil)
-	// }
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	e.Encode(rf.log)
+	if rf.snapshot != nil {
+		e.Encode(rf.snapshot.LastIncludedIndex)
+		e.Encode(rf.snapshot.LastIncludedTerm)
+		raftstate := w.Bytes()
+		rf.persister.Save(raftstate, rf.snapshot.StateMachineState)
+	} else {
+		e.Encode(0)
+		e.Encode(0)
+		raftstate := w.Bytes()
+		rf.persister.Save(raftstate, nil)
+	}
 }
 
 // restore previously persisted state.
@@ -302,19 +308,35 @@ func (rf *Raft) readPersist(data []byte) {
 	if len(data) < 1 { // bootstrap without any state?
 		return
 	}
-	// Your code here (3C).
-	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var currentTerm int
+	var votedFor int
+	var rfLog []LogEntry
+	var lastIncludedIndex int
+	var lastIncludedTerm int
+	if d.Decode(&currentTerm) != nil ||
+		d.Decode(&votedFor) != nil ||
+		d.Decode(&rfLog) != nil ||
+		d.Decode(&lastIncludedIndex) != nil ||
+		d.Decode(&lastIncludedTerm) != nil {
+		log.Fatalln("fail to decode the persist data")
+	} else {
+		rf.currentTerm = currentTerm
+		rf.votedFor = votedFor
+		rf.log = rfLog
+		if lastIncludedIndex != 0 {
+			stateMachineState := rf.persister.ReadRaftState()
+			if len(stateMachineState) == 0 {
+				log.Fatalln("fail to decode the stateMachineState")
+			}
+			rf.snapshot = &Snapshot{
+				LastIncludedIndex: lastIncludedIndex,
+				LastIncludedTerm:  lastIncludedTerm,
+				StateMachineState: stateMachineState,
+			}
+		}
+	}
 }
 
 // how many bytes in Raft's persisted log?
@@ -948,6 +970,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.lastSyncLogAt = time.Now()
 	rf.lastHeartbeatAt = time.Now()
 	rf.applyCh = applyCh
+
+	rf.debug("Make Raft, currentTerm=%d, log=%+v, snapshot=%+v", rf.currentTerm, rf.log, rf.snapshot)
 
 	go rf.electionLoop()
 	go rf.heartbeatLoop()
