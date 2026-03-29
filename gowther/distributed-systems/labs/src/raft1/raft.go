@@ -337,6 +337,8 @@ func (rf *Raft) readPersist(data []byte) {
 				LastIncludedTerm:  lastIncludedTerm,
 				StateMachineState: stateMachineState,
 			}
+			rf.lastApplied = lastIncludedIndex
+			rf.commitIndex = lastIncludedIndex
 		}
 	}
 }
@@ -606,27 +608,23 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 			LastIncludedTerm:  args.LastIncludedTerm,
 			StateMachineState: args.Data,
 		})
-		rf.persist()
-
-		go func() {
-			rf.applyCh <- raftapi.ApplyMsg{
-				SnapshotValid: true,
-				Snapshot:      args.Data,
-				SnapshotTerm:  args.LastIncludedTerm,
-				SnapshotIndex: args.LastIncludedIndex,
-			}
-			rf.mu.Lock()
-			defer rf.mu.Unlock()
-			if args.LastIncludedIndex > rf.lastApplied {
-				rf.increaseLastApplied(args.LastIncludedIndex)
-			}
-			if args.LastIncludedIndex > rf.commitIndex {
-				rf.increaseCommitIndex(args.LastIncludedIndex)
-			}
-		}()
+		rf.applyCh <- raftapi.ApplyMsg{
+			SnapshotValid: true,
+			Snapshot:      args.Data,
+			SnapshotTerm:  args.LastIncludedTerm,
+			SnapshotIndex: args.LastIncludedIndex,
+		}
+		if args.LastIncludedIndex > rf.lastApplied {
+			rf.increaseLastApplied(args.LastIncludedIndex)
+		}
+		if args.LastIncludedIndex > rf.commitIndex {
+			rf.increaseCommitIndex(args.LastIncludedIndex)
+		}
 
 		reply.Success = true
 	}
+
+	rf.persist()
 }
 
 func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply *InstallSnapshotReply) bool {
@@ -909,16 +907,10 @@ func (rf *Raft) heartbeatLoop() {
 
 func (rf *Raft) applyLogEntries() {
 	rf.mu.Lock()
-	lastApplied := rf.lastApplied
-	commitIndex := rf.commitIndex
-	rf.mu.Unlock()
+	defer rf.mu.Unlock()
 
-	for i := lastApplied + 1; i <= commitIndex; i++ {
-		rf.mu.Lock()
-		logEntry := rf.getLogEntry(i)
-		command := logEntry.Command
-		rf.debug("apply #%d log entry, %+v", i, logEntry)
-		rf.mu.Unlock()
+	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+		command := rf.getLogEntry(i).Command
 		if command != nil {
 			rf.applyCh <- raftapi.ApplyMsg{
 				CommandValid: true,
@@ -926,9 +918,7 @@ func (rf *Raft) applyLogEntries() {
 				CommandIndex: i,
 			}
 		}
-		rf.mu.Lock()
 		rf.increaseLastApplied(i)
-		rf.mu.Unlock()
 	}
 }
 
@@ -961,8 +951,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.log = []LogEntry{
 		{Term: 0, Command: nil},
 	}
-	// initialize from state persisted before a crash
-	rf.readPersist(persister.ReadRaftState())
 
 	// Volatile state
 	rf.state = Follower
@@ -973,6 +961,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.lastSyncLogAt = time.Now()
 	rf.lastHeartbeatAt = time.Now()
 	rf.applyCh = applyCh
+
+	// initialize from state persisted before a crash
+	rf.readPersist(persister.ReadRaftState())
 
 	rf.debug("Make Raft, currentTerm=%d, log=%+v, snapshot=%+v", rf.currentTerm, rf.log, rf.snapshot)
 
