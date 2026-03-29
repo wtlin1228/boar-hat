@@ -214,11 +214,21 @@ func (rf *Raft) initNextIndex() {
 	}
 }
 
+func (rf *Raft) updateNextIndex(server int, index int) {
+	rf.debug("update nextIndex[%d], %d -> %d", server, rf.nextIndex[server], index)
+	rf.nextIndex[server] = index
+}
+
 func (rf *Raft) initMatchIndex() {
 	rf.debug("initialize match index to 0")
 	for i := range len(rf.peers) {
 		rf.matchIndex[i] = 0
 	}
+}
+
+func (rf *Raft) updateMatchIndex(server int, index int) {
+	rf.debug("update matchIndex[%d], %d -> %d", server, rf.matchIndex[server], index)
+	rf.matchIndex[server] = index
 }
 
 func (rf *Raft) increaseCommitIndex(index int) {
@@ -355,8 +365,26 @@ func (rf *Raft) PersistBytes() int {
 // service no longer needs the log through (and including)
 // that index. Raft should now trim its log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
-	// Your code here (3D).
+	go func() {
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
 
+		rf.debug("Snapshot(%d)", index)
+
+		if index <= rf.getSnapshotLastIncludedIndex() {
+			rf.debug("No need to do snapshot, snapshot.lastIncludedIndex=%d", rf.getSnapshotLastIncludedIndex())
+			return
+		}
+
+		logEntry := rf.getLogEntry(index)
+		rf.updateSnapshot(Snapshot{
+			LastIncludedIndex: index,
+			LastIncludedTerm:  logEntry.Term,
+			StateMachineState: snapshot,
+		})
+
+		rf.persist()
+	}()
 }
 
 type RequestVoteArgs struct {
@@ -525,7 +553,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			if logIndex > lastIndex {
 				rf.appendLogEntry(args.Entries[i])
 				maybeNeedCleanUp = false
-			} else {
+			} else if rf.getLogEntry(logIndex).Term != args.Entries[i].Term {
 				rf.replaceLogEntry(logIndex, args.Entries[i])
 				lastReplacedIndex = logIndex
 				maybeNeedCleanUp = true
@@ -815,10 +843,10 @@ func (rf *Raft) startSyncLog() {
 
 		lastIndex := args.LastIncludedIndex
 		lastTerm := args.LastIncludedTerm
-		rf.nextIndex[server] = max(rf.nextIndex[server], lastIndex+1)
+		rf.updateNextIndex(server, max(rf.nextIndex[server], lastIndex+1))
 		if lastTerm == rf.currentTerm &&
 			lastIndex > rf.matchIndex[server] {
-			rf.matchIndex[server] = lastIndex
+			rf.updateMatchIndex(server, lastIndex)
 			rf.commitIfPossible()
 		}
 	}
@@ -845,7 +873,7 @@ func (rf *Raft) startSyncLog() {
 
 		if !reply.Success {
 			// TODO: check xTerm and xIndex for even faster backup
-			rf.nextIndex[server] = max(reply.XIndex+1, 1)
+			rf.updateNextIndex(server, max(reply.XIndex+1, 1))
 			return
 		}
 
@@ -854,10 +882,10 @@ func (rf *Raft) startSyncLog() {
 		if len(args.Entries) > 0 {
 			lastTerm = args.Entries[len(args.Entries)-1].Term
 		}
-		rf.nextIndex[server] = max(rf.nextIndex[server], lastIndex+1)
+		rf.updateNextIndex(server, max(rf.nextIndex[server], lastIndex+1))
 		if lastTerm == rf.currentTerm &&
 			lastIndex > rf.matchIndex[server] {
-			rf.matchIndex[server] = lastIndex
+			rf.updateMatchIndex(server, lastIndex)
 			rf.commitIfPossible()
 		}
 	}
@@ -910,6 +938,7 @@ func (rf *Raft) applyLogEntries() {
 	defer rf.mu.Unlock()
 
 	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+		rf.debug("apply #%d log entry, %+v", i, rf.getLogEntry(i))
 		command := rf.getLogEntry(i).Command
 		if command != nil {
 			rf.applyCh <- raftapi.ApplyMsg{
