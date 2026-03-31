@@ -100,6 +100,10 @@ type Raft struct {
 	applyCh         chan raftapi.ApplyMsg
 }
 
+func (rf *Raft) fatalf(format string, a ...interface{}) {
+	rf.fatalf("[Raft_%d] term:%d %-9s | %s\n", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
+}
+
 func (rf *Raft) debug(format string, a ...interface{}) {
 	DPrintf("[Raft_%d] term:%d %-9s | %s", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
 }
@@ -125,11 +129,11 @@ func (rf *Raft) getLogEntry(logIndex int) *LogEntry {
 	}
 
 	if logIndex <= rf.getSnapshotLastIncludedIndex() {
-		log.Fatalf("log has been trimmed, logIndex=%d, rf.snapshot.LastIncludedIndex=%d\n", logIndex, rf.getSnapshotLastIncludedIndex())
+		rf.fatalf("log has been trimmed, logIndex=%d, rf.snapshot.LastIncludedIndex=%d", logIndex, rf.getSnapshotLastIncludedIndex())
 	}
 
 	if logIndex > rf.getSnapshotLastIncludedIndex()+len(rf.log)-1 {
-		log.Fatalf("log doesn't exist, logIndex=%d, log count=%d\n", logIndex, rf.getSnapshotLastIncludedIndex()+len(rf.log)-1)
+		rf.fatalf("log doesn't exist, logIndex=%d, log count=%d", logIndex, rf.getSnapshotLastIncludedIndex()+len(rf.log)-1)
 	}
 
 	return &rf.log[logIndex-rf.getSnapshotLastIncludedIndex()]
@@ -174,7 +178,7 @@ func (rf *Raft) replaceLogEntry(logIndex int, logEntry LogEntry) {
 
 func (rf *Raft) submitNoOpCommand() {
 	if rf.state != Leader {
-		log.Fatalf("can only submit command to a leader, command=NoOp\n")
+		rf.fatalf("can only submit command to a leader, command=NoOp")
 	}
 	rf.debug("submit a NoOp command")
 	rf.appendLogEntry(LogEntry{rf.currentTerm, nil})
@@ -187,7 +191,7 @@ func (rf *Raft) incrementTerm() {
 
 func (rf *Raft) catchUpTerm(term int) {
 	if rf.currentTerm >= term {
-		log.Fatalf("no need to catch up term, term=%d\n", term)
+		rf.fatalf("no need to catch up term, term=%d", term)
 	}
 	rf.debug("catch up term, %d -> %d", rf.currentTerm, term)
 	rf.currentTerm = term
@@ -200,7 +204,7 @@ func (rf *Raft) voteFor(server int) {
 
 func (rf *Raft) changeState(state State) {
 	if rf.state == state {
-		log.Fatalf("no need to change state, state=%s\n", state)
+		rf.fatalf("no need to change state, state=%s", state)
 	}
 	rf.debug("change state, %s -> %s", rf.state, state)
 	rf.state = state
@@ -233,7 +237,7 @@ func (rf *Raft) updateMatchIndex(server int, index int) {
 
 func (rf *Raft) increaseCommitIndex(index int) {
 	if index <= rf.commitIndex {
-		log.Fatalf("commit index can only increase monotonically, index=%d, rf.commitIndex=%d\n", index, rf.commitIndex)
+		rf.fatalf("commit index can only increase monotonically, index=%d, rf.commitIndex=%d", index, rf.commitIndex)
 	}
 	rf.debug("increase commit index, %d -> %d", rf.commitIndex, index)
 	rf.commitIndex = index
@@ -251,7 +255,7 @@ func (rf *Raft) commitIfPossible() {
 
 func (rf *Raft) increaseLastApplied(index int) {
 	if index <= rf.lastApplied {
-		log.Fatalf("last applied can only increase monotonically, index=%d, rf.lastApplied=%d\n", index, rf.lastApplied)
+		rf.fatalf("last applied can only increase monotonically, index=%d, rf.lastApplied=%d", index, rf.lastApplied)
 	}
 	rf.debug("increase last applied, %d -> %d", rf.lastApplied, index)
 	rf.lastApplied = index
@@ -259,11 +263,17 @@ func (rf *Raft) increaseLastApplied(index int) {
 
 func (rf *Raft) updateSnapshot(snapshot Snapshot) {
 	if rf.snapshot != nil && snapshot.LastIncludedIndex <= rf.getSnapshotLastIncludedIndex() {
-		log.Fatalf("no need to update snapshot, snapshot.LastIncludedIndex=%d, rf.snapshot.LastIncludedIndex=%d\n", snapshot.LastIncludedIndex, rf.getSnapshotLastIncludedIndex())
+		rf.fatalf("no need to update snapshot, snapshot.LastIncludedIndex=%d, rf.snapshot.LastIncludedIndex=%d", snapshot.LastIncludedIndex, rf.getSnapshotLastIncludedIndex())
 	}
 	rf.debug("update snapshot, lastIncludedIndex: %d -> %d", rf.getSnapshotLastIncludedIndex(), snapshot.LastIncludedIndex)
 	// always keep the first log entry, it's a placeholder to make it 1-based for raft log
-	rf.log = append([]LogEntry{rf.log[0]}, rf.log[snapshot.LastIncludedIndex-rf.getSnapshotLastIncludedIndex()+1:]...)
+	newLog := []LogEntry{rf.log[0]}
+	// if snapshot contains more log entries than the current rf.log does, the trimmed log will be empty
+	lastIndex, _ := rf.getLastLogEntryIndexAndTerm()
+	if lastIndex > snapshot.LastIncludedIndex {
+		newLog = append(newLog, rf.log[snapshot.LastIncludedIndex-rf.getSnapshotLastIncludedIndex()+1:]...)
+	}
+	rf.log = newLog
 	rf.snapshot = &snapshot
 }
 
