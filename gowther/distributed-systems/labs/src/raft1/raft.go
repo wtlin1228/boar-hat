@@ -173,7 +173,7 @@ func (rf *Raft) appendLogEntry(logEntry LogEntry) {
 
 func (rf *Raft) replaceLogEntry(logIndex int, logEntry LogEntry) {
 	rf.debug("replace #%d log entry, %+v -> %+v", logIndex, rf.getLogEntry(logIndex), logEntry)
-	rf.log[logIndex] = logEntry
+	rf.log[logIndex-rf.getSnapshotLastIncludedIndex()] = logEntry
 }
 
 func (rf *Raft) submitNoOpCommand() {
