@@ -651,11 +651,12 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 			LastIncludedTerm:  args.LastIncludedTerm,
 			StateMachineState: args.Data,
 		})
+		rf.debug("apply snapshot, %+v", rf.snapshot)
 		rf.applyCh <- raftapi.ApplyMsg{
 			SnapshotValid: true,
-			Snapshot:      args.Data,
-			SnapshotTerm:  args.LastIncludedTerm,
-			SnapshotIndex: args.LastIncludedIndex,
+			Snapshot:      rf.snapshot.StateMachineState,
+			SnapshotTerm:  rf.snapshot.LastIncludedTerm,
+			SnapshotIndex: rf.snapshot.LastIncludedIndex,
 		}
 		if args.LastIncludedIndex > rf.lastApplied {
 			rf.increaseLastApplied(args.LastIncludedIndex)
