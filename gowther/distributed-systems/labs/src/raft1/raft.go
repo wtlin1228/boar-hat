@@ -141,7 +141,7 @@ func (rf *Raft) getLogEntryTerm(logIndex int) (term int) {
 	}
 
 	if logIndex == rf.getSnapshotLastIncludedIndex() {
-		return rf.getSnapshotLastIncludedIndex()
+		return rf.snapshot.LastIncludedTerm
 	}
 
 	return rf.getLogEntry(logIndex).Term
@@ -262,8 +262,9 @@ func (rf *Raft) updateSnapshot(snapshot Snapshot) {
 		log.Fatalf("no need to update snapshot, snapshot.LastIncludedIndex=%d, rf.snapshot.LastIncludedIndex=%d\n", snapshot.LastIncludedIndex, rf.getSnapshotLastIncludedIndex())
 	}
 	rf.debug("update snapshot, lastIncludedIndex: %d -> %d", rf.getSnapshotLastIncludedIndex(), snapshot.LastIncludedIndex)
+	// always keep the first log entry, it's a placeholder to make it 1-based for raft log
+	rf.log = append([]LogEntry{rf.log[0]}, rf.log[snapshot.LastIncludedIndex-rf.getSnapshotLastIncludedIndex()+1:]...)
 	rf.snapshot = &snapshot
-	rf.log = rf.log[snapshot.LastIncludedIndex-rf.getSnapshotLastIncludedIndex():]
 }
 
 func (rf *Raft) updateLastHeartbeatAt() {
@@ -516,6 +517,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	if args.PrevLogIndex > rf.getSnapshotLastIncludedIndex()+len(rf.log)-1 {
 		lastIndex, lastTerm := rf.getLastLogEntryIndexAndTerm()
+		rf.debug("    case 1: args.PrevLogIndex %d is greater than the last log index %d", args.PrevLogIndex, lastIndex)
 		xIndex := lastIndex
 		xTerm := lastTerm
 		for i := rf.getSnapshotLastIncludedIndex() + len(rf.log) - 1; i >= rf.getSnapshotLastIncludedIndex(); i-- {
@@ -528,11 +530,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		reply.XIndex = xIndex
 		reply.XTerm = xTerm
 	} else if args.PrevLogIndex < rf.getSnapshotLastIncludedIndex() {
+		rf.debug("    case 2: args.PrevLogIndex %d is smaller than the snapshot.LastIncludedIndex %d", args.PrevLogIndex, rf.getSnapshotLastIncludedIndex())
 		reply.Success = false
 		reply.XIndex = rf.getSnapshotLastIncludedIndex()
 		reply.XTerm = rf.snapshot.LastIncludedTerm
 	} else if args.PrevLogTerm != rf.getLogEntryTerm(args.PrevLogIndex) {
 		// first log entry {term: 0, command: nil} guarantees that args.PrevLogIndex - 1 >= 0
+		rf.debug("    case 3: args.PrevLogTerm %d isn't equal to rf.getLogEntryTerm(%d) %d", args.PrevLogTerm, args.PrevLogIndex, rf.getLogEntryTerm(args.PrevLogIndex))
 		xIndex := args.PrevLogIndex - 1
 		xTerm := rf.getLogEntryTerm(xIndex)
 		for i := xIndex; i >= rf.getSnapshotLastIncludedIndex(); i-- {
@@ -545,6 +549,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		reply.XIndex = xIndex
 		reply.XTerm = xTerm
 	} else {
+		rf.debug("    case 4: start updating log")
 		maybeNeedCleanUp := false
 		lastReplacedIndex := -1
 		lastIndex, _ := rf.getLastLogEntryIndexAndTerm()
@@ -648,9 +653,9 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		if args.LastIncludedIndex > rf.commitIndex {
 			rf.increaseCommitIndex(args.LastIncludedIndex)
 		}
-
-		reply.Success = true
 	}
+
+	reply.Success = true
 
 	rf.persist()
 }
