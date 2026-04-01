@@ -57,19 +57,6 @@ type LogEntry struct {
 	Command any
 }
 
-type Snapshot struct {
-	LastIncludedIndex int
-	LastIncludedTerm  int
-	StateMachineState []byte
-}
-
-func (s *Snapshot) String() string {
-	if s == nil {
-		return ""
-	}
-	return fmt.Sprintf("Snapshot{LastIncludedIndex=%d, LastIncludedTerm=%d}", s.LastIncludedIndex, s.LastIncludedTerm)
-}
-
 // A Go object implementing a single Raft peer.
 type Raft struct {
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
@@ -83,10 +70,12 @@ type Raft struct {
 	// state a Raft server must maintain.
 
 	// Persistent state
-	currentTerm int
-	votedFor    int
-	log         []LogEntry
-	snapshot    *Snapshot
+	currentTerm               int
+	votedFor                  int
+	log                       []LogEntry
+	snapshotLastIncludedIndex int
+	snapshotLastIncludedTerm  int
+	snapshot                  []byte
 
 	// Volatile state
 	state           State
@@ -101,7 +90,7 @@ type Raft struct {
 }
 
 func (rf *Raft) fatalf(format string, a ...interface{}) {
-	rf.fatalf("[Raft_%d] term:%d %-9s | %s\n", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
+	log.Fatalf("[Raft_%d] term:%d %-9s | %s\n", rf.me, rf.currentTerm, rf.state, fmt.Sprintf(format, a...))
 }
 
 func (rf *Raft) debug(format string, a ...interface{}) {
@@ -116,27 +105,20 @@ func (rf *Raft) debugWithLock(format string, a ...interface{}) {
 	}
 }
 
-func (rf *Raft) getSnapshotLastIncludedIndex() int {
-	if rf.snapshot == nil {
-		return 0
-	}
-	return rf.snapshot.LastIncludedIndex
-}
-
 func (rf *Raft) getLogEntry(logIndex int) *LogEntry {
 	if logIndex == 0 {
 		return &rf.log[0]
 	}
 
-	if logIndex <= rf.getSnapshotLastIncludedIndex() {
-		rf.fatalf("log has been trimmed, logIndex=%d, rf.snapshot.LastIncludedIndex=%d", logIndex, rf.getSnapshotLastIncludedIndex())
+	if logIndex <= rf.snapshotLastIncludedIndex {
+		rf.fatalf("log has been trimmed, logIndex=%d, rf.snapshotLastIncludedIndex=%d", logIndex, rf.snapshotLastIncludedIndex)
 	}
 
-	if logIndex > rf.getSnapshotLastIncludedIndex()+len(rf.log)-1 {
-		rf.fatalf("log doesn't exist, logIndex=%d, log count=%d", logIndex, rf.getSnapshotLastIncludedIndex()+len(rf.log)-1)
+	if logIndex > rf.snapshotLastIncludedIndex+len(rf.log)-1 {
+		rf.fatalf("log doesn't exist, logIndex=%d, log count=%d", logIndex, rf.snapshotLastIncludedIndex+len(rf.log)-1)
 	}
 
-	return &rf.log[logIndex-rf.getSnapshotLastIncludedIndex()]
+	return &rf.log[logIndex-rf.snapshotLastIncludedIndex]
 }
 
 func (rf *Raft) getLogEntryTerm(logIndex int) (term int) {
@@ -144,36 +126,36 @@ func (rf *Raft) getLogEntryTerm(logIndex int) (term int) {
 		return rf.log[0].Term
 	}
 
-	if logIndex == rf.getSnapshotLastIncludedIndex() {
-		return rf.snapshot.LastIncludedTerm
+	if logIndex == rf.snapshotLastIncludedIndex {
+		return rf.snapshotLastIncludedTerm
 	}
 
 	return rf.getLogEntry(logIndex).Term
 }
 
 func (rf *Raft) getLastLogEntryIndexAndTerm() (index int, term int) {
-	if rf.getSnapshotLastIncludedIndex() == 0 {
+	if rf.snapshotLastIncludedIndex == 0 {
 		// not trimmed yet, return the last one
 		return len(rf.log) - 1, rf.log[len(rf.log)-1].Term
 	}
 
 	if len(rf.log) == 1 {
 		// no new log entry after trimmed, return snapshot's last included one
-		return rf.getSnapshotLastIncludedIndex(), rf.snapshot.LastIncludedTerm
+		return rf.snapshotLastIncludedIndex, rf.snapshotLastIncludedTerm
 	}
 
 	// new log entries after trimmed, return the last one
-	return rf.getSnapshotLastIncludedIndex() + len(rf.log) - 1, rf.log[len(rf.log)-1].Term
+	return rf.snapshotLastIncludedIndex + len(rf.log) - 1, rf.log[len(rf.log)-1].Term
 }
 
 func (rf *Raft) appendLogEntry(logEntry LogEntry) {
-	rf.debug("append #%d log entry, %+v", rf.getSnapshotLastIncludedIndex()+len(rf.log), logEntry)
+	rf.debug("append #%d log entry, %+v", rf.snapshotLastIncludedIndex+len(rf.log), logEntry)
 	rf.log = append(rf.log, logEntry)
 }
 
 func (rf *Raft) replaceLogEntry(logIndex int, logEntry LogEntry) {
 	rf.debug("replace #%d log entry, %+v -> %+v", logIndex, rf.getLogEntry(logIndex), logEntry)
-	rf.log[logIndex-rf.getSnapshotLastIncludedIndex()] = logEntry
+	rf.log[logIndex-rf.snapshotLastIncludedIndex] = logEntry
 }
 
 func (rf *Raft) submitNoOpCommand() {
@@ -261,20 +243,22 @@ func (rf *Raft) increaseLastApplied(index int) {
 	rf.lastApplied = index
 }
 
-func (rf *Raft) updateSnapshot(snapshot Snapshot) {
-	if rf.snapshot != nil && snapshot.LastIncludedIndex <= rf.getSnapshotLastIncludedIndex() {
-		rf.fatalf("no need to update snapshot, snapshot.LastIncludedIndex=%d, rf.snapshot.LastIncludedIndex=%d", snapshot.LastIncludedIndex, rf.getSnapshotLastIncludedIndex())
+func (rf *Raft) updateSnapshot(lastIncludedIndex int, lastIncludedTerm int, snapshot []byte) {
+	if rf.snapshot != nil && lastIncludedIndex <= rf.snapshotLastIncludedIndex {
+		rf.fatalf("no need to update snapshot, snapshot.LastIncludedIndex=%d, rf.snapshotLastIncludedIndex=%d", lastIncludedIndex, rf.snapshotLastIncludedIndex)
 	}
-	rf.debug("update snapshot, lastIncludedIndex: %d -> %d", rf.getSnapshotLastIncludedIndex(), snapshot.LastIncludedIndex)
+	rf.debug("update snapshot, lastIncludedIndex: %d -> %d", rf.snapshotLastIncludedIndex, lastIncludedIndex)
 	// always keep the first log entry, it's a placeholder to make it 1-based for raft log
 	newLog := []LogEntry{rf.log[0]}
 	// if snapshot contains more log entries than the current rf.log does, the trimmed log will be empty
 	lastIndex, _ := rf.getLastLogEntryIndexAndTerm()
-	if lastIndex > snapshot.LastIncludedIndex {
-		newLog = append(newLog, rf.log[snapshot.LastIncludedIndex-rf.getSnapshotLastIncludedIndex()+1:]...)
+	if lastIndex > lastIncludedIndex {
+		newLog = append(newLog, rf.log[lastIncludedIndex-rf.snapshotLastIncludedIndex+1:]...)
 	}
 	rf.log = newLog
-	rf.snapshot = &snapshot
+	rf.snapshotLastIncludedIndex = lastIncludedIndex
+	rf.snapshotLastIncludedTerm = lastIncludedTerm
+	rf.snapshot = snapshot
 }
 
 func (rf *Raft) updateLastHeartbeatAt() {
@@ -306,22 +290,19 @@ func (rf *Raft) GetState() (int, bool) {
 // after you've implemented snapshots, pass the current snapshot
 // (or nil if there's not yet a snapshot).
 func (rf *Raft) persist() {
-	rf.debug("persist, currentTerm=%d, votedFor=%d, log=%d, snapshot=%+v",
-		rf.currentTerm, rf.votedFor, rf.log, rf.snapshot)
+	rf.debug("persist, currentTerm=%d, votedFor=%d, log=%d, snapshotLastIncludedIndex=%d, snapshotLastIncludedTerm=%d",
+		rf.currentTerm, rf.votedFor, rf.log, rf.snapshotLastIncludedIndex, rf.snapshotLastIncludedTerm)
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
 	e.Encode(rf.currentTerm)
 	e.Encode(rf.votedFor)
 	e.Encode(rf.log)
+	e.Encode(rf.snapshotLastIncludedIndex)
+	e.Encode(rf.snapshotLastIncludedTerm)
+	raftstate := w.Bytes()
 	if rf.snapshot != nil {
-		e.Encode(rf.snapshot.LastIncludedIndex)
-		e.Encode(rf.snapshot.LastIncludedTerm)
-		raftstate := w.Bytes()
-		rf.persister.Save(raftstate, rf.snapshot.StateMachineState)
+		rf.persister.Save(raftstate, rf.snapshot)
 	} else {
-		e.Encode(0)
-		e.Encode(0)
-		raftstate := w.Bytes()
 		rf.persister.Save(raftstate, nil)
 	}
 }
@@ -348,18 +329,15 @@ func (rf *Raft) readPersist(data []byte) {
 		rf.currentTerm = currentTerm
 		rf.votedFor = votedFor
 		rf.log = rfLog
+		rf.snapshotLastIncludedIndex = lastIncludedIndex
+		rf.snapshotLastIncludedTerm = lastIncludedTerm
+		rf.lastApplied = lastIncludedIndex
+		rf.commitIndex = lastIncludedIndex
 		if lastIncludedIndex != 0 {
-			stateMachineState := rf.persister.ReadRaftState()
-			if len(stateMachineState) == 0 {
-				log.Fatalln("fail to decode the stateMachineState")
+			rf.snapshot = rf.persister.ReadSnapshot()
+			if len(rf.snapshot) < 1 {
+				log.Fatalln("fail to read the snapshot")
 			}
-			rf.snapshot = &Snapshot{
-				LastIncludedIndex: lastIncludedIndex,
-				LastIncludedTerm:  lastIncludedTerm,
-				StateMachineState: stateMachineState,
-			}
-			rf.lastApplied = lastIncludedIndex
-			rf.commitIndex = lastIncludedIndex
 		}
 	}
 }
@@ -382,17 +360,13 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 
 		rf.debug("Snapshot(%d)", index)
 
-		if index <= rf.getSnapshotLastIncludedIndex() {
-			rf.debug("No need to do snapshot, snapshot.lastIncludedIndex=%d", rf.getSnapshotLastIncludedIndex())
+		if index <= rf.snapshotLastIncludedIndex {
+			rf.debug("No need to do snapshot, snapshot.lastIncludedIndex=%d", rf.snapshotLastIncludedIndex)
 			return
 		}
 
 		logEntry := rf.getLogEntry(index)
-		rf.updateSnapshot(Snapshot{
-			LastIncludedIndex: index,
-			LastIncludedTerm:  logEntry.Term,
-			StateMachineState: snapshot,
-		})
+		rf.updateSnapshot(index, logEntry.Term, snapshot)
 
 		rf.persist()
 	}()
@@ -525,12 +499,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.changeState(Follower)
 	}
 
-	if args.PrevLogIndex > rf.getSnapshotLastIncludedIndex()+len(rf.log)-1 {
+	if args.PrevLogIndex > rf.snapshotLastIncludedIndex+len(rf.log)-1 {
 		lastIndex, lastTerm := rf.getLastLogEntryIndexAndTerm()
 		rf.debug("    case 1: args.PrevLogIndex %d is greater than the last log index %d", args.PrevLogIndex, lastIndex)
 		xIndex := lastIndex
 		xTerm := lastTerm
-		for i := rf.getSnapshotLastIncludedIndex() + len(rf.log) - 1; i >= rf.getSnapshotLastIncludedIndex(); i-- {
+		for i := rf.snapshotLastIncludedIndex + len(rf.log) - 1; i >= rf.snapshotLastIncludedIndex; i-- {
 			if rf.getLogEntryTerm(i) != xTerm {
 				break
 			}
@@ -539,17 +513,17 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		reply.Success = false
 		reply.XIndex = xIndex
 		reply.XTerm = xTerm
-	} else if args.PrevLogIndex < rf.getSnapshotLastIncludedIndex() {
-		rf.debug("    case 2: args.PrevLogIndex %d is smaller than the snapshot.LastIncludedIndex %d", args.PrevLogIndex, rf.getSnapshotLastIncludedIndex())
+	} else if args.PrevLogIndex < rf.snapshotLastIncludedIndex {
+		rf.debug("    case 2: args.PrevLogIndex %d is smaller than the snapshot.LastIncludedIndex %d", args.PrevLogIndex, rf.snapshotLastIncludedIndex)
 		reply.Success = false
-		reply.XIndex = rf.getSnapshotLastIncludedIndex()
-		reply.XTerm = rf.snapshot.LastIncludedTerm
+		reply.XIndex = rf.snapshotLastIncludedIndex
+		reply.XTerm = rf.snapshotLastIncludedTerm
 	} else if args.PrevLogTerm != rf.getLogEntryTerm(args.PrevLogIndex) {
 		// first log entry {term: 0, command: nil} guarantees that args.PrevLogIndex - 1 >= 0
 		rf.debug("    case 3: args.PrevLogTerm %d isn't equal to rf.getLogEntryTerm(%d) %d", args.PrevLogTerm, args.PrevLogIndex, rf.getLogEntryTerm(args.PrevLogIndex))
 		xIndex := args.PrevLogIndex - 1
 		xTerm := rf.getLogEntryTerm(xIndex)
-		for i := xIndex; i >= rf.getSnapshotLastIncludedIndex(); i-- {
+		for i := xIndex; i >= rf.snapshotLastIncludedIndex; i-- {
 			if rf.getLogEntryTerm(i) != xTerm {
 				break
 			}
@@ -645,18 +619,14 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		rf.changeState(Follower)
 	}
 
-	if rf.snapshot == nil || rf.getSnapshotLastIncludedIndex() < args.LastIncludedIndex {
-		rf.updateSnapshot(Snapshot{
-			LastIncludedIndex: args.LastIncludedIndex,
-			LastIncludedTerm:  args.LastIncludedTerm,
-			StateMachineState: args.Data,
-		})
+	if rf.snapshot == nil || rf.snapshotLastIncludedIndex < args.LastIncludedIndex {
+		rf.updateSnapshot(args.LastIncludedIndex, args.LastIncludedTerm, args.Data)
 		rf.debug("apply snapshot, %+v", rf.snapshot)
 		rf.applyCh <- raftapi.ApplyMsg{
 			SnapshotValid: true,
-			Snapshot:      rf.snapshot.StateMachineState,
-			SnapshotTerm:  rf.snapshot.LastIncludedTerm,
-			SnapshotIndex: rf.snapshot.LastIncludedIndex,
+			Snapshot:      rf.snapshot,
+			SnapshotTerm:  rf.snapshotLastIncludedTerm,
+			SnapshotIndex: rf.snapshotLastIncludedIndex,
 		}
 		if args.LastIncludedIndex > rf.lastApplied {
 			rf.increaseLastApplied(args.LastIncludedIndex)
@@ -917,15 +887,15 @@ func (rf *Raft) startSyncLog() {
 
 	for server := range len(rf.peers) {
 		if server != rf.me {
-			if rf.nextIndex[server] <= rf.getSnapshotLastIncludedIndex() {
+			if rf.nextIndex[server] <= rf.snapshotLastIncludedIndex {
 				go syncLogByInstallSnapshot(server, InstallSnapshotArgs{
 					Term:              rf.currentTerm,
 					LeaderId:          rf.me,
-					LastIncludedIndex: rf.getSnapshotLastIncludedIndex(),
-					LastIncludedTerm:  rf.snapshot.LastIncludedTerm,
+					LastIncludedIndex: rf.snapshotLastIncludedIndex,
+					LastIncludedTerm:  rf.snapshotLastIncludedTerm,
 					Offset:            0,
-					Data:              rf.snapshot.StateMachineState,
-					Done:              rf.getSnapshotLastIncludedIndex() == lastLogEntryIndex,
+					Data:              rf.snapshot,
+					Done:              rf.snapshotLastIncludedIndex == lastLogEntryIndex,
 				})
 			} else {
 				nextIndex := rf.nextIndex[server]
@@ -934,7 +904,7 @@ func (rf *Raft) startSyncLog() {
 					LeaderId:     rf.me,
 					PrevLogIndex: nextIndex - 1,
 					PrevLogTerm:  rf.getLogEntryTerm(nextIndex - 1),
-					Entries:      append([]LogEntry{}, rf.log[nextIndex-rf.getSnapshotLastIncludedIndex():]...),
+					Entries:      append([]LogEntry{}, rf.log[nextIndex-rf.snapshotLastIncludedIndex:]...),
 					LeaderCommit: rf.commitIndex,
 				})
 			}
@@ -996,6 +966,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.log = []LogEntry{
 		{Term: 0, Command: nil},
 	}
+	rf.snapshotLastIncludedIndex = 0
+	rf.snapshotLastIncludedTerm = 0
+	rf.snapshot = nil
 
 	// Volatile state
 	rf.state = Follower
@@ -1010,7 +983,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	rf.debug("Make Raft, currentTerm=%d, log=%+v, snapshot=%+v", rf.currentTerm, rf.log, rf.snapshot)
+	rf.debug("Make Raft, currentTerm=%d, log=%+v, snapshotLastIncludedIndex=%d, snapshotLastIncludedTerm=%d",
+		rf.currentTerm, rf.log, rf.snapshotLastIncludedIndex, rf.snapshotLastIncludedTerm)
 
 	go rf.electionLoop()
 	go rf.heartbeatLoop()
