@@ -622,7 +622,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	if rf.snapshot == nil || rf.snapshotLastIncludedIndex < args.LastIncludedIndex {
 		rf.updateSnapshot(args.LastIncludedIndex, args.LastIncludedTerm, args.Data)
 		// don't need to apply snapshot if all log entries in the snapshot have been applied
-		if rf.lastApplied < rf.snapshotLastIncludedIndex {
+		if !rf.killed() && rf.lastApplied < rf.snapshotLastIncludedIndex {
 			rf.debug("apply snapshot, snapshotLastIncludedIndex=%d, snapshotLastIncludedTerm=%d",
 				rf.snapshotLastIncludedIndex, rf.snapshotLastIncludedTerm)
 			rf.applyCh <- raftapi.ApplyMsg{
@@ -932,7 +932,7 @@ func (rf *Raft) applyLogEntries() {
 	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
 		rf.debug("apply #%d log entry, %+v", i, rf.getLogEntry(i))
 		command := rf.getLogEntry(i).Command
-		if command != nil {
+		if !rf.killed() && command != nil {
 			rf.applyCh <- raftapi.ApplyMsg{
 				CommandValid: true,
 				Command:      command,
