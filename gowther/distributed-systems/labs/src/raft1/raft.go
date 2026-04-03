@@ -83,9 +83,8 @@ type Raft struct {
 	lastApplied     int
 	nextIndex       []int
 	matchIndex      []int
-	lastSyncLogAt   time.Time  // for throttling the AppendEntries and InstallSnapshot RPC calls
-	lastHeartbeatAt time.Time  // updated when an Heartbeat RPC is received
-	applyChMu       sync.Mutex // for preventing sending on closed channel
+	lastSyncLogAt   time.Time // for throttling the AppendEntries and InstallSnapshot RPC calls
+	lastHeartbeatAt time.Time // updated when an Heartbeat RPC is received
 	applyCh         chan raftapi.ApplyMsg
 }
 
