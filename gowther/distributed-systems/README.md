@@ -78,3 +78,9 @@ Consequently, RSM_0 may wait indefinitely for `term_1/command` to be applied if 
 Each RSM instance periodically submits a no-op command to its local Raft node.
 
 The interval can be relatively long (e.g., 1 second), since this scenario is rare under normal traffic. However, introducing a periodic no-op ensures that a command will not remain uncommitted indefinitely even if it has already been replicated to all Raft instances.
+
+## Solution: submit a "No-Op" command while elected as a leader
+
+> First, a leader must have the latest information on which entries are committed. The Leader Completeness Property guarantees that a leader has all committed entries, but at the start of its term, it may not know which those are. To find out, it needs to commit an entry from its term. Raft handles this by having each leader commit a blank no-op entry into the log at the start of its term.
+
+Read the paper!
