@@ -621,18 +621,22 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 	if rf.snapshot == nil || rf.snapshotLastIncludedIndex < args.LastIncludedIndex {
 		rf.updateSnapshot(args.LastIncludedIndex, args.LastIncludedTerm, args.Data)
-		rf.debug("apply snapshot, %+v", rf.snapshot)
-		rf.applyCh <- raftapi.ApplyMsg{
-			SnapshotValid: true,
-			Snapshot:      rf.snapshot,
-			SnapshotTerm:  rf.snapshotLastIncludedTerm,
-			SnapshotIndex: rf.snapshotLastIncludedIndex,
-		}
-		if args.LastIncludedIndex > rf.lastApplied {
-			rf.increaseLastApplied(args.LastIncludedIndex)
-		}
-		if args.LastIncludedIndex > rf.commitIndex {
-			rf.increaseCommitIndex(args.LastIncludedIndex)
+		// don't need to apply snapshot if all log entries in the snapshot have been applied
+		if rf.lastApplied < rf.snapshotLastIncludedIndex {
+			rf.debug("apply snapshot, snapshotLastIncludedIndex=%d, snapshotLastIncludedTerm=%d",
+				rf.snapshotLastIncludedIndex, rf.snapshotLastIncludedTerm)
+			rf.applyCh <- raftapi.ApplyMsg{
+				SnapshotValid: true,
+				Snapshot:      rf.snapshot,
+				SnapshotTerm:  rf.snapshotLastIncludedTerm,
+				SnapshotIndex: rf.snapshotLastIncludedIndex,
+			}
+			if rf.snapshotLastIncludedIndex > rf.lastApplied {
+				rf.increaseLastApplied(args.LastIncludedIndex)
+			}
+			if rf.snapshotLastIncludedIndex > rf.commitIndex {
+				rf.increaseCommitIndex(args.LastIncludedIndex)
+			}
 		}
 	}
 
@@ -698,6 +702,7 @@ func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) 
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
+	rf.debugWithLock("Kill")
 }
 
 func (rf *Raft) killed() bool {
@@ -923,6 +928,7 @@ func (rf *Raft) applyLogEntries() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	rf.debug("applyLogEntries from %d to %d", rf.lastApplied+1, rf.commitIndex)
 	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
 		rf.debug("apply #%d log entry, %+v", i, rf.getLogEntry(i))
 		command := rf.getLogEntry(i).Command
