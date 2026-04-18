@@ -1,25 +1,37 @@
 package rsm
 
 import (
+	"fmt"
+	"log"
 	"sync"
 
 	"6.5840/kvsrv1/rpc"
 	"6.5840/labrpc"
-	"6.5840/raft1"
+	raft "6.5840/raft1"
 	"6.5840/raftapi"
-	"6.5840/tester1"
-
+	tester "6.5840/tester1"
+	"github.com/google/uuid"
 )
 
 var useRaftStateMachine bool // to plug in another raft besided raft1
 
-
 type Op struct {
-	// Your definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
+	Me  int
+	Id  string
+	Req any
 }
 
+type OpResult struct {
+	val any
+	ok  bool
+}
+
+type OpQueueEntry struct {
+	logTerm  int
+	logIndex int
+	ch       chan OpResult
+	op       *Op
+}
 
 // A server (i.e., ../server.go) that wants to replicate itself calls
 // MakeRSM and must implement the StateMachine interface.  This
@@ -41,6 +53,43 @@ type RSM struct {
 	maxraftstate int // snapshot if log grows this big
 	sm           StateMachine
 	// Your definitions here.
+	opQueue []OpQueueEntry
+}
+
+func (rsm *RSM) fatalf(format string, a ...interface{}) {
+	if Debug {
+		log.Fatalf("[RSM_%d] %s\n", rsm.me, fmt.Sprintf(format, a...))
+	}
+}
+
+func (rsm *RSM) debug(format string, a ...interface{}) {
+	if Debug {
+		log.Printf("[RSM_%d] %s\n", rsm.me, fmt.Sprintf(format, a...))
+	}
+}
+
+func (rsm *RSM) debugWithLock(format string, a ...interface{}) {
+	if Debug {
+		rsm.mu.Lock()
+		rsm.debug(format, a...)
+		rsm.mu.Unlock()
+	}
+}
+
+func (rsm *RSM) rejectOp(entry *OpQueueEntry) {
+	rsm.debug("reject request(%s), %+v, %+v", entry.op.Id, entry, entry.op)
+	entry.ch <- OpResult{
+		val: nil,
+		ok:  false,
+	}
+}
+
+func (rsm *RSM) clearOpQueue() {
+	rsm.debug("clear op queue")
+	for _, entry := range rsm.opQueue {
+		rsm.rejectOp(&entry)
+	}
+	rsm.opQueue = make([]OpQueueEntry, 0)
 }
 
 // servers[] contains the ports of the set of
@@ -68,6 +117,16 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 	if !useRaftStateMachine {
 		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh)
 	}
+
+	snapshot := persister.ReadSnapshot()
+	if len(snapshot) != 0 {
+		rsm.sm.Restore(snapshot)
+	}
+
+	rsm.debug("Make RSM")
+
+	go rsm.reader()
+
 	return rsm
 }
 
@@ -75,16 +134,103 @@ func (rsm *RSM) Raft() raftapi.Raft {
 	return rsm.rf
 }
 
-
-// Submit a command to Raft, and wait for it to be committed.  It
-// should return ErrWrongLeader if client should find new leader and
-// try again.
+// Your solution needs to handle an rsm leader that has called Start()
+// for a request submitted with Submit() but loses its leadership before
+// the request is committed to the log. One way to do this is for the
+// rsm to detect that it has lost leadership, by noticing that Raft's
+// term has changed or a different request has appeared at the index
+// returned by Start(), and return rpc.ErrWrongLeader from Submit().
+// If the ex-leader is partitioned by itself, it won't know about new
+// leaders; but any client in the same partition won't be able to talk
+// to a new leader either, so it's OK in this case for the server to
+// wait indefinitely until the partition heals.
 func (rsm *RSM) Submit(req any) (rpc.Err, any) {
+	rsm.mu.Lock()
 
-	// Submit creates an Op structure to run a command through Raft;
-	// for example: op := Op{Me: rsm.me, Id: id, Req: req}, where req
-	// is the argument to Submit and id is a unique id for the op.
+	op := Op{
+		Me:  rsm.me,
+		Id:  uuid.NewString(),
+		Req: req,
+	}
 
-	// your code here
-	return rpc.ErrWrongLeader, nil // i'm dead, try another server.
+	rsm.debug("request(%s) is submitted", op.Id)
+
+	index, term, isLeader := rsm.Raft().Start(op)
+
+	if !isLeader {
+		rsm.debug("request(%s) is ignored since it's not leader", op.Id)
+		rsm.mu.Unlock()
+		return rpc.ErrWrongLeader, nil // i'm dead, try another server.
+	}
+
+	newEntry := OpQueueEntry{
+		logTerm:  term,
+		logIndex: index,
+		ch:       make(chan OpResult, 1),
+		op:       &op,
+	}
+
+	// detect that it has lost leadership
+	// - term has changed, or
+	// - a different request has appeared at the index
+	i := len(rsm.opQueue) - 1
+	for i >= 0 && rsm.opQueue[i].logIndex >= newEntry.logIndex {
+		rsm.rejectOp(&rsm.opQueue[i])
+		i--
+	}
+	if i != len(rsm.opQueue)-1 {
+		rsm.opQueue = rsm.opQueue[0 : i+1]
+	}
+
+	rsm.debug("request(%s) is accepted and sent to Raft, %+v", op.Id, newEntry)
+	rsm.opQueue = append(rsm.opQueue, newEntry)
+
+	rsm.mu.Unlock()
+
+	opRes := <-newEntry.ch
+
+	if opRes.ok {
+		rsm.debugWithLock("request(%s) is processed, result=%v, %+v\n", op.Id, opRes.val, newEntry)
+		return rpc.OK, opRes.val
+	} else {
+		rsm.debugWithLock("request(%s) is rejected, %+v\n", op.Id, newEntry)
+		return rpc.ErrWrongLeader, nil
+	}
+}
+
+func (rsm *RSM) reader() {
+	for msg := range rsm.applyCh {
+		rsm.mu.Lock()
+
+		if msg.CommandValid {
+			op := msg.Command.(Op)
+			rsm.debug("receive valid command, %+v", op)
+
+			if len(rsm.opQueue) > 0 &&
+				rsm.opQueue[0].logIndex == msg.CommandIndex &&
+				rsm.opQueue[0].op.Id != op.Id {
+				rsm.clearOpQueue()
+			}
+
+			res := rsm.sm.DoOp(op.Req)
+
+			rsm.debug("request(%s) is applied, result=%v", op.Id, res)
+
+			if len(rsm.opQueue) > 0 && rsm.opQueue[0].op.Id == op.Id {
+				rsm.opQueue[0].ch <- OpResult{
+					val: res,
+					ok:  true,
+				}
+				rsm.opQueue = rsm.opQueue[1:]
+			}
+		} else if msg.SnapshotValid {
+			rsm.debug("receive valid snapshot, msg.SnapshotTerm=%d, msg.CommandIndex=%d",
+				msg.SnapshotTerm, msg.CommandIndex)
+			rsm.fatalf("invalid msg %+v", msg)
+		} else {
+			rsm.fatalf("invalid msg %+v", msg)
+		}
+
+		rsm.mu.Unlock()
+	}
 }

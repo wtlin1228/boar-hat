@@ -925,12 +925,19 @@ func (rf *Raft) heartbeatLoop() {
 
 func (rf *Raft) applyLogEntries() {
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	start := rf.lastApplied + 1
+	end := rf.commitIndex
+	if start <= end {
+		rf.debug("applyLogEntries from %d to %d", start, end)
+	}
+	rf.mu.Unlock()
 
-	rf.debug("applyLogEntries from %d to %d", rf.lastApplied+1, rf.commitIndex)
-	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+	for i := start; i <= end; i++ {
+		rf.mu.Lock()
 		rf.debug("apply #%d log entry, %+v", i, rf.getLogEntry(i))
 		command := rf.getLogEntry(i).Command
+		rf.mu.Unlock()
+
 		if !rf.killed() && command != nil {
 			rf.applyCh <- raftapi.ApplyMsg{
 				CommandValid: true,
@@ -938,7 +945,10 @@ func (rf *Raft) applyLogEntries() {
 				CommandIndex: i,
 			}
 		}
+
+		rf.mu.Lock()
 		rf.increaseLastApplied(i)
+		rf.mu.Unlock()
 	}
 }
 
