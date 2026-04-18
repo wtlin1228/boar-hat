@@ -233,4 +233,9 @@ func (rsm *RSM) reader() {
 
 		rsm.mu.Unlock()
 	}
+
+	rsm.mu.Lock()
+	defer rsm.mu.Unlock()
+
+	rsm.clearOpQueue()
 }

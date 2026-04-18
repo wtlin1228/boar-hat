@@ -86,6 +86,7 @@ type Raft struct {
 	lastSyncLogAt   time.Time // for throttling the AppendEntries and InstallSnapshot RPC calls
 	lastHeartbeatAt time.Time // updated when an Heartbeat RPC is received
 	applyCh         chan raftapi.ApplyMsg
+	applyChMu       sync.Mutex
 }
 
 func (rf *Raft) fatalf(format string, a ...interface{}) {
@@ -624,12 +625,14 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		if !rf.killed() && rf.lastApplied < rf.snapshotLastIncludedIndex {
 			rf.debug("apply snapshot, snapshotLastIncludedIndex=%d, snapshotLastIncludedTerm=%d",
 				rf.snapshotLastIncludedIndex, rf.snapshotLastIncludedTerm)
+			rf.applyChMu.Lock()
 			rf.applyCh <- raftapi.ApplyMsg{
 				SnapshotValid: true,
 				Snapshot:      rf.snapshot,
 				SnapshotTerm:  rf.snapshotLastIncludedTerm,
 				SnapshotIndex: rf.snapshotLastIncludedIndex,
 			}
+			rf.applyChMu.Unlock()
 			if rf.snapshotLastIncludedIndex > rf.lastApplied {
 				rf.increaseLastApplied(args.LastIncludedIndex)
 			}
@@ -699,9 +702,13 @@ func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) 
 // confusing debug output. any goroutine with a long-running loop
 // should call killed() to check whether it should stop.
 func (rf *Raft) Kill() {
-	atomic.StoreInt32(&rf.dead, 1)
-	// Your code here, if desired.
 	rf.debugWithLock("Kill")
+
+	atomic.StoreInt32(&rf.dead, 1)
+
+	rf.applyChMu.Lock()
+	close(rf.applyCh)
+	rf.applyChMu.Unlock()
 }
 
 func (rf *Raft) killed() bool {
@@ -939,11 +946,13 @@ func (rf *Raft) applyLogEntries() {
 		rf.mu.Unlock()
 
 		if !rf.killed() && command != nil {
+			rf.applyChMu.Lock()
 			rf.applyCh <- raftapi.ApplyMsg{
 				CommandValid: true,
 				Command:      command,
 				CommandIndex: i,
 			}
+			rf.applyChMu.Unlock()
 		}
 
 		rf.mu.Lock()
