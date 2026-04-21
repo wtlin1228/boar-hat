@@ -223,10 +223,15 @@ func (rsm *RSM) reader() {
 				}
 				rsm.opQueue = rsm.opQueue[1:]
 			}
+
+			if rsm.maxraftstate > -1 && rsm.Raft().PersistBytes()*10 > rsm.maxraftstate*9 {
+				rsm.debug("create snapshot, index=%d", msg.CommandIndex)
+				rsm.Raft().Snapshot(msg.CommandIndex, rsm.sm.Snapshot())
+			}
 		} else if msg.SnapshotValid {
 			rsm.debug("receive valid snapshot, msg.SnapshotTerm=%d, msg.CommandIndex=%d",
 				msg.SnapshotTerm, msg.CommandIndex)
-			rsm.fatalf("invalid msg %+v", msg)
+			rsm.sm.Restore(msg.Snapshot)
 		} else {
 			rsm.fatalf("invalid msg %+v", msg)
 		}

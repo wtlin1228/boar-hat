@@ -14,8 +14,8 @@ import (
 )
 
 type Entry struct {
-	value   string
-	version rpc.Tversion
+	Value   string
+	Version rpc.Tversion
 }
 
 type KVServer struct {
@@ -46,8 +46,8 @@ func (kv *KVServer) DoOp(req any) any {
 			reply = rpc.GetReply{Err: rpc.ErrNoKey}
 		} else {
 			reply = rpc.GetReply{
-				Value:   entry.value,
-				Version: entry.version,
+				Value:   entry.Value,
+				Version: entry.Version,
 				Err:     rpc.OK,
 			}
 		}
@@ -60,8 +60,8 @@ func (kv *KVServer) DoOp(req any) any {
 			reply = rpc.PutReply{Err: rpc.OK}
 		} else if !ok {
 			reply = rpc.PutReply{Err: rpc.ErrNoKey}
-		} else if entry.version == args.Version {
-			kv.data[args.Key] = Entry{args.Value, entry.version + 1}
+		} else if entry.Version == args.Version {
+			kv.data[args.Key] = Entry{args.Value, entry.Version + 1}
 			reply = rpc.PutReply{Err: rpc.OK}
 		} else {
 			reply = rpc.PutReply{Err: rpc.ErrVersion}
