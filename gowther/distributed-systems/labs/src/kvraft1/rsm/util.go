@@ -1,4 +1,4 @@
-package kvraft
+package rsm
 
 // Debugging
 const Debug = false

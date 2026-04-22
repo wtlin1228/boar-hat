@@ -86,6 +86,7 @@ type Raft struct {
 	lastSyncLogAt   time.Time // for throttling the AppendEntries and InstallSnapshot RPC calls
 	lastHeartbeatAt time.Time // updated when an Heartbeat RPC is received
 	applyCh         chan raftapi.ApplyMsg
+	applyChMu       sync.Mutex
 }
 
 func (rf *Raft) fatalf(format string, a ...interface{}) {
@@ -554,8 +555,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				if logEntry.Term < args.Entries[len(args.Entries)-1].Term {
 					rf.debug("the term of #%d entry %+v is smaller than the term of #%d entry (last replaced entry) %+v",
 						i, logEntry, lastReplacedIndex, args.Entries[len(args.Entries)-1])
-					rf.debug("do clean up, log %+v -> log %+v", rf.log, rf.log[:i])
-					rf.log = rf.log[:i]
+					newLog := rf.log[:i-rf.snapshotLastIncludedIndex]
+					rf.debug("do clean up, log %+v -> log %+v", rf.log, newLog)
+					rf.log = newLog
 					break
 				}
 			}
@@ -597,14 +599,17 @@ type InstallSnapshotReply struct {
 }
 
 func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapshotReply) {
+	rf.applyChMu.Lock()
+	defer rf.applyChMu.Unlock()
+
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	rf.debug("handle InstallSnapshot, args=%+v", args)
 
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
 		reply.Success = false
+		rf.mu.Unlock()
 		return
 	}
 
@@ -624,12 +629,14 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		if !rf.killed() && rf.lastApplied < rf.snapshotLastIncludedIndex {
 			rf.debug("apply snapshot, snapshotLastIncludedIndex=%d, snapshotLastIncludedTerm=%d",
 				rf.snapshotLastIncludedIndex, rf.snapshotLastIncludedTerm)
+			rf.mu.Unlock()
 			rf.applyCh <- raftapi.ApplyMsg{
 				SnapshotValid: true,
 				Snapshot:      rf.snapshot,
 				SnapshotTerm:  rf.snapshotLastIncludedTerm,
 				SnapshotIndex: rf.snapshotLastIncludedIndex,
 			}
+			rf.mu.Lock()
 			if rf.snapshotLastIncludedIndex > rf.lastApplied {
 				rf.increaseLastApplied(args.LastIncludedIndex)
 			}
@@ -642,6 +649,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	reply.Success = true
 
 	rf.persist()
+	rf.mu.Unlock()
 }
 
 func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply *InstallSnapshotReply) bool {
@@ -700,8 +708,13 @@ func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) 
 // should call killed() to check whether it should stop.
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
-	// Your code here, if desired.
-	rf.debugWithLock("Kill")
+
+	// log.Printf("[Raft_%d] Kill", rf.me)
+
+	rf.applyChMu.Lock()
+	// log.Printf("[Raft_%d] close applyCh", rf.me)
+	close(rf.applyCh)
+	rf.applyChMu.Unlock()
 }
 
 func (rf *Raft) killed() bool {
@@ -925,12 +938,26 @@ func (rf *Raft) heartbeatLoop() {
 
 func (rf *Raft) applyLogEntries() {
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	start := rf.lastApplied + 1
+	end := rf.commitIndex
+	if start <= end {
+		rf.debug("applyLogEntries from %d to %d", start, end)
+	}
+	rf.mu.Unlock()
 
-	rf.debug("applyLogEntries from %d to %d", rf.lastApplied+1, rf.commitIndex)
-	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+	for i := start; i <= end; i++ {
+		rf.applyChMu.Lock()
+		rf.mu.Lock()
+		if i <= rf.lastApplied {
+			rf.debug("applyLogEntries early returns, #%d log entry is already applied", i)
+			rf.mu.Unlock()
+			rf.applyChMu.Unlock()
+			return
+		}
 		rf.debug("apply #%d log entry, %+v", i, rf.getLogEntry(i))
 		command := rf.getLogEntry(i).Command
+		rf.mu.Unlock()
+
 		if !rf.killed() && command != nil {
 			rf.applyCh <- raftapi.ApplyMsg{
 				CommandValid: true,
@@ -938,7 +965,13 @@ func (rf *Raft) applyLogEntries() {
 				CommandIndex: i,
 			}
 		}
-		rf.increaseLastApplied(i)
+
+		rf.mu.Lock()
+		if i > rf.lastApplied {
+			rf.increaseLastApplied(i)
+		}
+		rf.mu.Unlock()
+		rf.applyChMu.Unlock()
 	}
 }
 
