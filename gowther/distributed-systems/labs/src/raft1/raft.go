@@ -600,15 +600,16 @@ type InstallSnapshotReply struct {
 
 func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapshotReply) {
 	rf.applyChMu.Lock()
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	defer rf.applyChMu.Unlock()
+
+	rf.mu.Lock()
 
 	rf.debug("handle InstallSnapshot, args=%+v", args)
 
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
 		reply.Success = false
+		rf.mu.Unlock()
 		return
 	}
 
@@ -628,12 +629,14 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		if !rf.killed() && rf.lastApplied < rf.snapshotLastIncludedIndex {
 			rf.debug("apply snapshot, snapshotLastIncludedIndex=%d, snapshotLastIncludedTerm=%d",
 				rf.snapshotLastIncludedIndex, rf.snapshotLastIncludedTerm)
+			rf.mu.Unlock()
 			rf.applyCh <- raftapi.ApplyMsg{
 				SnapshotValid: true,
 				Snapshot:      rf.snapshot,
 				SnapshotTerm:  rf.snapshotLastIncludedTerm,
 				SnapshotIndex: rf.snapshotLastIncludedIndex,
 			}
+			rf.mu.Lock()
 			if rf.snapshotLastIncludedIndex > rf.lastApplied {
 				rf.increaseLastApplied(args.LastIncludedIndex)
 			}
@@ -646,6 +649,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	reply.Success = true
 
 	rf.persist()
+	rf.mu.Unlock()
 }
 
 func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply *InstallSnapshotReply) bool {
@@ -703,11 +707,12 @@ func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) 
 // confusing debug output. any goroutine with a long-running loop
 // should call killed() to check whether it should stop.
 func (rf *Raft) Kill() {
-	rf.debugWithLock("Kill")
-
 	atomic.StoreInt32(&rf.dead, 1)
 
+	// log.Printf("[Raft_%d] Kill", rf.me)
+
 	rf.applyChMu.Lock()
+	// log.Printf("[Raft_%d] close applyCh", rf.me)
 	close(rf.applyCh)
 	rf.applyChMu.Unlock()
 }
@@ -945,6 +950,8 @@ func (rf *Raft) applyLogEntries() {
 		rf.mu.Lock()
 		if i <= rf.lastApplied {
 			rf.debug("applyLogEntries early returns, #%d log entry is already applied", i)
+			rf.mu.Unlock()
+			rf.applyChMu.Unlock()
 			return
 		}
 		rf.debug("apply #%d log entry, %+v", i, rf.getLogEntry(i))

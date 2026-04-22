@@ -1,6 +1,8 @@
 package kvraft
 
 import (
+	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -22,6 +24,12 @@ type Clerk struct {
 	prefer int
 }
 
+func (ck *Clerk) debug(format string, a ...interface{}) {
+	if Debug {
+		log.Printf("[Clerk] %s\n", fmt.Sprintf(format, a...))
+	}
+}
+
 func MakeClerk(clnt *tester.Clnt, servers []string) kvtest.IKVClerk {
 	ck := &Clerk{clnt: clnt, servers: servers}
 	// You'll have to add code here.
@@ -39,6 +47,8 @@ func MakeClerk(clnt *tester.Clnt, servers []string) kvtest.IKVClerk {
 // must match the declared types of the RPC handler function's
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
+	ck.debug("Get(key=%s)", key)
+
 	type result struct {
 		serverId int
 		ok       bool
@@ -58,6 +68,7 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	for offset := 0; ; offset++ {
 		id := (offset + prefer) % len(ck.servers)
 		go func() {
+			ck.debug("Get(key=%s) -> server %d", key, id)
 			args := rpc.GetArgs{Key: key}
 			reply := rpc.GetReply{}
 			ok := ck.clnt.Call(ck.servers[id], "KVServer.Get", &args, &reply)
@@ -77,6 +88,7 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 
 Done:
 	ck.mu.Lock()
+	ck.debug("Get(key=%s) -> server %d, reply=%+v", key, r.serverId, r.reply)
 	ck.prefer = r.serverId
 	ck.mu.Unlock()
 	return r.reply.Value, r.reply.Version, r.reply.Err
@@ -100,6 +112,8 @@ Done:
 // must match the declared types of the RPC handler function's
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
+	ck.debug("Put(key=%s, value=%s, version=%v)", key, value, version)
+
 	type result struct {
 		serverId int
 		ok       bool
@@ -120,6 +134,7 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	for offset := 0; ; offset++ {
 		id := (offset + prefer) % len(ck.servers)
 		go func() {
+			ck.debug("Put(key=%s, value=%s, version=%v) -> server %d", key, value, version, id)
 			args := rpc.PutArgs{Key: key, Value: value, Version: version}
 			reply := rpc.PutReply{}
 			ok := ck.clnt.Call(ck.servers[id], "KVServer.Put", &args, &reply)
@@ -143,6 +158,7 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 
 Done:
 	ck.mu.Lock()
+	ck.debug("Put(key=%s, value=%s, version=%v) -> server %d, reply=%+v", key, value, version, r.serverId, r.reply)
 	ck.prefer = r.serverId
 	ck.mu.Unlock()
 	return r.reply.Err

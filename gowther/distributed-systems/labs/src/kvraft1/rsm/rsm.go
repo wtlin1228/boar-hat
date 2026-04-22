@@ -190,10 +190,10 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	opRes := <-newEntry.ch
 
 	if opRes.ok {
-		rsm.debugWithLock("request(%s) is processed, result=%v, %+v\n", op.Id, opRes.val, newEntry)
+		rsm.debugWithLock("request(%s) is processed, result=%v, %+v", op.Id, opRes.val, newEntry)
 		return rpc.OK, opRes.val
 	} else {
-		rsm.debugWithLock("request(%s) is rejected, %+v\n", op.Id, newEntry)
+		rsm.debugWithLock("request(%s) is rejected, %+v", op.Id, newEntry)
 		return rpc.ErrWrongLeader, nil
 	}
 }

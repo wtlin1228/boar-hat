@@ -2,6 +2,7 @@ package kvraft
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -28,6 +29,12 @@ type KVServer struct {
 	data map[string]Entry
 }
 
+func (kv *KVServer) debug(format string, a ...interface{}) {
+	if Debug {
+		log.Printf("[KVServer_%d] %s\n", kv.me, fmt.Sprintf(format, a...))
+	}
+}
+
 // To type-cast req to the right type, take a look at Go's type switches or type
 // assertions below:
 //
@@ -51,6 +58,7 @@ func (kv *KVServer) DoOp(req any) any {
 				Err:     rpc.OK,
 			}
 		}
+		kv.debug("DoOp, GetArgs=%+v, GetReply=%+v", args, reply)
 		return &reply
 	case rpc.PutArgs:
 		entry, ok := kv.data[args.Key]
@@ -66,6 +74,7 @@ func (kv *KVServer) DoOp(req any) any {
 		} else {
 			reply = rpc.PutReply{Err: rpc.ErrVersion}
 		}
+		kv.debug("DoOp, PutArgs=%+v, PutReply=%+v", args, reply)
 		return &reply
 	default:
 		log.Fatalf("DoOp should execute only Get and Put and not %T", req)
@@ -138,6 +147,7 @@ func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 func (kv *KVServer) Kill() {
 	atomic.StoreInt32(&kv.dead, 1)
 	// Your code here, if desired.
+	kv.debug("Kill")
 }
 
 func (kv *KVServer) killed() bool {
