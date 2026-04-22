@@ -555,8 +555,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				if logEntry.Term < args.Entries[len(args.Entries)-1].Term {
 					rf.debug("the term of #%d entry %+v is smaller than the term of #%d entry (last replaced entry) %+v",
 						i, logEntry, lastReplacedIndex, args.Entries[len(args.Entries)-1])
-					rf.debug("do clean up, log %+v -> log %+v", rf.log, rf.log[:i])
-					rf.log = rf.log[:i]
+					newLog := rf.log[:i-rf.snapshotLastIncludedIndex]
+					rf.debug("do clean up, log %+v -> log %+v", rf.log, newLog)
+					rf.log = newLog
 					break
 				}
 			}
@@ -598,8 +599,10 @@ type InstallSnapshotReply struct {
 }
 
 func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapshotReply) {
+	rf.applyChMu.Lock()
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	defer rf.applyChMu.Unlock()
 
 	rf.debug("handle InstallSnapshot, args=%+v", args)
 
@@ -625,14 +628,12 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		if !rf.killed() && rf.lastApplied < rf.snapshotLastIncludedIndex {
 			rf.debug("apply snapshot, snapshotLastIncludedIndex=%d, snapshotLastIncludedTerm=%d",
 				rf.snapshotLastIncludedIndex, rf.snapshotLastIncludedTerm)
-			rf.applyChMu.Lock()
 			rf.applyCh <- raftapi.ApplyMsg{
 				SnapshotValid: true,
 				Snapshot:      rf.snapshot,
 				SnapshotTerm:  rf.snapshotLastIncludedTerm,
 				SnapshotIndex: rf.snapshotLastIncludedIndex,
 			}
-			rf.applyChMu.Unlock()
 			if rf.snapshotLastIncludedIndex > rf.lastApplied {
 				rf.increaseLastApplied(args.LastIncludedIndex)
 			}
@@ -940,24 +941,30 @@ func (rf *Raft) applyLogEntries() {
 	rf.mu.Unlock()
 
 	for i := start; i <= end; i++ {
+		rf.applyChMu.Lock()
 		rf.mu.Lock()
+		if i <= rf.lastApplied {
+			rf.debug("applyLogEntries early returns, #%d log entry is already applied", i)
+			return
+		}
 		rf.debug("apply #%d log entry, %+v", i, rf.getLogEntry(i))
 		command := rf.getLogEntry(i).Command
 		rf.mu.Unlock()
 
 		if !rf.killed() && command != nil {
-			rf.applyChMu.Lock()
 			rf.applyCh <- raftapi.ApplyMsg{
 				CommandValid: true,
 				Command:      command,
 				CommandIndex: i,
 			}
-			rf.applyChMu.Unlock()
 		}
 
 		rf.mu.Lock()
-		rf.increaseLastApplied(i)
+		if i > rf.lastApplied {
+			rf.increaseLastApplied(i)
+		}
 		rf.mu.Unlock()
+		rf.applyChMu.Unlock()
 	}
 }
 
