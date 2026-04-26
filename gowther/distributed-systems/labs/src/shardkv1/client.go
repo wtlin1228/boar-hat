@@ -9,9 +9,13 @@ package shardkv
 //
 
 import (
+	"log"
+
 	"6.5840/kvsrv1/rpc"
 	kvtest "6.5840/kvtest1"
+	"6.5840/shardkv1/shardcfg"
 	"6.5840/shardkv1/shardctrler"
+	"6.5840/shardkv1/shardgrp"
 	tester "6.5840/tester1"
 )
 
@@ -39,11 +43,21 @@ func MakeClerk(clnt *tester.Clnt, sck *shardctrler.ShardCtrler) kvtest.IKVClerk 
 // calling shardgrp.MakeClerk(ck.clnt, servers).
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	// You will have to modify this function.
-	return "", 0, ""
+	return ck.makeShardgrpClerk(key).Get(key)
 }
 
 // Put a key to a shard group.
 func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	// You will have to modify this function.
-	return ""
+	return ck.makeShardgrpClerk(key).Put(key, value, version)
+}
+
+func (ck *Clerk) makeShardgrpClerk(key string) *shardgrp.Clerk {
+	shid := shardcfg.Key2Shard(key)
+	config := ck.sck.Query()
+	_, servers, ok := config.GidServers(shid)
+	if !ok {
+		log.Fatalf("Clerk::Get - failed to call config.GidServers(%d)", shid)
+	}
+	return shardgrp.MakeClerk(ck.clnt, servers)
 }

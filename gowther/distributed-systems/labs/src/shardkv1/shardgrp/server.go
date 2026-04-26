@@ -1,6 +1,9 @@
 package shardgrp
 
 import (
+	"bytes"
+	"log"
+	"sync"
 	"sync/atomic"
 
 	"6.5840/kvraft1/rsm"
@@ -11,6 +14,11 @@ import (
 	tester "6.5840/tester1"
 )
 
+type Entry struct {
+	Value   string
+	Version rpc.Tversion
+}
+
 type KVServer struct {
 	me   int
 	dead int32 // set by Kill()
@@ -18,28 +26,98 @@ type KVServer struct {
 	gid  tester.Tgid
 
 	// Your code here
+	mu   sync.Mutex
+	data map[string]Entry
 }
 
 func (kv *KVServer) DoOp(req any) any {
 	// Your code here
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	switch args := req.(type) {
+	case rpc.GetArgs:
+		entry, ok := kv.data[args.Key]
+		var reply rpc.GetReply
+		if !ok {
+			reply = rpc.GetReply{Err: rpc.ErrNoKey}
+		} else {
+			reply = rpc.GetReply{
+				Value:   entry.Value,
+				Version: entry.Version,
+				Err:     rpc.OK,
+			}
+		}
+		return &reply
+	case rpc.PutArgs:
+		entry, ok := kv.data[args.Key]
+		var reply rpc.PutReply
+		if !ok && args.Version == 0 {
+			kv.data[args.Key] = Entry{args.Value, 1}
+			reply = rpc.PutReply{Err: rpc.OK}
+		} else if !ok {
+			reply = rpc.PutReply{Err: rpc.ErrNoKey}
+		} else if entry.Version == args.Version {
+			kv.data[args.Key] = Entry{args.Value, entry.Version + 1}
+			reply = rpc.PutReply{Err: rpc.OK}
+		} else {
+			reply = rpc.PutReply{Err: rpc.ErrVersion}
+		}
+		return &reply
+	default:
+		log.Fatalf("shardgrp::Server::DoOp - should execute only Get and Put and not %T", req)
+	}
 	return nil
 }
 
 func (kv *KVServer) Snapshot() []byte {
 	// Your code here
-	return nil
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(kv.data)
+	return w.Bytes()
 }
 
 func (kv *KVServer) Restore(data []byte) {
 	// Your code here
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var decodedData map[string]Entry
+	if d.Decode(&decodedData) != nil {
+		log.Fatalln("shardgrp::Server::Restore - fail to decode the restore data")
+	} else {
+		kv.data = decodedData
+	}
 }
 
 func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 	// Your code here
+	err, res := kv.rsm.Submit(*args)
+	if err == rpc.ErrWrongLeader {
+		reply.Err = rpc.ErrWrongLeader
+	} else {
+		res := res.(*rpc.GetReply)
+		reply.Value = res.Value
+		reply.Version = res.Version
+		reply.Err = res.Err
+	}
 }
 
 func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 	// Your code here
+	err, res := kv.rsm.Submit(*args)
+	if err == rpc.ErrWrongLeader {
+		reply.Err = err
+	} else {
+		res := res.(*rpc.PutReply)
+		reply.Err = res.Err
+	}
 }
 
 // Freeze the specified shard (i.e., reject future Get/Puts for this
@@ -91,6 +169,7 @@ func StartServerShardGrp(servers []*labrpc.ClientEnd, gid tester.Tgid, me int, p
 	labgob.Register(rsm.Op{})
 
 	kv := &KVServer{gid: gid, me: me}
+	kv.data = make(map[string]Entry)
 	kv.rsm = rsm.MakeRSM(servers, me, persister, maxraftstate, kv)
 
 	// Your code here
