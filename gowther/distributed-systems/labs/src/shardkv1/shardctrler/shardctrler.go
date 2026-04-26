@@ -5,10 +5,17 @@ package shardctrler
 //
 
 import (
+	"log"
+
 	kvsrv "6.5840/kvsrv1"
+	"6.5840/kvsrv1/rpc"
 	kvtest "6.5840/kvtest1"
 	"6.5840/shardkv1/shardcfg"
 	tester "6.5840/tester1"
+)
+
+const (
+	ConfigKey string = "SHARD_CONFIG"
 )
 
 // ShardCtrler for the controller and kv clerk.
@@ -19,6 +26,7 @@ type ShardCtrler struct {
 	killed int32 // set by Kill()
 
 	// Your data here.
+	configVersion rpc.Tversion
 }
 
 // Make a ShardCltler, which stores its state in a kvsrv.
@@ -43,6 +51,12 @@ func (sck *ShardCtrler) InitController() {
 // lists shardgrp shardcfg.Gid1 for all shards.
 func (sck *ShardCtrler) InitConfig(cfg *shardcfg.ShardConfig) {
 	// Your code here
+	err := sck.IKVClerk.Put(ConfigKey, cfg.String(), 0)
+	if err == rpc.OK {
+		sck.configVersion = 1
+	} else {
+		log.Fatalf("ShardCtrler::InitConfig - failed, err=%s\n", err)
+	}
 }
 
 // Called by the tester to ask the controller to change the
@@ -51,10 +65,22 @@ func (sck *ShardCtrler) InitConfig(cfg *shardcfg.ShardConfig) {
 // controller.
 func (sck *ShardCtrler) ChangeConfigTo(new *shardcfg.ShardConfig) {
 	// Your code here.
+	err := sck.IKVClerk.Put(ConfigKey, new.String(), sck.configVersion)
+	if err == rpc.OK {
+		sck.configVersion += 1
+	} else {
+		log.Fatalf("ShardCtrler::ChangeConfigTo - failed, err=%s\n", err)
+	}
 }
 
 // Return the current configuration
 func (sck *ShardCtrler) Query() *shardcfg.ShardConfig {
 	// Your code here.
+	value, version, err := sck.IKVClerk.Get(ConfigKey)
+	if err == rpc.OK {
+		sck.configVersion = version
+		return shardcfg.FromString(value)
+	}
+	log.Fatalf("ShardCtrler::Query - failed, err=%s\n", err)
 	return nil
 }
