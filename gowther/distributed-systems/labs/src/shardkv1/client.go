@@ -9,6 +9,7 @@ package shardkv
 //
 
 import (
+	"fmt"
 	"log"
 
 	"6.5840/kvsrv1/rpc"
@@ -23,6 +24,16 @@ type Clerk struct {
 	clnt *tester.Clnt
 	sck  *shardctrler.ShardCtrler
 	// You will have to modify this struct.
+}
+
+func (ck *Clerk) fatalf(format string, a ...interface{}) {
+	log.Fatalf("[Clerk] %s\n", fmt.Sprintf(format, a...))
+}
+
+func (ck *Clerk) debug(format string, a ...interface{}) {
+	if Debug {
+		log.Printf("[Clerk] %s\n", fmt.Sprintf(format, a...))
+	}
 }
 
 // The tester calls MakeClerk and passes in a shardctrler so that
@@ -57,7 +68,7 @@ func (ck *Clerk) makeShardgrpClerk(key string) *shardgrp.Clerk {
 	config := ck.sck.Query()
 	_, servers, ok := config.GidServers(shid)
 	if !ok {
-		log.Fatalf("Clerk::Get - failed to call config.GidServers(%d)", shid)
+		ck.fatalf("makeShardgrpClerk - failed to get servers of shard_%d", shid)
 	}
 	return shardgrp.MakeClerk(ck.clnt, servers)
 }

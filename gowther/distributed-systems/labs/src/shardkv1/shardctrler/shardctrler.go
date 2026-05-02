@@ -5,12 +5,15 @@ package shardctrler
 //
 
 import (
+	"fmt"
 	"log"
+	"sync"
 
 	kvsrv "6.5840/kvsrv1"
 	"6.5840/kvsrv1/rpc"
 	kvtest "6.5840/kvtest1"
 	"6.5840/shardkv1/shardcfg"
+	"6.5840/shardkv1/shardgrp"
 	tester "6.5840/tester1"
 )
 
@@ -29,12 +32,24 @@ type ShardCtrler struct {
 	configVersion rpc.Tversion
 }
 
+func (sck *ShardCtrler) fatalf(format string, a ...interface{}) {
+	log.Fatalf("[ShardCtrler] %s\n", fmt.Sprintf(format, a...))
+}
+
+func (sck *ShardCtrler) debug(format string, a ...interface{}) {
+	if Debug {
+		log.Printf("[ShardCtrler] %s\n", fmt.Sprintf(format, a...))
+	}
+}
+
 // Make a ShardCltler, which stores its state in a kvsrv.
 func MakeShardCtrler(clnt *tester.Clnt) *ShardCtrler {
 	sck := &ShardCtrler{clnt: clnt}
 	srv := tester.ServerName(tester.GRP0, 0)
 	sck.IKVClerk = kvsrv.MakeClerk(clnt, srv)
 	// Your code here.
+	sck.debug("MakeShardCtrler")
+
 	return sck
 }
 
@@ -42,6 +57,8 @@ func MakeShardCtrler(clnt *tester.Clnt) *ShardCtrler {
 // controller. In part A, this method doesn't need to do anything. In
 // B and C, this method implements recovery.
 func (sck *ShardCtrler) InitController() {
+	sck.debug("InitController")
+
 }
 
 // Called once by the tester to supply the first configuration.  You
@@ -50,12 +67,15 @@ func (sck *ShardCtrler) InitController() {
 // pick the key to name the configuration.  The initial configuration
 // lists shardgrp shardcfg.Gid1 for all shards.
 func (sck *ShardCtrler) InitConfig(cfg *shardcfg.ShardConfig) {
-	// Your code here
+	sck.debug("InitConfig")
+
+	sck.initShards(cfg)
+
 	err := sck.IKVClerk.Put(ConfigKey, cfg.String(), 0)
 	if err == rpc.OK {
 		sck.configVersion = 1
 	} else {
-		log.Fatalf("ShardCtrler::InitConfig - failed, err=%s\n", err)
+		sck.fatalf("InitConfig - failed to put the new config\n")
 	}
 }
 
@@ -64,23 +84,65 @@ func (sck *ShardCtrler) InitConfig(cfg *shardcfg.ShardConfig) {
 // changes the configuration it may be superseded by another
 // controller.
 func (sck *ShardCtrler) ChangeConfigTo(new *shardcfg.ShardConfig) {
-	// Your code here.
+	sck.debug("ChangeConfigTo, new=%+v", new)
+
 	err := sck.IKVClerk.Put(ConfigKey, new.String(), sck.configVersion)
 	if err == rpc.OK {
 		sck.configVersion += 1
 	} else {
-		log.Fatalf("ShardCtrler::ChangeConfigTo - failed, err=%s\n", err)
+		sck.fatalf("ChangeConfigTo - failed, err=%s\n", err)
 	}
 }
 
 // Return the current configuration
 func (sck *ShardCtrler) Query() *shardcfg.ShardConfig {
-	// Your code here.
+	sck.debug("Query")
+
 	value, version, err := sck.IKVClerk.Get(ConfigKey)
 	if err == rpc.OK {
 		sck.configVersion = version
 		return shardcfg.FromString(value)
 	}
-	log.Fatalf("ShardCtrler::Query - failed, err=%s\n", err)
+	sck.fatalf("Query - failed, err=%s\n", err)
 	return nil
+}
+
+func (sck *ShardCtrler) makeShardgrpClerk(config *shardcfg.ShardConfig, shid shardcfg.Tshid) *shardgrp.Clerk {
+	_, servers, ok := config.GidServers(shid)
+	if !ok {
+		sck.fatalf("makeShardgrpClerk - failed to call config.GidServers(%d)", shid)
+	}
+	return shardgrp.MakeClerk(sck.clnt, servers)
+}
+
+func (sck *ShardCtrler) initShards(cfg *shardcfg.ShardConfig) {
+	sck.debug("initShards")
+
+	var wg sync.WaitGroup
+	errCh := make(chan struct{}, len(cfg.Shards))
+
+	for shid := range len(cfg.Shards) {
+		wg.Add(1)
+
+		go func(shid shardcfg.Tshid) {
+			defer wg.Done()
+
+			shardgrpClerk := sck.makeShardgrpClerk(cfg, shid)
+			err := shardgrpClerk.InitShard(shid, 0)
+			if err != rpc.OK {
+				sck.debug("initShards - initialize shard_%d failed", shid)
+				errCh <- struct{}{}
+			} else {
+				sck.debug("initShards - initialize shard_%d succeeded", shid)
+			}
+		}(shardcfg.Tshid(shid))
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for range errCh {
+		// not fatal here since the first test case doesn't make the KVServer
+		sck.debug("initShards - failed to init shards\n")
+	}
 }

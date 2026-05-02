@@ -2,6 +2,7 @@ package shardgrp
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -10,6 +11,7 @@ import (
 	"6.5840/kvsrv1/rpc"
 	"6.5840/labgob"
 	"6.5840/labrpc"
+	"6.5840/shardkv1/shardcfg"
 	"6.5840/shardkv1/shardgrp/shardrpc"
 	tester "6.5840/tester1"
 )
@@ -28,6 +30,22 @@ type KVServer struct {
 	// Your code here
 	mu   sync.Mutex
 	data map[string]Entry
+
+	// configuration
+	configNum shardcfg.Tnum
+	// each group can serve more than one shard
+	// freeze, exist := shardMap[shid]
+	shardMap map[shardcfg.Tshid]bool
+}
+
+func (kv *KVServer) fatalf(format string, a ...interface{}) {
+	log.Fatalf("[shardgrp::KVServer_%d] %s\n", kv.me, fmt.Sprintf(format, a...))
+}
+
+func (kv *KVServer) debug(format string, a ...interface{}) {
+	if Debug {
+		log.Printf("[shardgrp::KVServer_%d] %s\n", kv.me, fmt.Sprintf(format, a...))
+	}
 }
 
 func (kv *KVServer) DoOp(req any) any {
@@ -37,9 +55,12 @@ func (kv *KVServer) DoOp(req any) any {
 
 	switch args := req.(type) {
 	case rpc.GetArgs:
+		freeze, exist := kv.shardMap[shardcfg.Key2Shard(args.Key)]
 		entry, ok := kv.data[args.Key]
 		var reply rpc.GetReply
-		if !ok {
+		if !exist || freeze {
+			reply = rpc.GetReply{Err: rpc.ErrWrongGroup}
+		} else if !ok {
 			reply = rpc.GetReply{Err: rpc.ErrNoKey}
 		} else {
 			reply = rpc.GetReply{
@@ -50,9 +71,12 @@ func (kv *KVServer) DoOp(req any) any {
 		}
 		return &reply
 	case rpc.PutArgs:
+		freeze, exist := kv.shardMap[shardcfg.Key2Shard(args.Key)]
 		entry, ok := kv.data[args.Key]
 		var reply rpc.PutReply
-		if !ok && args.Version == 0 {
+		if !exist || freeze {
+			reply = rpc.PutReply{Err: rpc.ErrWrongGroup}
+		} else if !ok && args.Version == 0 {
 			kv.data[args.Key] = Entry{args.Value, 1}
 			reply = rpc.PutReply{Err: rpc.OK}
 		} else if !ok {
@@ -136,6 +160,22 @@ func (kv *KVServer) DeleteShard(args *shardrpc.DeleteShardArgs, reply *shardrpc.
 	// Your code here
 }
 
+// Initialize the shardMap
+func (kv *KVServer) InitShard(args *shardrpc.InitShardArgs, reply *shardrpc.InitShardReply) {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	kv.debug("InitShard, args=%+v", args)
+
+	if args.Num != 0 || kv.configNum != 0 || len(kv.data) != 0 {
+		reply.Err = rpc.ErrVersion
+		return
+	}
+
+	// kv.shardMap[args.Shard] = false
+	reply.Err = rpc.OK
+}
+
 // the tester calls Kill() when a KVServer instance won't
 // be needed again. for your convenience, we supply
 // code to set rf.dead (without needing a lock),
@@ -166,13 +206,21 @@ func StartServerShardGrp(servers []*labrpc.ClientEnd, gid tester.Tgid, me int, p
 	labgob.Register(shardrpc.FreezeShardArgs{})
 	labgob.Register(shardrpc.InstallShardArgs{})
 	labgob.Register(shardrpc.DeleteShardArgs{})
+	labgob.Register(shardrpc.InitShardArgs{})
 	labgob.Register(rsm.Op{})
 
 	kv := &KVServer{gid: gid, me: me}
-	kv.data = make(map[string]Entry)
 	kv.rsm = rsm.MakeRSM(servers, me, persister, maxraftstate, kv)
+	kv.data = make(map[string]Entry)
+	kv.shardMap = make(map[shardcfg.Tshid]bool)
+
+	snapshot := persister.ReadSnapshot()
+	if len(snapshot) != 0 {
+		kv.Restore(snapshot)
+	}
 
 	// Your code here
+	kv.debug("StartServerShardGrp")
 
 	return []tester.IService{kv, kv.rsm.Raft()}
 }
