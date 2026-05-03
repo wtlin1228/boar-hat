@@ -34,12 +34,3 @@ type DeleteShardArgs struct {
 type DeleteShardReply struct {
 	Err rpc.Err
 }
-
-type InitShardArgs struct {
-	Shard shardcfg.Tshid
-	Num   shardcfg.Tnum
-}
-
-type InitShardReply struct {
-	Err rpc.Err
-}

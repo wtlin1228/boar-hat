@@ -3,7 +3,6 @@ package shardgrp
 import (
 	"fmt"
 	"log"
-	"slices"
 	"sync"
 	"time"
 
@@ -142,54 +141,147 @@ Done:
 }
 
 func (ck *Clerk) FreezeShard(s shardcfg.Tshid, num shardcfg.Tnum) ([]byte, rpc.Err) {
-	// Your code here
-	return nil, ""
+	ck.debug("FreezeShard, shid=%d, num=%d", s, num)
+
+	type result struct {
+		serverId int
+		ok       bool
+		reply    shardrpc.FreezeShardReply
+	}
+
+	t := time.NewTimer(Timeout)
+	defer t.Stop()
+
+	done := make(chan result, len(ck.servers))
+
+	ck.mu.Lock()
+	prefer := ck.prefer
+	ck.mu.Unlock()
+
+	var r result
+	for offset := 0; ; offset++ {
+		id := (offset + prefer) % len(ck.servers)
+		go func() {
+			args := shardrpc.FreezeShardArgs{Shard: s, Num: num}
+			reply := shardrpc.FreezeShardReply{}
+			ok := ck.clnt.Call(ck.servers[id], "KVServer.FreezeShard", &args, &reply)
+			done <- result{id, ok, reply}
+		}()
+
+		select {
+		case <-t.C:
+		case r = <-done:
+			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
+				goto Done
+			}
+		}
+		t.Reset(Timeout)
+		time.Sleep(Throttle) // to prevent excessive RPC calls
+	}
+
+Done:
+	ck.mu.Lock()
+	ck.prefer = r.serverId
+	ck.debug("FreezeShard, shid=%d, num=%d, done with err=%s", s, num, r.reply.Err)
+	ck.mu.Unlock()
+	return r.reply.State, r.reply.Err
 }
 
 func (ck *Clerk) InstallShard(s shardcfg.Tshid, state []byte, num shardcfg.Tnum) rpc.Err {
-	// Your code here
-	return ""
+	ck.debug("InstallShard, shid=%d, num=%d", s, num)
+
+	type result struct {
+		serverId int
+		ok       bool
+		reply    shardrpc.InstallShardReply
+	}
+
+	tt := time.NewTimer(time.Second * 10)
+	defer tt.Stop()
+
+	t := time.NewTimer(Timeout)
+	defer t.Stop()
+
+	done := make(chan result, len(ck.servers))
+
+	ck.mu.Lock()
+	prefer := ck.prefer
+	ck.mu.Unlock()
+
+	var r result
+	for offset := 0; ; offset++ {
+		id := (offset + prefer) % len(ck.servers)
+		go func() {
+			args := shardrpc.InstallShardArgs{Shard: s, State: state, Num: num}
+			reply := shardrpc.InstallShardReply{}
+			ok := ck.clnt.Call(ck.servers[id], "KVServer.InstallShard", &args, &reply)
+			done <- result{id, ok, reply}
+		}()
+
+		select {
+		case <-tt.C:
+			return rpc.ErrTimeout
+		case <-t.C:
+		case r = <-done:
+			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
+				goto Done
+			}
+		}
+		t.Reset(Timeout)
+		time.Sleep(Throttle) // to prevent excessive RPC calls
+	}
+
+Done:
+	ck.mu.Lock()
+	ck.prefer = r.serverId
+	ck.debug("InstallShard, shid=%d, num=%d, done with err=%s", s, num, r.reply.Err)
+	ck.mu.Unlock()
+	return r.reply.Err
 }
 
 func (ck *Clerk) DeleteShard(s shardcfg.Tshid, num shardcfg.Tnum) rpc.Err {
-	// Your code here
-	return ""
-}
+	ck.debug("DeleteShard, shid=%d, num=%d", s, num)
 
-func (ck *Clerk) InitShard(s shardcfg.Tshid, num shardcfg.Tnum) rpc.Err {
-	ck.debug("InitShard, shid=%d", s)
+	type result struct {
+		serverId int
+		ok       bool
+		reply    shardrpc.DeleteShardReply
+	}
+
+	t := time.NewTimer(Timeout)
+	defer t.Stop()
+
+	done := make(chan result, len(ck.servers))
 
 	ck.mu.Lock()
-	servers := slices.Clone(ck.servers)
+	prefer := ck.prefer
 	ck.mu.Unlock()
 
-	var wg sync.WaitGroup
-	errCh := make(chan struct{}, len(servers))
+	var r result
+	for offset := 0; ; offset++ {
+		id := (offset + prefer) % len(ck.servers)
+		go func() {
+			args := shardrpc.DeleteShardArgs{Shard: s, Num: num}
+			reply := shardrpc.DeleteShardReply{}
+			ok := ck.clnt.Call(ck.servers[id], "KVServer.DeleteShard", &args, &reply)
+			done <- result{id, ok, reply}
+		}()
 
-	for _, server := range servers {
-		wg.Add(1)
-
-		go func(server string) {
-			defer wg.Done()
-
-			args := shardrpc.InitShardArgs{Shard: s, Num: num}
-			reply := shardrpc.InitShardReply{}
-			ok := ck.clnt.Call(server, "KVServer.InitShard", &args, &reply)
-			if !ok || reply.Err != rpc.OK {
-				ck.debug("InitShard - call KVServer.InitShard to init shard_%d on server_%s failed", s, server)
-				errCh <- struct{}{}
-			} else {
-				ck.debug("InitShard - call KVServer.InitShard to init shard_%d on server_%s succeeded", s, server)
+		select {
+		case <-t.C:
+		case r = <-done:
+			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
+				goto Done
 			}
-		}(server)
+		}
+		t.Reset(Timeout)
+		time.Sleep(Throttle) // to prevent excessive RPC calls
 	}
 
-	wg.Wait()
-	close(errCh)
-
-	for range errCh {
-		return rpc.ErrVersion
-	}
-
-	return rpc.OK
+Done:
+	ck.mu.Lock()
+	ck.prefer = r.serverId
+	ck.debug("DeleteShard, shid=%d, num=%d, done with err=%s", s, num, r.reply.Err)
+	ck.mu.Unlock()
+	return r.reply.Err
 }
