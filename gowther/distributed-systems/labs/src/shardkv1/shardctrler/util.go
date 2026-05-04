@@ -1,6 +1,6 @@
 package shardctrler
 
-const Debug = true
+const Debug = false
 
 func equalUnordered(a, b []string) bool {
 	if len(a) != len(b) {

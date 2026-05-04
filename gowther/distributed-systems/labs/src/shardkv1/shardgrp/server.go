@@ -37,7 +37,7 @@ type KVServer struct {
 	data map[string]Entry
 
 	// each group can serve more than one shard
-	shardMap map[shardcfg.Tshid]Shard
+	shardMap map[shardcfg.Tshid]*Shard
 }
 
 func (kv *KVServer) fatalf(format string, a ...interface{}) {
@@ -72,6 +72,14 @@ func (kv *KVServer) installShardState(data []byte) {
 	} else {
 		for k, v := range shardState {
 			kv.data[k] = v
+		}
+	}
+}
+
+func (kv *KVServer) removeShardState(shid shardcfg.Tshid) {
+	for k := range kv.data {
+		if shardcfg.Key2Shard(k) == shid {
+			delete(kv.data, k)
 		}
 	}
 }
@@ -135,21 +143,29 @@ func (kv *KVServer) DoOp(req any) any {
 			if len(args.State) != 0 || len(kv.data) != 0 {
 				return &shardrpc.InstallShardReply{Err: rpc.ErrVersion}
 			}
-			kv.shardMap[args.Shard] = Shard{freeze: false, num: 0}
+			kv.shardMap[args.Shard] = &Shard{freeze: false, num: 0}
 			return &shardrpc.InstallShardReply{Err: rpc.OK}
 		}
 		shard, exist := kv.shardMap[args.Shard]
-		if !exist {
-			return &shardrpc.InstallShardReply{Err: rpc.ErrWrongGroup}
-		} else if args.Num < shard.num {
+		if exist && args.Num < shard.num {
 			return &shardrpc.InstallShardReply{Err: rpc.ErrVersion}
 		}
 		kv.installShardState(args.State)
-		shard.num = args.Num
+		kv.shardMap[args.Shard] = &Shard{freeze: false, num: args.Num}
 		return &shardrpc.InstallShardReply{Err: rpc.OK}
 
 	case shardrpc.DeleteShardArgs:
-		kv.fatalf("not implemented yet")
+		shard, exist := kv.shardMap[args.Shard]
+		if !exist {
+			return &shardrpc.DeleteShardReply{Err: rpc.ErrWrongGroup}
+		} else if args.Num == 0 || args.Num < shard.num {
+			return &shardrpc.DeleteShardReply{Err: rpc.ErrVersion}
+		} else if !shard.freeze {
+			return &shardrpc.DeleteShardReply{Err: rpc.ErrWrongGroup}
+		}
+		kv.removeShardState(args.Shard)
+		delete(kv.shardMap, args.Shard)
+		return &shardrpc.DeleteShardReply{Err: rpc.OK}
 
 	default:
 		kv.fatalf("DoOp - unexpected operation %T", req)
@@ -281,7 +297,7 @@ func StartServerShardGrp(servers []*labrpc.ClientEnd, gid tester.Tgid, me int, p
 	kv := &KVServer{gid: gid, me: me}
 	kv.rsm = rsm.MakeRSM(servers, me, persister, maxraftstate, kv)
 	kv.data = make(map[string]Entry)
-	kv.shardMap = make(map[shardcfg.Tshid]Shard)
+	kv.shardMap = make(map[shardcfg.Tshid]*Shard)
 
 	snapshot := persister.ReadSnapshot()
 	if len(snapshot) != 0 {

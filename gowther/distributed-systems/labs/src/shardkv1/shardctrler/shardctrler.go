@@ -88,6 +88,7 @@ func (sck *ShardCtrler) ChangeConfigTo(new *shardcfg.ShardConfig) {
 	cfg := sck.Query()
 
 	var wg sync.WaitGroup
+	errCh := make(chan struct{}, len(cfg.Shards))
 
 	for shid := range len(cfg.Shards) {
 		shid := shardcfg.Tshid(shid)
@@ -99,21 +100,40 @@ func (sck *ShardCtrler) ChangeConfigTo(new *shardcfg.ShardConfig) {
 			go func(shid shardcfg.Tshid) {
 				defer wg.Done()
 
-				// TODO: handle failed RPCs?
 				oldShardgrpClerk := sck.makeShardgrpClerk(cfg, shid)
 				newShardgrpClerk := sck.makeShardgrpClerk(new, shid)
-				shardData, _ := oldShardgrpClerk.FreezeShard(shid, new.Num)
-				newShardgrpClerk.InstallShard(shid, shardData, new.Num)
-				oldShardgrpClerk.DeleteShard(shid, new.Num)
+				shardData, err := oldShardgrpClerk.FreezeShard(shid, new.Num)
+				if err != rpc.OK {
+					sck.debug("ChangeConfigTo - failed to freeze shard_%d", shid)
+					errCh <- struct{}{}
+					return
+				}
+				err = newShardgrpClerk.InstallShard(shid, shardData, new.Num)
+				if err != rpc.OK {
+					sck.debug("ChangeConfigTo - failed to install shard_%d", shid)
+					errCh <- struct{}{}
+					return
+				}
+				err = oldShardgrpClerk.DeleteShard(shid, new.Num)
+				if err != rpc.OK {
+					sck.debug("ChangeConfigTo - failed to delete shard_%d", shid)
+					errCh <- struct{}{}
+					return
+				}
 			}(shid)
 		}
 	}
 
 	wg.Wait()
+	close(errCh)
+
+	for range errCh {
+		sck.fatalf("ChangeConfigTo - failed to apply the new config")
+	}
 
 	err := sck.IKVClerk.Put(ConfigKey, new.String(), rpc.Tversion(new.Num))
 	if err != rpc.OK {
-		sck.fatalf("ChangeConfigTo - failed, err=%s\n", err)
+		sck.fatalf("ChangeConfigTo - failed to put the new config, err=%s\n", err)
 	}
 
 	sck.debug("ChangeConfigTo - succeeded, new=%+v", new)
