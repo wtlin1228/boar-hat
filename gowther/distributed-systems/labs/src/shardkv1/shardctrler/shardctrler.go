@@ -85,7 +85,7 @@ func (sck *ShardCtrler) InitConfig(cfg *shardcfg.ShardConfig) {
 func (sck *ShardCtrler) ChangeConfigTo(new *shardcfg.ShardConfig) {
 	sck.debug("ChangeConfigTo - new=%+v", new)
 
-	cfg := sck.Query()
+	cfg, version := sck.query()
 
 	var wg sync.WaitGroup
 	errCh := make(chan struct{}, len(cfg.Shards))
@@ -130,8 +130,9 @@ func (sck *ShardCtrler) ChangeConfigTo(new *shardcfg.ShardConfig) {
 	for range errCh {
 		sck.fatalf("ChangeConfigTo - failed to apply the new config")
 	}
+	sck.debug("ChangeConfigTo - apply the new config succeeded")
 
-	err := sck.IKVClerk.Put(ConfigKey, new.String(), rpc.Tversion(new.Num))
+	err := sck.IKVClerk.Put(ConfigKey, new.String(), version)
 	if err != rpc.OK {
 		sck.fatalf("ChangeConfigTo - failed to put the new config, err=%s\n", err)
 	}
@@ -139,16 +140,20 @@ func (sck *ShardCtrler) ChangeConfigTo(new *shardcfg.ShardConfig) {
 	sck.debug("ChangeConfigTo - succeeded, new=%+v", new)
 }
 
+func (sck *ShardCtrler) query() (*shardcfg.ShardConfig, rpc.Tversion) {
+	value, version, err := sck.IKVClerk.Get(ConfigKey)
+	if err == rpc.OK {
+		return shardcfg.FromString(value), version
+	}
+	sck.fatalf("Query - failed, err=%s\n", err)
+	return nil, 0
+}
+
 // Return the current configuration
 func (sck *ShardCtrler) Query() *shardcfg.ShardConfig {
 	sck.debug("Query")
-
-	value, _, err := sck.IKVClerk.Get(ConfigKey)
-	if err == rpc.OK {
-		return shardcfg.FromString(value)
-	}
-	sck.fatalf("Query - failed, err=%s\n", err)
-	return nil
+	cfg, _ := sck.query()
+	return cfg
 }
 
 func (sck *ShardCtrler) makeShardgrpClerk(config *shardcfg.ShardConfig, shid shardcfg.Tshid) *shardgrp.Clerk {
