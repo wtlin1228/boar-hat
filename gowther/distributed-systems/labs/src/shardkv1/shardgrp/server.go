@@ -157,7 +157,7 @@ func (kv *KVServer) DoOp(req any) any {
 	case shardrpc.DeleteShardArgs:
 		shard, exist := kv.shardMap[args.Shard]
 		if !exist {
-			return &shardrpc.DeleteShardReply{Err: rpc.ErrWrongGroup}
+			return &shardrpc.DeleteShardReply{Err: rpc.OK}
 		} else if args.Num == 0 || args.Num < shard.num {
 			return &shardrpc.DeleteShardReply{Err: rpc.ErrVersion}
 		} else if !shard.freeze {

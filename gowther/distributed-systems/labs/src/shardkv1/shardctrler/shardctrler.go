@@ -70,11 +70,7 @@ func (sck *ShardCtrler) InitConfig(cfg *shardcfg.ShardConfig) {
 
 	sck.initShards(cfg)
 
-	err := sck.IKVClerk.Put(ConfigKey, cfg.String(), 0)
-	if err != rpc.OK {
-		sck.fatalf("InitConfig - failed to put the new config\n")
-	}
-
+	sck.put(cfg, 0)
 	sck.debug("InitConfig succeeded")
 }
 
@@ -132,10 +128,7 @@ func (sck *ShardCtrler) ChangeConfigTo(new *shardcfg.ShardConfig) {
 	}
 	sck.debug("ChangeConfigTo - apply the new config succeeded")
 
-	err := sck.IKVClerk.Put(ConfigKey, new.String(), version)
-	if err != rpc.OK {
-		sck.fatalf("ChangeConfigTo - failed to put the new config, err=%s\n", err)
-	}
+	sck.put(new, version)
 
 	sck.debug("ChangeConfigTo - succeeded, new=%+v", new)
 }
@@ -147,6 +140,19 @@ func (sck *ShardCtrler) query() (*shardcfg.ShardConfig, rpc.Tversion) {
 	}
 	sck.fatalf("Query - failed, err=%s\n", err)
 	return nil, 0
+}
+
+func (sck *ShardCtrler) put(config *shardcfg.ShardConfig, version rpc.Tversion) {
+	configString := config.String()
+	sck.IKVClerk.Put(ConfigKey, configString, version)
+	for {
+		currentConfig, currentVersion := sck.query()
+		if currentConfig.String() == configString && currentVersion == version+1 {
+			break
+		}
+		sck.debug("put - failed to put new config, try again")
+		sck.IKVClerk.Put(ConfigKey, configString, version)
+	}
 }
 
 // Return the current configuration
