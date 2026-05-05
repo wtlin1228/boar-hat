@@ -54,22 +54,28 @@ func MakeClerk(clnt *tester.Clnt, sck *shardctrler.ShardCtrler) kvtest.IKVClerk 
 // calling shardgrp.MakeClerk(ck.clnt, servers).
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	// You will have to modify this function.
+	ck.debug("Get(%s)", key)
 	for {
 		value, version, err := ck.makeShardgrpClerk(key).Get(key)
 		if err != rpc.ErrWrongGroup {
+			ck.debug("Get(%s) - succeeded with value=%s, version=%d, err=%v", key, value, version, err)
 			return value, version, err
 		}
+		ck.debug("Get(%s) - failed, wrong group, try again", key)
 	}
 }
 
 // Put a key to a shard group.
 func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	// You will have to modify this function.
+	ck.debug("Put(%s, %s)", key, value)
 	for {
 		err := ck.makeShardgrpClerk(key).Put(key, value, version)
 		if err != rpc.ErrWrongGroup {
+			ck.debug("Put(%s, %s) - succeeded with err=%v", key, value, err)
 			return err
 		}
+		ck.debug("Put(%s, %s) - failed, wrong group, try again", key, value)
 	}
 }
 

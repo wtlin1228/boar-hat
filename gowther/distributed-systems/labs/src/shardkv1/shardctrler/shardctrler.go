@@ -158,7 +158,8 @@ func (sck *ShardCtrler) put(config *shardcfg.ShardConfig, version rpc.Tversion) 
 // Return the current configuration
 func (sck *ShardCtrler) Query() *shardcfg.ShardConfig {
 	sck.debug("Query")
-	cfg, _ := sck.query()
+	cfg, version := sck.query()
+	sck.debug("Query - success, version=%d, cfg=%s", version, cfg.String())
 	return cfg
 }
 
