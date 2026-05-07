@@ -72,7 +72,9 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 		select {
 		case <-t.C:
 		case r = <-done:
-			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
+			if !r.ok {
+				return "", 0, rpc.ErrWrongGroup
+			} else if r.ok && r.reply.Err != rpc.ErrWrongLeader {
 				goto Done
 			}
 		}
@@ -120,7 +122,9 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 		select {
 		case <-t.C:
 		case r = <-done:
-			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
+			if !r.ok {
+				return rpc.ErrWrongGroup
+			} else if r.ok && r.reply.Err != rpc.ErrWrongLeader {
 				if r.reply.Err == rpc.ErrVersion && retryCount > 0 {
 					r.reply.Err = rpc.ErrMaybe
 				}
