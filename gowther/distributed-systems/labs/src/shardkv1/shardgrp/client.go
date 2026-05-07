@@ -26,12 +26,12 @@ type Clerk struct {
 }
 
 func (ck *Clerk) fatalf(format string, a ...interface{}) {
-	log.Fatalf("[shardgrp::Clerk] %s\n", fmt.Sprintf(format, a...))
+	log.Fatalf("[shardgrp::Clerk] %+v %s\n", ck.servers, fmt.Sprintf(format, a...))
 }
 
 func (ck *Clerk) debug(format string, a ...interface{}) {
 	if Debug {
-		log.Printf("[shardgrp::Clerk] %s\n", fmt.Sprintf(format, a...))
+		log.Printf("[shardgrp::Clerk] %+v %s\n", ck.servers, fmt.Sprintf(format, a...))
 	}
 }
 
@@ -65,7 +65,9 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 		go func() {
 			args := rpc.GetArgs{Key: key}
 			reply := rpc.GetReply{}
+			ck.debug("%s.Get(%+v)", ck.servers[id], args)
 			ok := ck.clnt.Call(ck.servers[id], "KVServer.Get", &args, &reply)
+			ck.debug("%s.Get(%+v), ok=%v, reply=%+v", ck.servers[id], args, ok, reply)
 			done <- result{id, ok, reply}
 		}()
 
@@ -115,7 +117,9 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 		go func() {
 			args := rpc.PutArgs{Key: key, Value: value, Version: version}
 			reply := rpc.PutReply{}
+			ck.debug("%s.Put(%+v)", ck.servers[id], args)
 			ok := ck.clnt.Call(ck.servers[id], "KVServer.Put", &args, &reply)
+			ck.debug("%s.Put(%+v), ok=%v, reply=%+v", ck.servers[id], args, ok, reply)
 			done <- result{id, ok, reply}
 		}()
 
@@ -168,7 +172,9 @@ func (ck *Clerk) FreezeShard(s shardcfg.Tshid, num shardcfg.Tnum) ([]byte, rpc.E
 		go func() {
 			args := shardrpc.FreezeShardArgs{Shard: s, Num: num}
 			reply := shardrpc.FreezeShardReply{}
+			ck.debug("%s.FreezeShard(%+v)", ck.servers[id], args)
 			ok := ck.clnt.Call(ck.servers[id], "KVServer.FreezeShard", &args, &reply)
+			ck.debug("%s.FreezeShard(%+v), ok=%v, reply=%+v", ck.servers[id], args, ok, reply)
 			done <- result{id, ok, reply}
 		}()
 
@@ -218,7 +224,9 @@ func (ck *Clerk) InstallShard(s shardcfg.Tshid, state []byte, num shardcfg.Tnum)
 		go func() {
 			args := shardrpc.InstallShardArgs{Shard: s, State: state, Num: num}
 			reply := shardrpc.InstallShardReply{}
+			ck.debug("%s.InstallShard(%+v)", ck.servers[id], args)
 			ok := ck.clnt.Call(ck.servers[id], "KVServer.InstallShard", &args, &reply)
+			ck.debug("%s.InstallShard(%+v), ok=%v, reply=%+v", ck.servers[id], args, ok, reply)
 			done <- result{id, ok, reply}
 		}()
 
@@ -267,7 +275,9 @@ func (ck *Clerk) DeleteShard(s shardcfg.Tshid, num shardcfg.Tnum) rpc.Err {
 		go func() {
 			args := shardrpc.DeleteShardArgs{Shard: s, Num: num}
 			reply := shardrpc.DeleteShardReply{}
+			ck.debug("%s.DeleteShard(%+v)", ck.servers[id], args)
 			ok := ck.clnt.Call(ck.servers[id], "KVServer.DeleteShard", &args, &reply)
+			ck.debug("%s.DeleteShard(%+v), ok=%v, reply=%+v", ck.servers[id], args, ok, reply)
 			done <- result{id, ok, reply}
 		}()
 
