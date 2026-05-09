@@ -81,12 +81,11 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 			return "", 0, rpc.ErrTimeout
 		case <-t.C:
 		case r = <-done:
-			if r.reply.Err == rpc.ErrWrongLeader {
-				offset += 1
-			} else if r.ok {
+			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
 				goto Done
 			}
 		}
+		offset += 1
 		t.Reset(Timeout)
 		time.Sleep(Throttle) // to prevent excessive RPC calls
 	}
@@ -139,18 +138,15 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 			return rpc.ErrTimeout
 		case <-t.C:
 		case r = <-done:
-			if r.reply.Err == rpc.ErrWrongLeader {
-				offset += 1
-			} else {
-				if r.ok {
-					if retryCount > 0 && r.reply.Err == rpc.ErrVersion {
-						r.reply.Err = rpc.ErrMaybe
-					}
-					goto Done
+			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
+				if retryCount > 0 && r.reply.Err == rpc.ErrVersion {
+					r.reply.Err = rpc.ErrMaybe
 				}
-				retryCount += 1
+				goto Done
 			}
 		}
+		retryCount += 1
+		offset += 1
 		t.Reset(Timeout)
 		time.Sleep(Throttle) // to prevent excessive RPC calls
 	}
@@ -202,12 +198,11 @@ func (ck *Clerk) FreezeShard(s shardcfg.Tshid, num shardcfg.Tnum) ([]byte, rpc.E
 			return nil, rpc.ErrTimeout
 		case <-t.C:
 		case r = <-done:
-			if r.reply.Err == rpc.ErrWrongLeader {
-				offset += 1
-			} else if r.ok {
+			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
 				goto Done
 			}
 		}
+		offset += 1
 		t.Reset(Timeout)
 		time.Sleep(Throttle) // to prevent excessive RPC calls
 	}
@@ -259,12 +254,11 @@ func (ck *Clerk) InstallShard(s shardcfg.Tshid, state []byte, num shardcfg.Tnum)
 			return rpc.ErrTimeout
 		case <-t.C:
 		case r = <-done:
-			if r.reply.Err == rpc.ErrWrongLeader {
-				offset += 1
-			} else if r.ok {
+			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
 				goto Done
 			}
 		}
+		offset += 1
 		t.Reset(Timeout)
 		time.Sleep(Throttle) // to prevent excessive RPC calls
 	}
@@ -316,12 +310,11 @@ func (ck *Clerk) DeleteShard(s shardcfg.Tshid, num shardcfg.Tnum) rpc.Err {
 			return rpc.ErrTimeout
 		case <-t.C:
 		case r = <-done:
-			if r.reply.Err == rpc.ErrWrongLeader {
-				offset += 1
-			} else if r.ok {
+			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
 				goto Done
 			}
 		}
+		offset += 1
 		t.Reset(Timeout)
 		time.Sleep(Throttle) // to prevent excessive RPC calls
 	}
