@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	Timeout  = 1 * time.Second
-	Throttle = 2 * time.Millisecond
+	Timeout       = 1 * time.Second
+	Throttle      = 2 * time.Millisecond
+	ClientTimeout = 10 * time.Second
 )
 
 type Clerk struct {
@@ -50,6 +51,9 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 		reply    rpc.GetReply
 	}
 
+	tt := time.NewTimer(ClientTimeout)
+	defer tt.Stop()
+
 	t := time.NewTimer(Timeout)
 	defer t.Stop()
 
@@ -59,8 +63,9 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	prefer := ck.prefer
 	ck.mu.Unlock()
 
+	offset := 0
 	var r result
-	for offset := 0; ; offset++ {
+	for {
 		id := (offset + prefer) % len(ck.servers)
 		go func() {
 			args := rpc.GetArgs{Key: key}
@@ -72,11 +77,13 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 		}()
 
 		select {
+		case <-tt.C:
+			return "", 0, rpc.ErrTimeout
 		case <-t.C:
 		case r = <-done:
-			if !r.ok {
-				return "", 0, rpc.ErrWrongGroup
-			} else if r.ok && r.reply.Err != rpc.ErrWrongLeader {
+			if r.reply.Err == rpc.ErrWrongLeader {
+				offset += 1
+			} else if r.ok {
 				goto Done
 			}
 		}
@@ -101,6 +108,9 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 		reply    rpc.PutReply
 	}
 
+	tt := time.NewTimer(ClientTimeout)
+	defer tt.Stop()
+
 	t := time.NewTimer(Timeout)
 	defer t.Stop()
 
@@ -111,8 +121,9 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	ck.mu.Unlock()
 
 	retryCount := 0
+	offset := 0
 	var r result
-	for offset := 0; ; offset++ {
+	for {
 		id := (offset + prefer) % len(ck.servers)
 		go func() {
 			args := rpc.PutArgs{Key: key, Value: value, Version: version}
@@ -124,19 +135,23 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 		}()
 
 		select {
+		case <-tt.C:
+			return rpc.ErrTimeout
 		case <-t.C:
 		case r = <-done:
-			if !r.ok {
-				return rpc.ErrWrongGroup
-			} else if r.ok && r.reply.Err != rpc.ErrWrongLeader {
-				if r.reply.Err == rpc.ErrVersion && retryCount > 0 {
-					r.reply.Err = rpc.ErrMaybe
+			if r.reply.Err == rpc.ErrWrongLeader {
+				offset += 1
+			} else {
+				if r.ok {
+					if retryCount > 0 && r.reply.Err == rpc.ErrVersion {
+						r.reply.Err = rpc.ErrMaybe
+					}
+					goto Done
 				}
-				goto Done
+				retryCount += 1
 			}
 		}
 		t.Reset(Timeout)
-		retryCount += 1
 		time.Sleep(Throttle) // to prevent excessive RPC calls
 	}
 
@@ -157,6 +172,9 @@ func (ck *Clerk) FreezeShard(s shardcfg.Tshid, num shardcfg.Tnum) ([]byte, rpc.E
 		reply    shardrpc.FreezeShardReply
 	}
 
+	tt := time.NewTimer(ClientTimeout)
+	defer tt.Stop()
+
 	t := time.NewTimer(Timeout)
 	defer t.Stop()
 
@@ -166,8 +184,9 @@ func (ck *Clerk) FreezeShard(s shardcfg.Tshid, num shardcfg.Tnum) ([]byte, rpc.E
 	prefer := ck.prefer
 	ck.mu.Unlock()
 
+	offset := 0
 	var r result
-	for offset := 0; ; offset++ {
+	for {
 		id := (offset + prefer) % len(ck.servers)
 		go func() {
 			args := shardrpc.FreezeShardArgs{Shard: s, Num: num}
@@ -179,9 +198,13 @@ func (ck *Clerk) FreezeShard(s shardcfg.Tshid, num shardcfg.Tnum) ([]byte, rpc.E
 		}()
 
 		select {
+		case <-tt.C:
+			return nil, rpc.ErrTimeout
 		case <-t.C:
 		case r = <-done:
-			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
+			if r.reply.Err == rpc.ErrWrongLeader {
+				offset += 1
+			} else if r.ok {
 				goto Done
 			}
 		}
@@ -206,7 +229,7 @@ func (ck *Clerk) InstallShard(s shardcfg.Tshid, state []byte, num shardcfg.Tnum)
 		reply    shardrpc.InstallShardReply
 	}
 
-	tt := time.NewTimer(time.Second * 10)
+	tt := time.NewTimer(ClientTimeout)
 	defer tt.Stop()
 
 	t := time.NewTimer(Timeout)
@@ -218,8 +241,9 @@ func (ck *Clerk) InstallShard(s shardcfg.Tshid, state []byte, num shardcfg.Tnum)
 	prefer := ck.prefer
 	ck.mu.Unlock()
 
+	offset := 0
 	var r result
-	for offset := 0; ; offset++ {
+	for {
 		id := (offset + prefer) % len(ck.servers)
 		go func() {
 			args := shardrpc.InstallShardArgs{Shard: s, State: state, Num: num}
@@ -235,7 +259,9 @@ func (ck *Clerk) InstallShard(s shardcfg.Tshid, state []byte, num shardcfg.Tnum)
 			return rpc.ErrTimeout
 		case <-t.C:
 		case r = <-done:
-			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
+			if r.reply.Err == rpc.ErrWrongLeader {
+				offset += 1
+			} else if r.ok {
 				goto Done
 			}
 		}
@@ -260,6 +286,9 @@ func (ck *Clerk) DeleteShard(s shardcfg.Tshid, num shardcfg.Tnum) rpc.Err {
 		reply    shardrpc.DeleteShardReply
 	}
 
+	tt := time.NewTimer(ClientTimeout)
+	defer tt.Stop()
+
 	t := time.NewTimer(Timeout)
 	defer t.Stop()
 
@@ -269,8 +298,9 @@ func (ck *Clerk) DeleteShard(s shardcfg.Tshid, num shardcfg.Tnum) rpc.Err {
 	prefer := ck.prefer
 	ck.mu.Unlock()
 
+	offset := 0
 	var r result
-	for offset := 0; ; offset++ {
+	for {
 		id := (offset + prefer) % len(ck.servers)
 		go func() {
 			args := shardrpc.DeleteShardArgs{Shard: s, Num: num}
@@ -282,9 +312,13 @@ func (ck *Clerk) DeleteShard(s shardcfg.Tshid, num shardcfg.Tnum) rpc.Err {
 		}()
 
 		select {
+		case <-tt.C:
+			return rpc.ErrTimeout
 		case <-t.C:
 		case r = <-done:
-			if r.ok && r.reply.Err != rpc.ErrWrongLeader {
+			if r.reply.Err == rpc.ErrWrongLeader {
+				offset += 1
+			} else if r.ok {
 				goto Done
 			}
 		}

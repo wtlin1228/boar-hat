@@ -57,11 +57,12 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	ck.debug("Get(%s), shid=%d", key, shardcfg.Key2Shard(key))
 	for {
 		value, version, err := ck.makeShardgrpClerk(key).Get(key)
-		if err != rpc.ErrWrongGroup {
-			ck.debug("Get(%s) - succeeded with value=%s, version=%d, err=%v", key, value, version, err)
-			return value, version, err
+		if err == rpc.ErrWrongGroup || err == rpc.ErrTimeout {
+			ck.debug("Get(%s) - failed, try again, err=%s", key, err)
+			continue
 		}
-		ck.debug("Get(%s) - failed, wrong group, try again", key)
+		ck.debug("Get(%s) - succeeded with value=%s, version=%d, err=%v", key, value, version, err)
+		return value, version, err
 	}
 }
 
@@ -69,13 +70,19 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	// You will have to modify this function.
 	ck.debug("Put(%s, %s), shid=%d", key, value, shardcfg.Key2Shard(key))
+	retryCount := 0
 	for {
 		err := ck.makeShardgrpClerk(key).Put(key, value, version)
-		if err != rpc.ErrWrongGroup {
-			ck.debug("Put(%s, %s) - succeeded with err=%v", key, value, err)
-			return err
+		if err == rpc.ErrWrongGroup || err == rpc.ErrTimeout {
+			ck.debug("Put(%s, %s) - failed, try again, err=%s", key, value, err)
+			retryCount += 1
+			continue
 		}
-		ck.debug("Put(%s, %s) - failed, wrong group, try again", key, value)
+		ck.debug("Put(%s, %s) - succeeded with err=%v", key, value, err)
+		if retryCount > 0 && err == rpc.ErrVersion {
+			return rpc.ErrMaybe
+		}
+		return err
 	}
 }
 

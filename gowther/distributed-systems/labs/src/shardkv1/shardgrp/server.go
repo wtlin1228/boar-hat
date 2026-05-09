@@ -201,6 +201,7 @@ func (kv *KVServer) Restore(data []byte) {
 
 func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 	// Your code here
+	kv.debug("Get(%+v)", args)
 	err, res := kv.rsm.Submit(*args)
 	if err == rpc.ErrWrongLeader {
 		reply.Err = rpc.ErrWrongLeader
@@ -214,6 +215,7 @@ func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 
 func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 	// Your code here
+	kv.debug("Put(%+v)", args)
 	err, res := kv.rsm.Submit(*args)
 	if err == rpc.ErrWrongLeader {
 		reply.Err = err
