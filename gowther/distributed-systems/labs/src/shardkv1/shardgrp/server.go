@@ -122,6 +122,7 @@ func (kv *KVServer) DoOp(req any) any {
 			return &rpc.PutReply{Err: rpc.ErrVersion}
 		}
 
+	// TODO: fix freeze shard -> delete shard -> freeze the same shard
 	case shardrpc.FreezeShardArgs:
 		shard, exist := kv.shardMap[args.Shard]
 		if !exist {
