@@ -122,7 +122,11 @@ func (sck *ShardCtrler) changeConfigTo(new *shardcfg.ShardConfig, isRetry bool) 
 				oldShardgrpClerk := sck.makeShardgrpClerk(cfg, shid)
 				newShardgrpClerk := sck.makeShardgrpClerk(new, shid)
 				shardData, err := oldShardgrpClerk.FreezeShard(shid, new.Num)
-				if err != rpc.OK {
+				if err == rpc.ErrWrongGroup {
+					// The shard is not in this group anymore, implying that it has
+					// been deleted so we can skip the install and delete.
+					return
+				} else if err != rpc.OK {
 					sck.debug("changeConfigTo - failed to freeze shard_%d", shid)
 					errCh <- struct{}{}
 					return
