@@ -138,7 +138,7 @@ func (kv *KVServer) DoOp(req any) any {
 		}
 
 	case shardrpc.InstallShardArgs:
-		if args.Num == 0 {
+		if args.Num == 1 {
 			// initialize phase
 			if len(args.State) != 0 || len(kv.data) != 0 {
 				return &shardrpc.InstallShardReply{Err: rpc.ErrVersion}

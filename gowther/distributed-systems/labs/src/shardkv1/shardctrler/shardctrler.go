@@ -58,13 +58,7 @@ func MakeShardCtrler(clnt *tester.Clnt) *ShardCtrler {
 // B and C, this method implements recovery.
 func (sck *ShardCtrler) InitController() {
 	sck.debug("InitController")
-
-	_, currentVersion := sck.query(CurrentConfigKey)
-	nextCfg, nextVersion := sck.query(NextConfigKey)
-
-	if currentVersion != nextVersion {
-		sck.changeConfigTo(nextCfg, true)
-	}
+	sck.applyNextConfig()
 }
 
 // Called once by the tester to supply the first configuration.  You
@@ -75,9 +69,14 @@ func (sck *ShardCtrler) InitController() {
 func (sck *ShardCtrler) InitConfig(cfg *shardcfg.ShardConfig) {
 	sck.debug("InitConfig")
 
-	sck.put(NextConfigKey, cfg, 0)
+	initCfg := cfg.Copy()
+	initCfg.Num = 0
+	sck.put(NextConfigKey, initCfg)
+	sck.put(CurrentConfigKey, initCfg)
+
+	sck.put(NextConfigKey, cfg)
+	sck.put(CurrentConfigKey, cfg)
 	sck.initShards(cfg)
-	sck.put(CurrentConfigKey, cfg, 0)
 
 	sck.debug("InitConfig succeeded")
 }
@@ -87,7 +86,14 @@ func (sck *ShardCtrler) InitConfig(cfg *shardcfg.ShardConfig) {
 // changes the configuration it may be superseded by another
 // controller.
 func (sck *ShardCtrler) ChangeConfigTo(new *shardcfg.ShardConfig) {
-	sck.changeConfigTo(new, false)
+	ok := sck.put(NextConfigKey, new)
+	if !ok {
+		sck.debug("ChangeConfigTo - rejected, new.Num=%d, new=%+v", new.Num, new)
+		return
+	}
+
+	sck.debug("ChangeConfigTo - new.Num=%d, new=%+v", new.Num, new)
+	sck.applyNextConfig()
 }
 
 // Return the current configuration
@@ -98,48 +104,51 @@ func (sck *ShardCtrler) Query() *shardcfg.ShardConfig {
 	return cfg
 }
 
-func (sck *ShardCtrler) changeConfigTo(new *shardcfg.ShardConfig, isRetry bool) {
-	sck.debug("changeConfigTo - new=%+v", new)
+func (sck *ShardCtrler) applyNextConfig() {
+	next, nextVersion := sck.query(NextConfigKey)
+	curr, currVersion := sck.query(CurrentConfigKey)
 
-	cfg, version := sck.query(CurrentConfigKey)
-	if !isRetry {
-		sck.put(NextConfigKey, new, version)
+	sck.debug("applyNextConfig - currVersion=%d, nextVersion=%d", currVersion, nextVersion)
+	if nextVersion == currVersion {
+		sck.debug("applyNextConfig - early return, next config has already been applied and write to current config")
+	} else if nextVersion != currVersion+1 {
+		sck.fatalf("applyNextConfig - nextVersion can only be equal or one version ahead the currVersion")
 	}
 
 	var wg sync.WaitGroup
-	errCh := make(chan struct{}, len(cfg.Shards))
+	errCh := make(chan struct{}, len(curr.Shards))
 
-	for shid := range len(cfg.Shards) {
+	for shid := range len(curr.Shards) {
 		shid := shardcfg.Tshid(shid)
-		oldServers := cfg.Groups[cfg.Shards[shid]]
-		newServers := new.Groups[new.Shards[shid]]
+		oldServers := curr.Groups[curr.Shards[shid]]
+		newServers := next.Groups[next.Shards[shid]]
 		if !equalUnordered(oldServers, newServers) {
 			wg.Add(1)
 
 			go func(shid shardcfg.Tshid) {
 				defer wg.Done()
 
-				oldShardgrpClerk := sck.makeShardgrpClerk(cfg, shid)
-				newShardgrpClerk := sck.makeShardgrpClerk(new, shid)
-				shardData, err := oldShardgrpClerk.FreezeShard(shid, new.Num)
+				oldShardgrpClerk := sck.makeShardgrpClerk(curr, shid)
+				newShardgrpClerk := sck.makeShardgrpClerk(next, shid)
+				shardData, err := oldShardgrpClerk.FreezeShard(shid, next.Num)
 				if err == rpc.ErrWrongGroup {
 					// The shard is not in this group anymore, implying that it has
 					// been deleted so we can skip the install and delete.
 					return
 				} else if err != rpc.OK {
-					sck.debug("changeConfigTo - failed to freeze shard_%d", shid)
+					sck.debug("applyNextConfig - failed to freeze shard_%d", shid)
 					errCh <- struct{}{}
 					return
 				}
-				err = newShardgrpClerk.InstallShard(shid, shardData, new.Num)
+				err = newShardgrpClerk.InstallShard(shid, shardData, next.Num)
 				if err != rpc.OK {
-					sck.debug("changeConfigTo - failed to install shard_%d", shid)
+					sck.debug("applyNextConfig - failed to install shard_%d", shid)
 					errCh <- struct{}{}
 					return
 				}
-				err = oldShardgrpClerk.DeleteShard(shid, new.Num)
+				err = oldShardgrpClerk.DeleteShard(shid, next.Num)
 				if err != rpc.OK {
-					sck.debug("changeConfigTo - failed to delete shard_%d", shid)
+					sck.debug("applyNextConfig - failed to delete shard_%d", shid)
 					errCh <- struct{}{}
 					return
 				}
@@ -149,16 +158,14 @@ func (sck *ShardCtrler) changeConfigTo(new *shardcfg.ShardConfig, isRetry bool) 
 
 	wg.Wait()
 	close(errCh)
-
 	for range errCh {
-		sck.debug("changeConfigTo - failed to apply the new config")
+		sck.debug("applyNextConfig - failed to apply the new config")
 		return
 	}
-	sck.debug("changeConfigTo - apply the new config succeeded")
+	sck.debug("applyNextConfig - apply the new config succeeded")
 
-	sck.put(CurrentConfigKey, new, version)
-
-	sck.debug("changeConfigTo - succeeded, new=%+v", new)
+	sck.put(CurrentConfigKey, next)
+	sck.debug("applyNextConfig - succeeded, new=%+v", next)
 }
 
 func (sck *ShardCtrler) query(key string) (*shardcfg.ShardConfig, rpc.Tversion) {
@@ -170,16 +177,24 @@ func (sck *ShardCtrler) query(key string) (*shardcfg.ShardConfig, rpc.Tversion) 
 	return nil, 0
 }
 
-func (sck *ShardCtrler) put(key string, config *shardcfg.ShardConfig, version rpc.Tversion) {
+func (sck *ShardCtrler) put(key string, config *shardcfg.ShardConfig) bool {
+	sck.debug("put(%s) - config.Num=%d, config=%+v", key, config.Num, config)
+
 	configString := config.String()
-	sck.IKVClerk.Put(key, configString, version)
+	sck.IKVClerk.Put(key, configString, rpc.Tversion(config.Num))
 	for {
 		currentConfig, currentVersion := sck.query(key)
-		if currentConfig.String() == configString && currentVersion == version+1 {
-			break
+		if currentVersion > rpc.Tversion(config.Num) {
+			if currentConfig.String() == configString {
+				sck.debug("put(%s) - succeeded, config.Num=%d, config=%+v", key, config.Num, config)
+				return true
+			} else {
+				sck.debug("put(%s) - failed, config.Num=%d, config=%+v", key, config.Num, config)
+				return false
+			}
 		}
 		sck.debug("put(%s) - failed to put new config, try again", key)
-		sck.IKVClerk.Put(key, configString, version)
+		sck.IKVClerk.Put(key, configString, rpc.Tversion(config.Num))
 	}
 }
 
@@ -204,7 +219,7 @@ func (sck *ShardCtrler) initShards(cfg *shardcfg.ShardConfig) {
 			defer wg.Done()
 
 			shardgrpClerk := sck.makeShardgrpClerk(cfg, shid)
-			err := shardgrpClerk.InstallShard(shid, nil, 0)
+			err := shardgrpClerk.InstallShard(shid, nil, 1)
 			if err != rpc.OK {
 				sck.debug("initShards - initialize shard_%d failed", shid)
 				errCh <- struct{}{}
