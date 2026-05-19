@@ -1,0 +1,3 @@
+- course website: https://cs186berkeley.net/
+- course video: https://www.youtube.com/user/CS186Berkeley/playlists
+- project gitbook: https://cs186.gitbook.io/project
