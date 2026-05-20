@@ -1,3 +1,2 @@
-- course website: https://cs186berkeley.net/
-- course video: https://www.youtube.com/user/CS186Berkeley/playlists
-- project gitbook: https://cs186.gitbook.io/project
+- course website: https://15445.courses.cs.cmu.edu
+- course video: https://www.youtube.com/playlist?list=PLSE8ODhjZXjYMAgsGH-GtY5rJYZ6zjsd5
