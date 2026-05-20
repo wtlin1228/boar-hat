@@ -1,2 +1,3 @@
 - course website: https://15445.courses.cs.cmu.edu
 - course video: https://www.youtube.com/playlist?list=PLSE8ODhjZXjYMAgsGH-GtY5rJYZ6zjsd5
+- my projects(not public): https://github.com/wtlin1228/CMU.15445
