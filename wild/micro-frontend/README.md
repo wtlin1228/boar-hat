@@ -1,0 +1,2 @@
+- [Why Your Micro‑Frontends are a Distributed Monolith | AWS Architecture | Luca Mezzalira](https://www.youtube.com/watch?v=CpBP4FInj0g&t=1s)
+- [Understanding and implementing micro-frontends on AWS](https://docs.aws.amazon.com/prescriptive-guidance/latest/micro-frontends-aws/introduction.html)
