@@ -1,1 +1,2 @@
-- [Google I/O 2026 - Adam Bender - Software engineering at the tipping point](https://www.youtube.com/watch?v=2n41YjR5QfU)
+- [AI Engineer: The Infinite Software Crisis – Jake Nations, Netflix](https://www.youtube.com/watch?v=eIoohUmYpGI)
+- [Google I/O 2026: Software engineering at the tipping point – Adam Bender, Google](https://www.youtube.com/watch?v=2n41YjR5QfU)
