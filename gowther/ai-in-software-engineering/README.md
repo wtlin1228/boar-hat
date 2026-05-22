@@ -1,0 +1,1 @@
+- [Google I/O 2026 - Adam Bender - Software engineering at the tipping point](https://www.youtube.com/watch?v=2n41YjR5QfU)
