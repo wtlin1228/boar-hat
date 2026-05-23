@@ -1,5 +1,6 @@
-# Build output
+# Build output (any "build" or "build-*" folder)
 build/
+build-*/
 out/
 
 # CMake
@@ -12,8 +13,7 @@ compile_commands.json
 # clangd cache
 .cache/
 
-# Local VSCode overrides
-.vscode/settings.local.json
+# Per-machine VSCode overrides (anything ending in .local.json stays out of git)
 .vscode/*.local.json
 
 # Compiled binaries / objects

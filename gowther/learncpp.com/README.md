@@ -63,6 +63,27 @@ cmake -S . -B build
 
 This regenerates the build files inside `build/`. You don't need to repeat it on every code change — only when `CMakeLists.txt` files change.
 
+### Debug vs Release builds
+
+Default is **Debug** (`-g -O0`, asserts on) — what you want while learning. Use **Release** (`-O3 -DNDEBUG`, optimized) only when benchmarking or shipping.
+
+Keep one folder per config so they live side-by-side:
+
+```bash
+# Debug (default — same as the build/ you already have)
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+
+# Release
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
+cmake --build build-release
+./build-release/projects/HelloWorld/HelloWorld
+```
+
+In VSCode: `Cmd+Shift+P` → "CMake: Select Variant" → pick Debug or Release. The CMake Tools status bar shows the current variant.
+
+**Heads up:** `assert(...)` is disabled in Release. Use it for catching bugs (programmer mistakes), never for validating user input.
+
 ## In VSCode
 
 - **Pick the target**: status bar at the bottom → click the target name next to the ▶ icon.

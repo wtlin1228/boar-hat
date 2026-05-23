@@ -28,11 +28,29 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Turn on a generous set of compiler warnings for every target.
-#   -Wall      common warnings
-#   -Wextra    extra warnings -Wall misses
-#   -Wpedantic warn on non-standard C++ usage
+#   -Wall         common warnings
+#   -Wextra       extra warnings -Wall misses
+#   -Wpedantic    warn on non-standard C++ usage
+#   -Weffc++      Scott Meyers' "Effective C++" style guidelines
+#                 (e.g. classes with pointer members need explicit copy ctors).
+#                 Noisy on real codebases; great for learning idiomatic C++.
+#   -Wconversion       warn on implicit type conversions that may change a value
+#                      (e.g. int -> float, double -> int).
+#                      Catches a whole class of subtle numeric bugs.
+#   -Wsign-conversion  warn specifically on signed <-> unsigned conversions.
+#                      (Implied by -Wconversion in C++, but listed for clarity.)
+#   -Werror       promote ALL warnings to errors — the build fails until you fix them.
+#                 Strict, but forces good habits while learning.
 # Catching mistakes early is one of the best things you can do as a beginner.
-add_compile_options(-Wall -Wextra -Wpedantic)
+add_compile_options(
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Weffc++
+    -Wconversion
+    -Wsign-conversion
+    -Werror
+)
 
 # Auto-discover every exercise: list all entries inside projects/ and,
 # for each one that's a directory containing its own CMakeLists.txt, include it.
