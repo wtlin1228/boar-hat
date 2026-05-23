@@ -1,0 +1,9 @@
+CompileFlags:
+  CompilationDatabase: build
+  Add: [-std=c++20, -Wall, -Wextra, -Wpedantic]
+
+Diagnostics:
+  UnusedIncludes: Strict
+  ClangTidy:
+    Add: [modernize-*, readability-*, bugprone-*, performance-*]
+    Remove: [modernize-use-trailing-return-type, readability-identifier-length]
