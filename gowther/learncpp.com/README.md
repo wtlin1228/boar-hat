@@ -2,7 +2,29 @@
 
 My C++ exercises while working through [learncpp.com](https://www.learncpp.com/).
 
-Toolchain: Apple clang 15 (C++20) · CMake · clangd · VSCode + CodeLLDB.
+Toolchain (shared): CMake · clangd · VSCode + CodeLLDB. C++20.
+
+- **macOS**: Apple clang 15 as the compiler.
+- **Linux** (Debian): GCC 14 as the compiler.
+
+## Toolchain setup
+
+### macOS
+
+```bash
+xcode-select --install            # Apple clang + lldb
+brew install cmake llvm           # cmake + clangd (clangd ships with llvm)
+```
+
+Make sure Homebrew's `clangd` is on your PATH (e.g. `/opt/homebrew/opt/llvm/bin`).
+
+### Linux (Debian / Ubuntu)
+
+```bash
+sudo apt install build-essential cmake clangd lldb
+```
+
+`build-essential` provides g++; `clangd` powers VSCode IntelliSense; `lldb` is used by the CodeLLDB debug config.
 
 ## Layout
 

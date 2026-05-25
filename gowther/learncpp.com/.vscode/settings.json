@@ -14,7 +14,8 @@
     "cmake.buildDirectory": "${workspaceFolder}/build",
     "cmake.configureOnOpen": true,
     "cSpell.words": [
-        "learncpp"
+        "learncpp",
+        "lldb"
     ],
     "editor.formatOnSave": true,
     "files.associations": {
