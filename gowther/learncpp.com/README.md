@@ -16,7 +16,9 @@ xcode-select --install            # Apple clang + lldb
 brew install cmake llvm           # cmake + clangd (clangd ships with llvm)
 ```
 
-Make sure Homebrew's `clangd` is on your PATH (e.g. `/opt/homebrew/opt/llvm/bin`).
+Make sure Homebrew's `clangd` is on your PATH (e.g. `/opt/homebrew/opt/llvm/bin`, or `/usr/local/opt/llvm/bin` on Intel Macs).
+
+**Minimum `clangd` version: 18.** Apple's bundled clangd (15) is missing newer clang-tidy checks like `performance-avoid-endl`. Verify with `clangd --version`. If VSCode is still launching Apple's clangd, set `clangd.path` in your VSCode **user** settings (per-machine, not in the repo) to the Homebrew binary, and add `--query-driver=/usr/bin/clang*` to `clangd.arguments` so it can find Apple SDK headers.
 
 ### Linux (Debian / Ubuntu)
 
