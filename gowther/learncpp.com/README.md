@@ -44,6 +44,19 @@ The root `CMakeLists.txt` scans `projects/` and auto-includes every subfolder th
 
 ## Creating a new project
 
+### Quick way (script)
+
+```bash
+./new-project.sh Chapter2_Variables
+```
+
+This creates `projects/Chapter2_Variables/` with a one-line `CMakeLists.txt` and a
+starter `main.cpp`, then re-runs configure. It prints the exact build-and-run command
+when it's done. The project name can't contain spaces or slashes (it becomes the CMake
+target name).
+
+### Manual way
+
 1. Make a folder under `projects/` named after the exercise (e.g. `projects/Chapter2_Variables/`).
 2. Drop your `.cpp` file(s) inside.
 3. Add a one-line `CMakeLists.txt`:
