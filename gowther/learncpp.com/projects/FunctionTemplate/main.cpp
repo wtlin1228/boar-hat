@@ -13,11 +13,15 @@ int main() {
   // uncomment line 10 to see the compilation error
   std::cout << addOne("Hello, world!") << '\n';
 
-  // printIdAndValue is defined in lib.h, so every translation unit that calls
-  // it (main.cpp and foo.cpp here) instantiates its own identical copy of
-  // printIdAndValue<const char*>. The compiler marks these as weak/COMDAT
-  // symbols; the linker keeps just one and discards the rest. That's why the
-  // duplicates don't trigger a "multiple definition" (ODR) error.
+  // In modern C++, "inline" means "multiple definitions allowed": such a
+  // function may be defined in many translation units without violating the
+  // ODR, and the linker collapses the copies into one. Function templates are
+  // implicitly treated as inline functions, so instantiations get this same
+  // treatment.
+  //
+  // main.cpp and foo.cpp both instantiate printIdAndValue<const char*> from
+  // lib.h. The linker keeps one copy, so all callers share its single static
+  // `id` -- notice the counter keeps climbing across calls instead of resetting.
   printIdAndValue("main");
   foo();
 
