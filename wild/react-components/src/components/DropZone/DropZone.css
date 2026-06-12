@@ -1,0 +1,77 @@
+.rc-dropzone {
+  border: 2px dashed #3a4046;
+  border-radius: 12px;
+  background: #0d1117;
+  color: #c9d1d9;
+  padding: 3rem 2rem;
+  text-align: center;
+  font-family: Roboto, sans-serif;
+  transition:
+    border-color 120ms,
+    background 120ms;
+}
+
+.rc-dropzone--dragging {
+  border-color: #e76125;
+  background:
+    linear-gradient(rgba(231, 97, 37, 0.08), rgba(231, 97, 37, 0.08)),
+    #0d1117;
+}
+
+.rc-dropzone--disabled {
+  opacity: 0.6;
+}
+
+.rc-dropzone__heading {
+  font-weight: 700;
+  font-size: 1.25rem;
+  margin: 0 0 0.75rem;
+}
+
+.rc-dropzone__subtext {
+  font-size: 1.1rem;
+  margin: 0 0 1rem;
+  color: #8b949e;
+}
+
+.rc-dropzone__hint {
+  margin: 0;
+  color: #8b949e;
+}
+
+.rc-dropzone__link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #c9d1d9;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.rc-dropzone__link:disabled {
+  cursor: not-allowed;
+}
+
+.rc-dropzone__files {
+  margin-top: 1.5rem;
+  text-align: left;
+}
+
+.rc-dropzone__file-list {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.rc-dropzone__size {
+  color: #8b949e;
+}
+
+.rc-dropzone__name--error,
+.rc-dropzone__error {
+  color: #d21419;
+}
+
+.rc-dropzone__remove {
+  margin-left: 0.5rem;
+}

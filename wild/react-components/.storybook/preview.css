@@ -1,0 +1,11 @@
+/* withThemeByClassName adds `light` / `dark` to <html>. */
+
+html.light body {
+  background: #ffffff;
+  color: #213547;
+}
+
+html.dark body {
+  background: #1a1d21;
+  color: #ececec;
+}
