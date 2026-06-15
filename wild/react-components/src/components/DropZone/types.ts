@@ -1,4 +1,16 @@
-import type { ReactNode, Ref } from 'react'
+import type { CSSProperties, ReactNode, Ref } from 'react'
+
+/**
+ * The container's mutually-exclusive visual states. `dragging` and `disabled`
+ * are never both true (drags are ignored while disabled); the *normal* state is
+ * simply both being `false`.
+ */
+export interface DropZoneState {
+  /** A drag is currently hovering the zone. */
+  dragging: boolean
+  /** The zone is disabled. */
+  disabled: boolean
+}
 
 /** Everything a custom renderer needs to rebuild the zone's content. */
 export interface DropZoneRenderApi {
@@ -25,10 +37,26 @@ export interface DropZoneProps {
   label?: string
   /** Allow selecting/dropping more than one file. Defaults to single. */
   multiple?: boolean
-  /** Restrict the picker to certain types, e.g. `.zip,.html` or `image/*`. */
+  /**
+   * Restrict the picker to certain types, e.g. `.zip,.html` or `image/*`.
+   * @see https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/accept
+   */
   accept?: string
   /** Disable dropping, browsing and removing. */
   disabled?: boolean
+
+  /**
+   * Extra class names appended to the container's own `rc-dropzone` classes.
+   * Pass a string to apply in every state, or a function of the current
+   * {@link DropZoneState} to vary it per state (dragging / disabled / normal).
+   */
+  className?: string | ((state: DropZoneState) => string)
+  /**
+   * Inline styles applied to the container element. Pass a `CSSProperties`
+   * object to apply in every state, or a function of the current
+   * {@link DropZoneState} to vary it per state (dragging / disabled / normal).
+   */
+  style?: CSSProperties | ((state: DropZoneState) => CSSProperties)
 
   /** Controlled value. Pass together with `onChange` to own the files. */
   value?: File[]

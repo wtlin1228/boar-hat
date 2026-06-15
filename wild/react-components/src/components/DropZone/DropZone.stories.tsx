@@ -85,6 +85,24 @@ export const WithError: Story = {
   },
 }
 
+/**
+ * Customize the container per state. `style` (and `className`) accept a
+ * function of the current {@link DropZoneState}, so the *normal*, *dragging*
+ * and *disabled* states can each be styled respectively — here the border and
+ * background change on drag.
+ */
+export const CustomContainer: Story = {
+  args: {
+    label: 'Drag a file to see the container restyle',
+    style: ({ dragging, disabled }) => ({
+      borderStyle: 'solid',
+      borderColor: dragging ? '#d21419' : disabled ? '#646d72' : '#e76125',
+      background: dragging ? 'rgba(210, 20, 25, 0.08)' : '#ececec',
+      color: '#646d72',
+    }),
+  },
+}
+
 /** Fully custom content via the render prop, using `browse()` and `files`. */
 export const CustomContent: Story = {
   args: { multiple: true },

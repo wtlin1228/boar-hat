@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react'
 
 import './DropZone.css'
-import type { DropZoneProps, DropZoneRenderApi } from './types'
+import type { DropZoneProps, DropZoneRenderApi, DropZoneState } from './types'
 import { useFileSelection } from './useFileSelection'
 import { useDragCounter } from './useDragCounter'
 import { DefaultContent, RenderContent } from './DropZoneContent'
@@ -16,6 +16,8 @@ export function DropZone({
   multiple = false,
   accept,
   disabled = false,
+  className,
+  style,
   value,
   defaultValue,
   onChange,
@@ -74,16 +76,27 @@ export function DropZone({
       (children ?? <DefaultContent api={api} label={label} />)
     )
 
-  const className = [
+  const state: DropZoneState = { dragging, disabled }
+  const resolvedClassName =
+    typeof className === 'function' ? className(state) : className
+  const resolvedStyle = typeof style === 'function' ? style(state) : style
+
+  const containerClassName = [
     'rc-dropzone',
     dragging && 'rc-dropzone--dragging',
     disabled && 'rc-dropzone--disabled',
+    resolvedClassName,
   ]
     .filter(Boolean)
     .join(' ')
 
   return (
-    <div {...dragHandlers} className={className} data-testid="rc-dropzone">
+    <div
+      {...dragHandlers}
+      className={containerClassName}
+      style={resolvedStyle}
+      data-testid="rc-dropzone"
+    >
       {content}
 
       {/* Hidden trigger backing api.browse(). */}
