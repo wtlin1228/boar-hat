@@ -2,7 +2,7 @@ import { expect, test, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 
 import { DropZone } from './DropZone'
-import type { DropZoneRenderApi } from './types'
+import type { DropZoneRenderApi, DropZoneState } from './types'
 
 // --- helpers ----------------------------------------------------------------
 
@@ -37,6 +37,18 @@ function getInput(container: HTMLElement) {
   return container.querySelector<HTMLInputElement>(
     '[data-testid="rc-dropzone-input"]',
   )!
+}
+
+// The rendered <li> for each selected file, in display order.
+function fileItems(container: HTMLElement) {
+  return Array.from(
+    container.querySelectorAll<HTMLLIElement>('.rc-dropzone__file-list li'),
+  )
+}
+
+// Whether a file's <li> is rendering the error state.
+function hasError(item: HTMLLIElement) {
+  return item.querySelector('.rc-dropzone__error') !== null
 }
 
 // --- tests ------------------------------------------------------------------
@@ -144,6 +156,39 @@ test('getFileError flags invalid files', async () => {
   await expect.element(screen.getByText('— not allowed')).toBeInTheDocument()
 })
 
+test('error state follows the file as the list reindexes after removal', async () => {
+  // Flag a specific file by name so the error is tied to the file, not its
+  // position — proving errors are re-evaluated against the current indices.
+  const screen = await render(
+    <DropZone
+      multiple
+      getFileError={(f) => (f.name === 'b.txt' ? 'not allowed' : null)}
+    />,
+  )
+
+  selectFiles(getInput(screen.container), [
+    makeFile('a.txt'),
+    makeFile('b.txt'),
+    makeFile('c.txt'),
+  ])
+
+  // The second file (b.txt) is the flagged one; the others are clean.
+  await expect.element(screen.getByText('— not allowed')).toBeInTheDocument()
+  let items = fileItems(screen.container)
+  expect(items.map((li) => hasError(li))).toEqual([false, true, false])
+
+  // Remove the first file (a.txt); b.txt shifts into the first position.
+  await screen.getByRole('button', { name: 'Remove' }).first().click()
+
+  await vi.waitFor(() => {
+    items = fileItems(screen.container)
+    expect(items).toHaveLength(2)
+    // b.txt is now first and still carries the error; c.txt stays clean.
+    expect(items[0]).toHaveTextContent('b.txt')
+    expect(items.map((li) => hasError(li))).toEqual([true, false])
+  })
+})
+
 test('disabled blocks the input, buttons and drops', async () => {
   const onChange = vi.fn()
   const screen = await render(<DropZone disabled onChange={onChange} />)
@@ -202,6 +247,67 @@ test('controlled mode emits onChange and renders the value prop', async () => {
     <DropZone multiple value={[makeFile('x.txt')]} onChange={onChange} />,
   )
   await expect.element(screen.getByText('x.txt')).toBeInTheDocument()
+})
+
+test('className string is appended to the container alongside built-ins', async () => {
+  const screen = await render(<DropZone className="custom-zone" />)
+  const zone = screen.getByTestId('rc-dropzone')
+
+  await expect.element(zone).toHaveClass('rc-dropzone')
+  await expect.element(zone).toHaveClass('custom-zone')
+})
+
+test('className function reflects the normal and dragging states', async () => {
+  const className = ({ dragging }: DropZoneState) =>
+    dragging ? 'is-dragging' : 'is-idle'
+  const screen = await render(<DropZone className={className} />)
+  const zone = screen.getByTestId('rc-dropzone')
+
+  // Normal state.
+  await expect.element(zone).toHaveClass('is-idle')
+  await expect.element(zone).not.toHaveClass('is-dragging')
+
+  // Dragging state.
+  fireDrag(zone.element(), 'dragenter')
+  await expect.element(zone).toHaveClass('is-dragging')
+  await expect.element(zone).not.toHaveClass('is-idle')
+
+  // Back to normal once the drag leaves.
+  fireDrag(zone.element(), 'dragleave')
+  await expect.element(zone).toHaveClass('is-idle')
+})
+
+test('className function reflects the disabled state', async () => {
+  const className = ({ disabled }: DropZoneState) =>
+    disabled ? 'is-disabled' : 'is-idle'
+  const screen = await render(<DropZone disabled className={className} />)
+
+  await expect
+    .element(screen.getByTestId('rc-dropzone'))
+    .toHaveClass('is-disabled')
+})
+
+test('style object is applied to the container', async () => {
+  const screen = await render(
+    <DropZone style={{ borderColor: 'rgb(231, 97, 37)' }} />,
+  )
+
+  await expect
+    .element(screen.getByTestId('rc-dropzone'))
+    .toHaveStyle({ borderColor: 'rgb(231, 97, 37)' })
+})
+
+test('style function varies the container per state', async () => {
+  const style = ({ dragging }: DropZoneState) => ({
+    borderColor: dragging ? 'rgb(210, 20, 25)' : 'rgb(58, 64, 70)',
+  })
+  const screen = await render(<DropZone style={style} />)
+  const zone = screen.getByTestId('rc-dropzone')
+
+  await expect.element(zone).toHaveStyle({ borderColor: 'rgb(58, 64, 70)' })
+
+  fireDrag(zone.element(), 'dragenter')
+  await expect.element(zone).toHaveStyle({ borderColor: 'rgb(210, 20, 25)' })
 })
 
 test('render prop receives the api and can drive browse()', async () => {
